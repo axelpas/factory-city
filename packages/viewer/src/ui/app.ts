@@ -27,6 +27,7 @@ import {
   fileCard,
   folderCard,
   frameChangeRows,
+  lastChangeRow,
   lotCard,
   metricRow,
 } from "../view/card";
@@ -769,6 +770,16 @@ export class App {
       el("span", { text: `${format.integer(s.model.files.length)} files` }),
     );
     if (hiddenLine) this.status.append(el("span", { class: "muted", text: hiddenLine }));
+    const coverage = s.data.manifest?.kind === "timeline" ? s.data.manifest.coverage : undefined;
+    if (coverage) {
+      this.status.append(
+        el("span", {
+          class: "muted",
+          text: `${format.integer(coverage.linked)} of ${format.integer(coverage.commits)} commits linked to ${format.integer(coverage.issues)} issues`,
+          title: `By closing keyword: ${coverage.byStrategy["closing-keyword"]}, by pull request: ${coverage.byStrategy["pull-request"]}, by reference: ${coverage.byStrategy.reference}, by branch name: ${coverage.byStrategy.branch}, unlinked: ${coverage.byStrategy.unlinked}`,
+        }),
+      );
+    }
     if (this.fpsBox) this.status.append(this.fpsBox);
     for (const w of s.model.manifest?.warnings ?? [])
       this.status.append(el("span", { class: "muted", text: w }));
@@ -919,7 +930,11 @@ export class App {
         );
       } else {
         const data = fileCard(s.model, m, s.mapping, format);
-        const changes = frameChangeRows(s.data, frame, pick.index, s.mapping, format);
+        const last = lastChangeRow(s.data, frame, pick.index, format);
+        const changes = [
+          ...(last ? [last] : []),
+          ...frameChangeRows(s.data, frame, pick.index, s.mapping, format),
+        ];
         this.card.append(this.fileCardView(data, changes));
       }
     }

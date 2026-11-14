@@ -1,0 +1,4 @@
+[
+  { "number": 5, "title": "Parser", "body": "Adds the parser.", "headRefName": "feat/2-parser", "url": "https://github.com/acme/demo/pull/5", "closingIssuesReferences": [{ "number": 2 }] },
+  { "number": 7, "title": "CSV export", "body": "Implements the export. Closes #3", "headRefName": "csv", "url": "https://github.com/acme/demo/pull/7", "closingIssuesReferences": [] }
+]

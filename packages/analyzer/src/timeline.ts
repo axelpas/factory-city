@@ -1,16 +1,36 @@
 import { execFile } from "node:child_process";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import type { Frame, FrameKind, TimelineManifest, TimelineMode } from "@factory-city/schema";
+import type {
+  CoverageReport,
+  Frame,
+  FrameIssue,
+  FrameKind,
+  TimelineManifest,
+  TimelineMode,
+} from "@factory-city/schema";
 import type { AnalyzeShared, CachedFile } from "./analyze.js";
 import { ANALYZER_VERSION, analyze } from "./analyze.js";
+import { type GhRunner, loadForge, systemGh } from "./collectors/forge.js";
 import { computeHistory, loadHistoryLog, reachableCommits } from "./collectors/history.js";
+import {
+  type CommitMessage,
+  emptyCoverage,
+  type ForgeData,
+  frameIssue,
+  kindOf,
+  linkStep,
+} from "./collectors/issues.js";
 import { loadConfig } from "./config.js";
 import { findRepo } from "./source/git.js";
 
 export interface TimelineOptions {
   folder: string;
-  by: "commit" | "day";
+  by: "commit" | "day" | "issue";
+  /** No network: issue titles are not loaded; issues are still found from git data. */
+  offline?: boolean;
+  /** How `gh` is run; tests replay recorded output. */
+  gh?: GhRunner;
   branch?: string;
   /** Every commit instead of the first-parent history. */
   allCommits?: boolean;
@@ -48,6 +68,8 @@ interface Rev {
   hash: string;
   time: number;
   subject: string;
+  /** Issue mode: what the frame stands for. */
+  meta?: { label: string; kind: FrameKind; issue?: FrameIssue; unlinked?: boolean };
 }
 
 const KINDS: Record<string, FrameKind> = {
@@ -110,6 +132,87 @@ async function listRevs(topLevel: string, opts: TimelineOptions, branch: string)
   return parseRevs(await git(topLevel, args));
 }
 
+function parseMessages(raw: string): Array<CommitMessage & { parents: string[]; time: number }> {
+  return raw
+    .split("\u0001")
+    .filter((c) => c.trim() !== "")
+    .map((c) => {
+      const [hash = "", parents = "", time = "0", subject = "", body = ""] = c.split("\u0002");
+      return {
+        hash: hash.trim(),
+        parents: parents.split(" ").filter(Boolean),
+        time: Number(time),
+        subject,
+        body: body.trim(),
+      };
+    });
+}
+
+const MESSAGE_FORMAT = "--format=%x01%H%x02%P%x02%ct%x02%s%x02%b";
+
+/**
+ * Issue mode: walks the first-parent history, links each step to an issue (specification 6.4) and returns one
+ * frame per issue, at the last commit linked to it. Commits linked to no issue are grouped per day.
+ */
+async function planIssueFrames(
+  topLevel: string,
+  opts: TimelineOptions,
+  branch: string,
+  forge: ForgeData | undefined,
+  patterns: readonly string[],
+): Promise<{ revs: Rev[]; coverage: CoverageReport }> {
+  const args = ["log", "--first-parent", "--reverse", MESSAGE_FORMAT];
+  if (opts.since) args.push(`--since=${opts.since}`);
+  if (opts.until) args.push(`--until=${opts.until}`);
+  args.push(opts.range ?? branch);
+  const chain = parseMessages(await git(topLevel, args));
+  const coverage = emptyCoverage(forge !== undefined);
+  const byIssue = new Map<number, { index: number; rev: Rev }>();
+  const unlinkedByDay = new Map<string, { index: number; rev: Rev }>();
+
+  for (const [index, step] of chain.entries()) {
+    const [first, second] = step.parents;
+    const merged =
+      first && second
+        ? parseMessages(await git(topLevel, ["log", MESSAGE_FORMAT, `${first}..${second}`]))
+        : [];
+    const link = linkStep(step, merged, forge, patterns);
+    const size = 1 + merged.length;
+    coverage.commits += size;
+    coverage.byStrategy[link.strategy] += size;
+    const subjects = [step.subject, ...merged.map((m) => m.subject)];
+    if (link.issue === undefined) {
+      const day = new Date(step.time * 1000).toISOString().slice(0, 10);
+      unlinkedByDay.set(day, {
+        index,
+        rev: {
+          hash: step.hash,
+          time: step.time,
+          subject: step.subject,
+          meta: { label: `unlinked ${day}`, kind: "unknown", unlinked: true },
+        },
+      });
+      continue;
+    }
+    coverage.linked += size;
+    const issue = frameIssue(link.issue, link.pullRequest, forge);
+    const kind =
+      subjects.map((s) => kindOf(s, link.branch, issue.labels)).find((k) => k !== "unknown") ?? "unknown";
+    byIssue.set(link.issue, {
+      index,
+      rev: {
+        hash: step.hash,
+        time: step.time,
+        subject: step.subject,
+        meta: { label: issue.title ? `#${issue.number} ${issue.title}` : `#${issue.number}`, kind, issue },
+      },
+    });
+  }
+  coverage.issues = byIssue.size;
+  const frames = [...byIssue.values(), ...unlinkedByDay.values()].sort((a, b) => a.index - b.index);
+  return { revs: frames.map((f) => f.rev), coverage };
+}
+
 /** Keeps the last commit of each calendar day (UTC). */
 export function lastOfEachDay(revs: Rev[]): Rev[] {
   const byDay = new Map<string, Rev>();
@@ -149,14 +252,33 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
   if (!repo.hasCommits) throw new Error("This repository has no commit yet: there is no history to play.");
 
   const branch = opts.branch ?? "HEAD";
-  let revs = await listRevs(repo.topLevel, opts, branch);
   const mode: TimelineMode = opts.revs?.length ? "revs" : opts.by;
-  if (mode === "day") revs = lastOfEachDay(revs);
+  const config = await loadConfig(folder);
+  const planWarnings: string[] = [];
+  let coverage: CoverageReport | undefined;
+  let revs: Rev[];
+  if (mode === "issue") {
+    let forge: ForgeData | undefined;
+    if (!opts.offline) {
+      try {
+        forge = await loadForge(opts.gh ?? systemGh(folder), join(dataDir, "cache", "forge.json"));
+      } catch (err) {
+        planWarnings.push(
+          `GitHub data could not be loaded (${err instanceof Error ? err.message : String(err)}): issue titles are unavailable. Issues are still found from commit messages and branch names.`,
+        );
+      }
+    }
+    const plan = await planIssueFrames(repo.topLevel, opts, branch, forge, config.issuePatterns);
+    revs = plan.revs;
+    coverage = plan.coverage;
+  } else {
+    revs = await listRevs(repo.topLevel, opts, branch);
+    if (mode === "day") revs = lastOfEachDay(revs);
+  }
   if (revs.length === 0) throw new Error("No commit matches the given branch, range or dates.");
   const total = revs.length;
   revs = sample(revs, opts.maxFrames);
 
-  const config = await loadConfig(folder);
   const tip = revs[revs.length - 1] as Rev;
   const log = await loadHistoryLog(repo.topLevel, opts.revs?.length ? "--all" : tip.hash);
   const byHash = new Map(log.commits.map((c) => [c.hash, c]));
@@ -248,8 +370,8 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
     frames.push({
       id,
       index,
-      kind: kindOfSubject(rev.subject),
-      label: mode === "day" ? date.slice(0, 10) : `${short.slice(0, 7)} ${rev.subject}`,
+      kind: rev.meta?.kind ?? kindOfSubject(rev.subject),
+      label: rev.meta?.label ?? (mode === "day" ? date.slice(0, 10) : `${short.slice(0, 7)} ${rev.subject}`),
       date,
       commit: short,
       subject: rev.subject,
@@ -266,6 +388,8 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
         folders_touched: index === 0 ? 0 : folders.size,
       },
       lines,
+      ...(rev.meta?.issue ? { issue: rev.meta.issue } : {}),
+      ...(rev.meta?.unlinked ? { unlinked: true } : {}),
     });
     previousBlobs = result.blobs;
     previousReachable = reachable;
@@ -285,12 +409,13 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
       firstParent: !opts.allCommits && !opts.revs?.length,
       ...(total !== revs.length ? { sampledFrom: total } : {}),
     },
-    dataLevel: last.manifest.dataLevel,
+    dataLevel: coverage?.forge ? 2 : last.manifest.dataLevel,
     git: last.manifest.git,
     metrics: [...metrics].sort(),
     categories: last.manifest.categories,
     ignored: last.manifest.ignored,
-    warnings: [...warnings],
+    warnings: [...planWarnings, ...warnings],
+    ...(coverage ? { coverage } : {}),
     frames,
   };
   await writeAtomic(join(dataDir, `timeline.${mode}.json`), `${JSON.stringify(manifest)}\n`);

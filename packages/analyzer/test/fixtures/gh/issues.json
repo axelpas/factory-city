@@ -1,0 +1,7 @@
+[
+  { "number": 1, "title": "Set up the project", "state": "CLOSED", "labels": [{ "name": "type:chore" }], "url": "https://github.com/acme/demo/issues/1" },
+  { "number": 2, "title": "Add the parser", "state": "CLOSED", "labels": [{ "name": "enhancement" }], "url": "https://github.com/acme/demo/issues/2" },
+  { "number": 3, "title": "Export as CSV", "state": "CLOSED", "labels": [], "url": "https://github.com/acme/demo/issues/3" },
+  { "number": 4, "title": "Crash on empty input", "state": "OPEN", "labels": [{ "name": "bug" }], "url": "https://github.com/acme/demo/issues/4" },
+  { "number": 6, "title": "Wrong total", "state": "CLOSED", "labels": [{ "name": "bug" }], "url": "https://github.com/acme/demo/issues/6" }
+]

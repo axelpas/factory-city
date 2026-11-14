@@ -222,3 +222,31 @@ export function lotCard(data: TimelineData, frame: number, union: number): LotCa
   else text = "This file is hidden by the current filter.";
   return { kind: "lot", title: path.slice(cut + 1), folder: cut < 0 ? "(root)" : path.slice(0, cut), text };
 }
+
+/** The last change of a file: its date, and the issue number and title when known. */
+export function lastChangeRow(
+  data: TimelineData,
+  frame: number,
+  union: number,
+  fmt: Formatter,
+): CardRow | undefined {
+  const path = data.paths[union] as string;
+  for (let f = Math.min(frame, data.frames.length - 1); f >= 0; f--) {
+    const info = data.frames[f]?.info;
+    if (!info) break;
+    if (!info.added.includes(path) && !info.modified.includes(path)) continue;
+    const what = info.issue
+      ? `#${info.issue.number}${info.issue.title ? ` ${info.issue.title}` : ""}`
+      : info.label;
+    return { label: "Last change", value: `${fmt.date(info.date)} · ${what}` };
+  }
+  const current = data.frames[frame];
+  const file = current?.model.files[current.modelIndex[union] as number];
+  const days = file?.values.days_since_last_change;
+  if (days === undefined) return undefined;
+  const value =
+    days === 0
+      ? "the day of the snapshot"
+      : `${fmt.integer(days)} day${days === 1 ? "" : "s"} before the snapshot`;
+  return { label: "Last change", value };
+}

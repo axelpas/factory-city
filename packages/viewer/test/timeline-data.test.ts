@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { syntheticSnapshots } from "../src/data/synthetic";
 import { buildTimelineData, layoutWeights } from "../src/data/timeline";
 import { createFormat } from "../src/lib/format";
-import { frameChangeRows, lotCard } from "../src/view/card";
+import { frameChangeRows, lastChangeRow, lotCard } from "../src/view/card";
 import { FRAMES, MAPPING, snapshot } from "./timeline-helpers";
 
 const fmt = createFormat(["en-US"]);
@@ -149,5 +149,35 @@ describe("synthetic city", () => {
     expect(a).toHaveLength(3);
     expect(buildTimelineData(a).paths.length).toBeGreaterThan(150);
     expect(Object.keys(syntheticSnapshots(50, 1)[0]?.lenses.metrics.attributes ?? {})).toHaveLength(50);
+  });
+});
+
+describe("last change of a file", () => {
+  it("gives the date and the frame that last touched the file", () => {
+    expect(lastChangeRow(data, 3, u("src/a.ts"), fmt)).toEqual({
+      label: "Last change",
+      value: "Jan 2, 2026 · c1 step 1",
+    });
+  });
+
+  it("names the issue when the frame stands for one", () => {
+    const withIssue = buildTimelineData(FRAMES.map(snapshot), {
+      ...manifest,
+      frames: manifest.frames.map((f) =>
+        f.index === 1 ? { ...f, issue: { number: 12, title: "Export as CSV" } } : f,
+      ),
+    });
+    expect(lastChangeRow(withIssue, 4, u("src/new.ts"), fmt)?.value).toBe("Jan 2, 2026 · #12 Export as CSV");
+  });
+
+  it("falls back to the days since the last change for a single snapshot, and to nothing without history", () => {
+    const one = buildTimelineData([
+      snapshot({ "a.ts": { rloc: 1, days_since_last_change: 3 }, "b.ts": { rloc: 1 } }),
+    ]);
+    expect(lastChangeRow(one, 0, 0, fmt)).toEqual({
+      label: "Last change",
+      value: "3 days before the snapshot",
+    });
+    expect(lastChangeRow(one, 0, 1, fmt)).toBeUndefined();
   });
 });

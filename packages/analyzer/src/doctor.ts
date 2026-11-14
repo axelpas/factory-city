@@ -3,12 +3,12 @@ import { resolve } from "node:path";
 import { findRepo } from "./source/git.js";
 
 /** Highest data level this version collects. */
-export const COLLECTED_LEVEL = 1;
+export const COLLECTED_LEVEL = 2;
 
 export interface DoctorReport {
   folder: string;
   /** Data level an analysis of this folder reaches. */
-  level: 0 | 1;
+  level: 0 | 1 | 2;
   levelName: string;
   checks: Array<{ name: string; ok: boolean; detail: string }>;
   /** The one action that unlocks the next level. */
@@ -78,6 +78,14 @@ export async function doctor(folder: string): Promise<DoctorReport> {
       "Install the GitHub CLI (`gh`) and sign in to unlock level 2 (issue titles, pull requests, CI runs).";
   else if (!ghSignedIn)
     next = "Run `gh auth login` to unlock level 2 (issue titles, pull requests, CI runs).";
-  else next = "The sources of level 2 are ready, but this version does not collect forge data yet.";
+  else {
+    return {
+      folder: dir,
+      level: 2,
+      levelName: "Forge",
+      checks,
+      next: "Level 3 needs a facts file (agent, model, outcome, cost per issue); this version does not import facts yet.",
+    };
+  }
   return { folder: dir, level: 1, levelName: "History", checks, next };
 }

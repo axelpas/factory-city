@@ -32,6 +32,30 @@ export interface AnalysisManifest {
 export type FrameKind = "feature" | "fix" | "refactor" | "chore" | "docs" | "test" | "unknown";
 export type TimelineMode = "commit" | "day" | "issue" | "revs";
 
+/** How a commit was linked to an issue, in priority order; `unlinked` when no strategy applied. */
+export type LinkStrategy = "closing-keyword" | "pull-request" | "reference" | "branch" | "unlinked";
+
+/** The issue a frame stands for. Title, state, labels and url are known at data level 2 only. */
+export interface FrameIssue {
+  number: number;
+  title?: string;
+  state?: string;
+  labels?: string[];
+  url?: string;
+  /** Pull request that carried the work, when known. */
+  pullRequest?: number;
+}
+
+/** How many commits each strategy linked, and how many stayed unlinked. */
+export interface CoverageReport {
+  commits: number;
+  linked: number;
+  byStrategy: Record<LinkStrategy, number>;
+  issues: number;
+  /** True when issue titles and pull requests came from the forge. */
+  forge: boolean;
+}
+
 /** One step of a timeline: a commit, a day or an issue. It points to one snapshot. */
 export interface Frame {
   id: string;
@@ -56,6 +80,10 @@ export interface Frame {
   metrics: { files_touched: number; lines_added: number; lines_deleted: number; folders_touched: number };
   /** Lines added and deleted per file by this frame's commits: `[added, deleted]`. */
   lines: Record<string, [number, number]>;
+  /** Issue mode: the issue this frame stands for; absent for a frame of unlinked commits. */
+  issue?: FrameIssue;
+  /** Issue mode: true for a frame that groups the commits of one day linked to no issue. */
+  unlinked?: boolean;
 }
 
 /** `timeline.json`: the ordered frames of a repository's history and what they share. */
@@ -72,5 +100,7 @@ export interface TimelineManifest {
   categories: Record<string, string[]>;
   ignored: IgnoreSummary;
   warnings: string[];
+  /** Issue mode: how commits were linked to issues. */
+  coverage?: CoverageReport;
   frames: Frame[];
 }

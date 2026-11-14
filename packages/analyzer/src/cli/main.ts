@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { METRICS } from "@factory-city/schema";
 import { Command } from "commander";
 import { ANALYZER_VERSION, analyze, slugFor, summaryLine } from "../analyze.js";
+import { coverageLine } from "../collectors/issues.js";
 import { doctor } from "../doctor.js";
 import { LANGUAGES } from "../languages/index.js";
 import { outputRoot, readIndex, updateIndex, writeAnalysis } from "../output.js";
@@ -101,7 +102,13 @@ program
     let entry: { slug: string; name: string; dataDir: string; updatedAt: string } | undefined;
     if (dataDir) {
       const dir = resolve(dataDir);
-      const known = ["analysis.json", "timeline.commit.json", "timeline.day.json", "timeline.revs.json"];
+      const known = [
+        "analysis.json",
+        "timeline.commit.json",
+        "timeline.day.json",
+        "timeline.issue.json",
+        "timeline.revs.json",
+      ];
       if (!known.some((f) => existsSync(join(dir, f))))
         throw new Error(
           `No analysis.json or timeline in ${dir}. Run \`factory-city analyze\` first, or pass the folder written by it.`,
@@ -170,7 +177,8 @@ program
   .command("timeline")
   .description("Build the timeline of a repository: one snapshot per commit or per day")
   .argument("[repo]", "repository to analyze", ".")
-  .option("--by <mode>", "one frame per commit or per day", "commit")
+  .option("--by <mode>", "one frame per commit, per issue or per day", "commit")
+  .option("--offline", "no network: do not ask GitHub for issue titles")
   .option("--branch <branch>", "branch to follow (default: the current one)")
   .option("--all-commits", "every commit instead of the first-parent history")
   .option("--since <date>", "only commits after this date")
@@ -186,9 +194,8 @@ program
   .option("--json", "print machine-readable output")
   .action(async (repoPath: string, opts: Record<string, unknown>) => {
     const by = opts.by as string;
-    if (by === "issue")
-      throw new Error("--by issue is not available yet in this version. Use --by commit or --by day.");
-    if (by !== "commit" && by !== "day") throw new Error(`Unknown --by "${by}". Use commit or day.`);
+    if (by !== "commit" && by !== "day" && by !== "issue")
+      throw new Error(`Unknown --by "${by}". Use commit, issue or day.`);
     const maxFrames = opts.maxFrames === undefined ? undefined : Number(opts.maxFrames);
     if (maxFrames !== undefined && (!Number.isInteger(maxFrames) || maxFrames < 2)) {
       throw new Error("--max-frames must be a whole number of at least 2.");
@@ -215,6 +222,7 @@ program
                 .filter(Boolean)
             : undefined,
         maxFrames,
+        offline: opts.offline as boolean | undefined,
         path: opts.path as string | undefined,
         all: opts.all as boolean | undefined,
         include: opts.include as string[],
@@ -255,6 +263,7 @@ program
       `Timeline of ${result.manifest.frames.length} frames${sampled} written to ${dataDir} in ${seconds.toFixed(1)} s.`,
     );
     console.log(`Parsed ${result.cache.parsed} file contents, reused ${result.cache.reused} from the cache.`);
+    if (result.manifest.coverage) console.log(coverageLine(result.manifest.coverage));
     for (const warning of result.manifest.warnings) console.warn(`warning: ${warning}`);
     console.log("Run `factory-city view` to play it.");
   });

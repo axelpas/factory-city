@@ -6,9 +6,15 @@ export interface Config {
   windows: { recentDays: number; reworkDays: number };
   /** Extra regular expressions that mark a commit subject as a fix. */
   fixPatterns: string[];
+  /** Extra regular expressions that find an issue number in a commit message; group 1 is the number. */
+  issuePatterns: string[];
 }
 
-export const DEFAULT_CONFIG: Config = { windows: { recentDays: 30, reworkDays: 14 }, fixPatterns: [] };
+export const DEFAULT_CONFIG: Config = {
+  windows: { recentDays: 30, reworkDays: 14 },
+  fixPatterns: [],
+  issuePatterns: [],
+};
 
 export async function loadConfig(folder: string): Promise<Config> {
   const path = join(folder, "factory-city.config.json");
@@ -34,22 +40,26 @@ export async function loadConfig(folder: string): Promise<Config> {
       throw new Error(`${path}: windows.${key} must be a positive number of days.`);
     return v;
   };
-  const fixPatterns = json.fixPatterns ?? [];
-  if (!Array.isArray(fixPatterns) || fixPatterns.some((p) => typeof p !== "string")) {
-    throw new Error(`${path}: fixPatterns must be a list of regular expressions written as strings.`);
-  }
-  for (const p of fixPatterns as string[]) {
-    try {
-      new RegExp(p);
-    } catch {
-      throw new Error(`${path}: "${p}" in fixPatterns is not a valid regular expression.`);
+  const patterns = (key: "fixPatterns" | "issuePatterns"): string[] => {
+    const list = json[key] ?? [];
+    if (!Array.isArray(list) || list.some((p) => typeof p !== "string")) {
+      throw new Error(`${path}: ${key} must be a list of regular expressions written as strings.`);
     }
-  }
+    for (const p of list as string[]) {
+      try {
+        new RegExp(p);
+      } catch {
+        throw new Error(`${path}: "${p}" in ${key} is not a valid regular expression.`);
+      }
+    }
+    return list as string[];
+  };
   return {
     windows: {
       recentDays: days("recentDays", DEFAULT_CONFIG.windows.recentDays),
       reworkDays: days("reworkDays", DEFAULT_CONFIG.windows.reworkDays),
     },
-    fixPatterns: fixPatterns as string[],
+    fixPatterns: patterns("fixPatterns"),
+    issuePatterns: patterns("issuePatterns"),
   };
 }
