@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { basename, resolve } from "node:path";
 import type { AnalysisManifest, AttributeDescriptor, CcJson, FileNode } from "@factory-city/schema";
 import { buildCcJson, getMetric, nodeId } from "@factory-city/schema";
+import { collectHistory, historyMetrics } from "./collectors/history.js";
+import { loadConfig } from "./config.js";
 import { inspectContent } from "./inspect.js";
 import { LANGUAGES } from "./languages/index.js";
 import { computeMetrics, plainMetrics } from "./metrics/file-metrics.js";
@@ -9,6 +11,7 @@ import { getParser } from "./parse.js";
 import { buildImportGraph, folderCohesion, loadResolveContext } from "./resolve.js";
 import { bump, emptySummary, folderReason, makeFolderSkipper, selectEntries } from "./select.js";
 import { DiskSource } from "./source/disk.js";
+import type { RepoInfo } from "./source/git.js";
 import { findRepo, GitSource } from "./source/git.js";
 import type { Source } from "./source/types.js";
 
@@ -41,6 +44,12 @@ const ABSOLUTE = new Set([
   "imports_out",
   "imports_in",
   "escape_hatches",
+  "number_of_commits",
+  "recent_commits",
+  "lines_added_recent",
+  "lines_deleted_recent",
+  "fix_commits",
+  "fix_commits_recent",
 ]);
 
 /** Resolves imports across the analyzed files, then adds `imports_out`, `imports_in` and `folder_cohesion`. */
@@ -91,7 +100,7 @@ async function addCoupling(
 async function openSource(
   opts: AnalyzeOptions,
   warnings: string[],
-): Promise<{ source: Source; git: { available: boolean; shallow: boolean } }> {
+): Promise<{ source: Source; git: { available: boolean; shallow: boolean }; repo: RepoInfo | undefined }> {
   const folder = resolve(opts.folder);
   const repo = await findRepo(folder);
   const git = { available: repo !== undefined, shallow: repo?.shallow ?? false };
@@ -102,14 +111,14 @@ async function openSource(
       );
     if (!repo.hasCommits)
       throw new Error("This repository has no commit yet. Commit something, or run without --rev.");
-    return { source: await GitSource.open(folder, repo, opts.rev), git };
+    return { source: await GitSource.open(folder, repo, opts.rev), git, repo };
   }
   if (repo?.hasCommits && !opts.dirty) {
-    return { source: await GitSource.open(folder, repo, "HEAD"), git };
+    return { source: await GitSource.open(folder, repo, "HEAD"), git, repo };
   }
   if (repo && !repo.hasCommits && !opts.dirty)
     warnings.push("The repository has no commit yet: analyzing the files on disk.");
-  return { source: new DiskSource(folder), git };
+  return { source: new DiskSource(folder), git, repo };
 }
 
 function buildTree(
@@ -161,7 +170,7 @@ function buildTree(
 export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
   const warnings: string[] = [];
   const summary = emptySummary();
-  const { source, git } = await openSource(opts, warnings);
+  const { source, git, repo } = await openSource(opts, warnings);
   try {
     if (git.shallow) {
       warnings.push(
@@ -221,6 +230,29 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
       importsByFile,
       folderAttributes,
     );
+    let dataLevel: 0 | 1 = 0;
+    if (repo?.hasCommits) {
+      // level 1: history up to the analyzed revision, never beyond it
+      try {
+        const config = await loadConfig(resolve(opts.folder));
+        const history = await collectHistory(
+          repo.topLevel,
+          repo.prefix,
+          opts.rev ?? "HEAD",
+          new Set(attributesByPath.keys()),
+          { recentDays: config.windows.recentDays, fixPatterns: config.fixPatterns },
+        );
+        for (const [path, h] of history.files) {
+          const values = attributesByPath.get(path);
+          if (values) Object.assign(values, historyMetrics(h, history.snapshotTime));
+        }
+        dataLevel = 1;
+      } catch (err) {
+        warnings.push(
+          `Git history could not be read (${err instanceof Error ? err.message : String(err)}): level 1 metrics are unavailable.`,
+        );
+      }
+    }
     for (const values of attributesByPath.values()) for (const key of Object.keys(values)) present.add(key);
     for (const values of folderAttributes.values()) for (const key of Object.keys(values)) present.add(key);
 
@@ -254,7 +286,7 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
       createdAt: new Date().toISOString(),
       project,
       source: { kind: source.kind, rev: opts.rev, commit: source.commit, path: opts.path },
-      dataLevel: 0,
+      dataLevel,
       git,
       metrics: metricIds,
       categories: {

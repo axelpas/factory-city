@@ -1,5 +1,7 @@
 import type { Model } from "../data/model";
+import bugMagnets from "./bug-magnets.json";
 import cohesion from "./cohesion.json";
+import hotspots from "./hotspots.json";
 import language from "./language.json";
 import shortcuts from "./shortcuts.json";
 import structure from "./structure.json";
@@ -27,7 +29,12 @@ export const PRESETS: readonly Preset[] = [
   threeCs as Preset,
   shortcuts as Preset,
   language as Preset,
+  hotspots as Preset,
+  bugMagnets as Preset,
 ];
+
+/** Default preset, in order of preference: Hotspots with git history, Structure without. */
+const DEFAULT_ORDER = ["hotspots", "structure"];
 export const MIN_COVERAGE = 0.5;
 
 export interface Mapping {
@@ -97,7 +104,11 @@ export function presetStatuses(model: Model): PresetStatus[] {
 
 /** The first available preset: Structure, the default without git history. */
 export function defaultMapping(model: Model): { preset: Preset; mapping: Mapping } {
-  const first = presetStatuses(model).find((s) => s.available);
+  const statuses = presetStatuses(model);
+  const first =
+    DEFAULT_ORDER.map((id) => statuses.find((s) => s.preset.id === id && s.available)).find(
+      (s) => s !== undefined,
+    ) ?? statuses.find((s) => s.available);
   if (first?.mapping) return { preset: first.preset, mapping: first.mapping };
   const numeric = [...model.metrics.values()].filter((m) => m.kind === "number").map((m) => m.id);
   const fallback = numeric[0] ?? "loc";

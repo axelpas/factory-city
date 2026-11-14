@@ -1,0 +1,10 @@
+{
+  "id": "hotspots",
+  "label": "Hotspots",
+  "group": "History",
+  "level": 1,
+  "question": "Where is complex code changing often?",
+  "area": "rloc",
+  "height": "mcc",
+  "color": ["recent_commits"]
+}

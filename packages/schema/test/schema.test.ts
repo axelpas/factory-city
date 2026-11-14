@@ -50,7 +50,9 @@ describe("metric registry", () => {
   it("looks metrics up by id and by data level", () => {
     expect(getMetric("rloc")?.level).toBe(0);
     expect(getMetric("nope")).toBeUndefined();
-    expect(metricsForLevel(0)).toHaveLength(METRICS.length);
+    expect(getMetric("recent_commits")?.level).toBe(1);
+    expect(metricsForLevel(3)).toHaveLength(METRICS.length);
+    expect(metricsForLevel(0).length).toBeLessThan(METRICS.length);
     expect(metricsForLevel(0).every((m) => m.level === 0)).toBe(true);
   });
 });

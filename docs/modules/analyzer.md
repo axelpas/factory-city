@@ -10,7 +10,8 @@ The `factory-city` command line. Depends on `schema` only.
 - `metrics/file-metrics.ts`: `loc`, `rloc`, `comment_lines`, `functions`, `mcc`, `max_function_complexity`, `max_nesting_level`.
 - `metrics/cohesion.ts`: LCOM4 generalized to a file (union-find over functions and methods). `metrics/file-metrics.ts` also counts the shortcut kinds from the language's rule set and collects module specifiers.
 - `resolve.ts`: resolves imports to files of the project (relative paths, `.js` to `.ts`, tsconfig and jsconfig `paths` and `baseUrl` with `extends`, workspace packages); builds the import graph, `imports_out`, `imports_in` and `folder_cohesion`. No type checker: resolution is a heuristic.
+- `collectors/history.ts`: level 1. One `git log --numstat -M -z` up to the analyzed revision gives commits, authors, fixes, recent changes, age and change coupling per file. `config.ts` reads the optional `factory-city.config.json` (`windows.recentDays`, `windows.reworkDays`, `fixPatterns`). `doctor.ts` reports the data level and the next action.
 - `analyze.ts`, `output.ts`: builds the snapshot and the manifest, writes `~/.factory-city/<slug>/` (or `-o`), updates `index.json`.
 
-Commands so far: `analyze`, `metrics`, `languages`. Set `FACTORY_CITY_HOME` to move the output root (the tests do).
+Commands so far: `analyze`, `view`, `doctor`, `metrics`, `languages`, and the default command (analyze, then open). Set `FACTORY_CITY_HOME` to move the output root (the tests do).
 Decisions: `decisions/2026-11-14-parsing-web-tree-sitter.md`, `decisions/2026-11-14-metric-definitions-and-thresholds.md`.

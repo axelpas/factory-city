@@ -1,0 +1,10 @@
+{
+  "id": "bug-magnets",
+  "label": "Bug magnets",
+  "group": "History",
+  "level": 1,
+  "question": "Where do fixes keep landing?",
+  "area": "rloc",
+  "height": "mcc",
+  "color": ["fix_commits"]
+}

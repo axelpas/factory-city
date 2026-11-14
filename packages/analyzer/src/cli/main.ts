@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { METRICS } from "@factory-city/schema";
 import { Command } from "commander";
 import { ANALYZER_VERSION, analyze, slugFor, summaryLine } from "../analyze.js";
+import { doctor } from "../doctor.js";
 import { LANGUAGES } from "../languages/index.js";
 import { outputRoot, readIndex, updateIndex, writeAnalysis } from "../output.js";
 import { defaultViewerDir, openBrowser, startServer } from "../server.js";
@@ -161,6 +162,22 @@ program
       return;
     }
     for (const l of LANGUAGES) console.log(`${l.label.padEnd(12)} tier ${l.tier}  ${l.extensions.join(" ")}`);
+  });
+
+program
+  .command("doctor")
+  .description("Print the data level reached and the one action that unlocks the next")
+  .argument("[path]", "folder to check", ".")
+  .option("--json", "print machine-readable output")
+  .action(async (path: string, opts: { json?: boolean }) => {
+    const report = await doctor(path);
+    if (opts.json) {
+      console.log(JSON.stringify(report, null, 2));
+      return;
+    }
+    console.log(`Data level ${report.level} (${report.levelName})`);
+    for (const c of report.checks) console.log(`  ${c.ok ? "ok" : "--"}  ${c.name}: ${c.detail}`);
+    console.log(`Next: ${report.next}`);
   });
 
 program.parseAsync().catch((err: unknown) => {
