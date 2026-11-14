@@ -1,6 +1,6 @@
 # Snapshot format: CodeCharta cc.json 2.x
 
-- Status: proposed (awaiting approval of the Phase A plan)
+- Status: accepted (2026-11-14)
 - Date: 2026-11-14
 
 ## Context
