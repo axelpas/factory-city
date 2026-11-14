@@ -1,0 +1,10 @@
+{
+  "id": "agents",
+  "label": "Agents",
+  "group": "Factory",
+  "level": 1,
+  "question": "Who wrote what?",
+  "area": "rloc",
+  "height": "mcc",
+  "color": ["main_agent"]
+}

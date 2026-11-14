@@ -1,0 +1,10 @@
+{
+  "id": "contention",
+  "label": "Contention",
+  "group": "History",
+  "level": 1,
+  "question": "Which files do many issues fight over?",
+  "area": "rloc",
+  "height": "mcc",
+  "color": ["issues_recent"]
+}

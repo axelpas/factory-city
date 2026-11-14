@@ -4,6 +4,8 @@ import type { AnalysisManifest, AttributeDescriptor, CcJson, FileNode } from "@f
 import { buildCcJson, getMetric, nodeId } from "@factory-city/schema";
 import type { HistoryResult } from "./collectors/history.js";
 import { collectHistory, historyMetrics } from "./collectors/history.js";
+import { buildLineage } from "./collectors/lineage.js";
+import type { FileProvenance } from "./collectors/provenance.js";
 import { loadConfig } from "./config.js";
 import type { ContentProblem } from "./inspect.js";
 import { inspectContent } from "./inspect.js";
@@ -15,7 +17,7 @@ import { buildImportGraph, folderCohesion, loadResolveContext } from "./resolve.
 import { bump, emptySummary, folderReason, makeFolderSkipper, selectEntries } from "./select.js";
 import { DiskSource } from "./source/disk.js";
 import type { RepoInfo } from "./source/git.js";
-import { findRepo, GitSource } from "./source/git.js";
+import { findRepo, GitSource, revParse } from "./source/git.js";
 import type { Source } from "./source/types.js";
 
 export const ANALYZER_VERSION = "0.2.0";
@@ -44,6 +46,8 @@ export interface AnalyzeShared {
   fileCache: Map<string, CachedFile>;
   /** History of the files at a revision; replaces the per-call `git log`. */
   history?: (rev: string, files: ReadonlySet<string>) => Promise<HistoryResult>;
+  /** Line provenance at a revision (full hash), from the timeline's single replay. */
+  provenance?: (hash: string) => { metrics?: Map<string, FileProvenance>; labels: string[] } | undefined;
 }
 
 export interface AnalysisResult {
@@ -68,6 +72,8 @@ const ABSOLUTE = new Set([
   "lines_deleted_recent",
   "fix_commits",
   "fix_commits_recent",
+  "rework_lines",
+  "issues_recent",
 ]);
 
 /** Resolves imports across the analyzed files, then adds `imports_out`, `imports_in` and `folder_cohesion`. */
@@ -263,6 +269,7 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
       folderAttributes,
     );
     let dataLevel: 0 | 1 = 0;
+    let authorLabels: string[] | undefined;
     if (repo?.hasCommits) {
       // level 1: history up to the analyzed revision, never beyond it
       try {
@@ -282,6 +289,38 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
       } catch (err) {
         warnings.push(
           `Git history could not be read (${err instanceof Error ? err.message : String(err)}): level 1 metrics are unavailable.`,
+        );
+      }
+      // level 1, from line provenance: rework, contention, authorship
+      try {
+        const hash = await revParse(repo.topLevel, opts.rev ?? "HEAD");
+        let found = opts.shared?.provenance?.(hash);
+        if (!opts.shared?.provenance) {
+          const lineage = await buildLineage(repo.topLevel, hash, {
+            config: await loadConfig(resolve(opts.folder)),
+            prefix: repo.prefix,
+            checkpoints: [hash],
+            analyzerVersion: ANALYZER_VERSION,
+          });
+          found = { metrics: lineage.at.get(hash), labels: lineage.labels };
+        }
+        if (found?.metrics) {
+          authorLabels = found.labels;
+          for (const [path, m] of found.metrics) {
+            const values = attributesByPath.get(path);
+            if (!values) continue;
+            values.rework_lines = m.rework_lines;
+            values.rework_ratio = m.rework_ratio;
+            values.issues_recent = m.issues_recent;
+            if (m.main_agent >= 0) {
+              values.main_agent = m.main_agent;
+              values.main_agent_share = m.main_agent_share;
+            }
+          }
+        }
+      } catch (err) {
+        warnings.push(
+          `Line provenance could not be computed (${err instanceof Error ? err.message : String(err)}): rework and authorship are unavailable.`,
         );
       }
     }
@@ -323,6 +362,7 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
       categories: {
         language: LANGUAGES.map((l) => l.id),
         is_test: ["no", "yes"],
+        ...(authorLabels ? { main_agent: authorLabels } : {}),
       },
       selected: candidates.length,
       analyzed: attributesByPath.size,

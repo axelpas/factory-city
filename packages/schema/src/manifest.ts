@@ -77,7 +77,18 @@ export interface Frame {
   added: string[];
   modified: string[];
   deleted: string[];
-  metrics: { files_touched: number; lines_added: number; lines_deleted: number; folders_touched: number };
+  metrics: {
+    files_touched: number;
+    lines_added: number;
+    lines_deleted: number;
+    folders_touched: number;
+    /** Retrospective. Absent while pending (under 14 days of later history) or without provenance. */
+    rework_after?: number;
+    /** True while `rework_after` waits for 14 days of later history. */
+    rework_after_pending?: boolean;
+    /** Retrospective, experimental. Absent without provenance. */
+    caused_fixes?: number;
+  };
   /** Lines added and deleted per file by this frame's commits: `[added, deleted]`. */
   lines: Record<string, [number, number]>;
   /** Issue mode: the issue this frame stands for; absent for a frame of unlinked commits. */

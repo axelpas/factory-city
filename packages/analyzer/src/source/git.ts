@@ -13,6 +13,11 @@ function git(cwd: string, args: string[]): Promise<string> {
   });
 }
 
+/** Full hash of a revision. */
+export async function revParse(topLevel: string, rev: string): Promise<string> {
+  return (await git(topLevel, ["rev-parse", `${rev}^{commit}`])).trim();
+}
+
 /** Result of looking for a git repository around a folder. */
 export interface RepoInfo {
   topLevel: string;

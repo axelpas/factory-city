@@ -21,6 +21,7 @@ import {
   kindOf,
   linkStep,
 } from "./collectors/issues.js";
+import { buildLineage, type Lineage } from "./collectors/lineage.js";
 import { loadConfig } from "./config.js";
 import { findRepo } from "./source/git.js";
 
@@ -53,6 +54,8 @@ export interface TimelineResult {
   dataDir: string;
   /** Unique file contents parsed during this run, and those answered by the cache. */
   cache: { parsed: number; reused: number };
+  /** First-parent steps replayed for line provenance in this run, and steps restored from the cache. */
+  provenance: { replayed: number; reused: number };
 }
 
 function git(cwd: string, args: string[]): Promise<string> {
@@ -257,8 +260,8 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
   const planWarnings: string[] = [];
   let coverage: CoverageReport | undefined;
   let revs: Rev[];
+  let forge: ForgeData | undefined;
   if (mode === "issue") {
-    let forge: ForgeData | undefined;
     if (!opts.offline) {
       try {
         forge = await loadForge(opts.gh ?? systemGh(folder), join(dataDir, "cache", "forge.json"));
@@ -286,7 +289,29 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
   const fileCache = await loadFileCache(cachePath);
   const cachedBefore = fileCache.size;
   let reachable = new Set<string>();
+  let lineage: Lineage | undefined;
+  try {
+    lineage = await buildLineage(repo.topLevel, tip.hash, {
+      config,
+      forge,
+      prefix: repo.prefix,
+      checkpoints: revs.map((r) => r.hash),
+      cachePath: join(dataDir, "cache", `provenance.${mode}.json`),
+      analyzerVersion: ANALYZER_VERSION,
+    });
+    if (revs.some((r) => !lineage?.stepIndex.has(r.hash))) {
+      planWarnings.push(
+        "Some frames are not on the first-parent history: rework and authorship are unavailable for them.",
+      );
+    }
+  } catch (err) {
+    planWarnings.push(
+      `Line provenance could not be computed (${err instanceof Error ? err.message : String(err)}): rework and authorship are unavailable.`,
+    );
+  }
+  const known = lineage;
   const shared: AnalyzeShared = {
+    provenance: (hash) => (known ? { metrics: known.at.get(hash), labels: known.labels } : undefined),
     fileCache,
     history: async (_rev, files) =>
       computeHistory(log, currentTime, reachable, repo.prefix, files, {
@@ -397,6 +422,22 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
   }
 
   if (!last) throw new Error("No frame was produced.");
+  if (lineage) {
+    // retrospective metrics: what later happened to the lines each frame added
+    let previous = -1;
+    for (const [i, rev] of revs.entries()) {
+      const at = lineage.stepIndex.get(rev.hash);
+      const frame = frames[i];
+      if (at === undefined || !frame) continue;
+      const indices: number[] = [];
+      for (let k = previous + 1; k <= at; k++) indices.push(k);
+      previous = Math.max(previous, at);
+      const retro = lineage.provenance.retrospective(indices, rev.time);
+      frame.metrics.caused_fixes = retro.caused_fixes;
+      if (retro.rework_after !== undefined) frame.metrics.rework_after = retro.rework_after;
+      else if (retro.lines_added > 0) frame.metrics.rework_after_pending = true;
+    }
+  }
   const manifest: TimelineManifest = {
     kind: "timeline",
     schemaVersion: 1,
@@ -424,5 +465,6 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
     manifest,
     dataDir,
     cache: { parsed: fileCache.size - cachedBefore, reused: Math.max(0, lookups) },
+    provenance: { replayed: lineage?.replayed ?? 0, reused: lineage?.reused ?? 0 },
   };
 }

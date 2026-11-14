@@ -1,11 +1,14 @@
 import type { Model } from "../data/model";
+import agents from "./agents.json";
 import bugMagnets from "./bug-magnets.json";
 import cohesion from "./cohesion.json";
+import contention from "./contention.json";
 import hotspots from "./hotspots.json";
 import language from "./language.json";
 import shortcuts from "./shortcuts.json";
 import structure from "./structure.json";
 import threeCs from "./three-cs.json";
+import waste from "./waste.json";
 
 /** A preset sets all channels at once and states the question it answers. Declarative: no viewer code per preset. */
 export interface Preset {
@@ -31,6 +34,9 @@ export const PRESETS: readonly Preset[] = [
   language as Preset,
   hotspots as Preset,
   bugMagnets as Preset,
+  waste as Preset,
+  contention as Preset,
+  agents as Preset,
 ];
 
 /** Default preset, in order of preference: Hotspots with git history, Structure without. */

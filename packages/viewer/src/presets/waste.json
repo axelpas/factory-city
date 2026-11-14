@@ -1,0 +1,10 @@
+{
+  "id": "waste",
+  "label": "Waste",
+  "group": "History",
+  "level": 1,
+  "question": "Where is fresh code thrown away?",
+  "area": "rloc",
+  "height": "mcc",
+  "color": ["rework_ratio"]
+}

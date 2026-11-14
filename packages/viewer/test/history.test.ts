@@ -33,3 +33,48 @@ describe("history presets", () => {
     expect(dataLevelLine(withHistory)).toContain("gh");
   });
 });
+
+describe("provenance presets", () => {
+  const model = makeModel(
+    SAMPLE.map((s, i) => ({
+      ...s,
+      values: {
+        ...s.values,
+        rework_ratio: i / 10,
+        issues_recent: i,
+        main_agent: i % 2,
+        main_agent_share: 0.8,
+      },
+    })),
+    { dataLevel: 1, categories: { main_agent: ["Agent One", "unknown"] } },
+  );
+
+  it("offers Waste, Contention and Agents with their questions", () => {
+    const byId = new Map(presetStatuses(model).map((s) => [s.preset.id, s]));
+    expect(byId.get("waste")?.mapping?.color).toBe("rework_ratio");
+    expect(byId.get("contention")?.mapping?.color).toBe("issues_recent");
+    expect(byId.get("agents")?.mapping?.color).toBe("main_agent");
+    expect(byId.get("agents")?.preset.question).toBe("Who wrote what?");
+    expect(byId.get("agents")?.preset.group).toBe("Factory");
+  });
+
+  it("lists them as unavailable without provenance", () => {
+    const plain = makeModel(SAMPLE);
+    for (const id of ["waste", "contention", "agents"]) {
+      expect(presetStatuses(plain).find((s) => s.preset.id === id)?.available).toBe(false);
+    }
+  });
+
+  it("names the main author on the card", async () => {
+    const { fileCard } = await import("../src/view/card");
+    const { createFormat } = await import("../src/lib/format");
+    const { mapping } = defaultMapping(model);
+    const card = fileCard(
+      model,
+      model.filesByPath.get("src/b.ts") as number,
+      mapping,
+      createFormat(["en-US"]),
+    );
+    expect(card.metrics).toContainEqual(expect.objectContaining({ label: "Main author", value: "unknown" }));
+  });
+});

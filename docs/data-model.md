@@ -35,3 +35,5 @@ Each frame holds: `id`, `index`, `kind`, `label`, `date` (UTC), short `commit`, 
 Category codes are fixed (a language's code is its position in the analyzer's language list), so a code means the same in every frame. `cache/files.json` holds the per-content metric cache; it is not served to the viewer.
 
 In issue mode (`timeline.issue.json`) a frame also carries `issue` (`number`, and at data level 2 `title`, `state`, `labels`, `url`; `pullRequest` when known) or `unlinked: true`, and the manifest carries `coverage` (`commits`, `linked`, `byStrategy`, `issues`, `forge`). See `decisions/2026-11-15-issue-resolution.md`.
+
+Frame metrics also hold the retrospective `rework_after` (absent while `rework_after_pending` is true, or without provenance) and `caused_fixes` (experimental). `categories.main_agent` lists the author labels.
