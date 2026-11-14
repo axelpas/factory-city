@@ -25,6 +25,8 @@ export interface Placement {
   h: number;
   baseY: number;
   color: Rgb;
+  /** Position on the sequential ramp (0..1) when the color comes from a number; undefined otherwise. */
+  ramp?: number;
   /** Rotation around the vertical axis, in radians (0 when twist is off or unavailable). */
   twist: number;
   /** 0..1: which roof mark a category carries, so that color is never the only cue. */
@@ -135,6 +137,7 @@ export function computePlacements(
       twist,
     );
     let color = building;
+    let ramp: number | undefined;
     let colorUnavailable = false;
     let roofMark = 0;
     if (colorMetric) {
@@ -147,7 +150,8 @@ export function computePlacements(
         color = slot === undefined ? cats.other : (cats.palette[slot] as Rgb);
         roofMark = slot === undefined ? 1 : slot / Math.max(cats.palette.length, 1);
       } else if (colorScale) {
-        color = rampColor(sequential, colorScale(cv));
+        ramp = colorScale(cv);
+        color = rampColor(sequential, ramp);
       }
     }
     return {
@@ -159,6 +163,7 @@ export function computePlacements(
       h: hv === undefined ? MIN_HEIGHT : MIN_HEIGHT + heightScale(hv) * maxHeight,
       baseY: plinthTop(folderDepth(file.dir)),
       color,
+      ramp,
       roofMark,
       heightUnavailable: hv === undefined,
       colorUnavailable,

@@ -22,6 +22,8 @@ function fixture() {
     "analysis.json": '{"kind":"snapshot"}',
     "snapshot.cc.json": "{}",
     "secret.txt": "nope",
+    "frames.commit/0001-abc.cc.json": '{"frame":1}',
+    "cache/files.json": "{}",
   });
   mkdirSync(join(home, "x"), { recursive: true });
   return { home, viewer, dataDir };
@@ -57,6 +59,13 @@ describe("local server", () => {
     });
   });
 
+  it("serves the frames of a timeline", async () => {
+    const { viewer, dataDir } = fixture();
+    running = await startServer({ viewerDir: viewer, extra: [entry(dataDir)], port: 0 });
+    const res = await fetch(`${running.url}data/demo-abc123/frames.commit/0001-abc.cc.json`);
+    expect(await res.json()).toEqual({ frame: 1 });
+  });
+
   it("refuses path traversal and unknown projects", async () => {
     const { viewer, dataDir } = fixture();
     running = await startServer({ viewerDir: viewer, extra: [entry(dataDir)], port: 0 });
@@ -66,6 +75,8 @@ describe("local server", () => {
       "data/other/analysis.json",
       "data/demo-abc123/..%2fsecret.txt",
       "data/demo-abc123/.hidden",
+      "data/demo-abc123/frames.commit/..%2f..%2fsecret.txt",
+      "data/demo-abc123/cache/files.json",
     ]) {
       const res = await fetch(`${running.url}${path}`);
       expect(res.status, path).toBeGreaterThanOrEqual(400);

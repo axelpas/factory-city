@@ -1,24 +1,160 @@
 import type { Layout } from "@factory-city/layout";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import {
+  B,
+  D,
+  G,
+  H,
+  MAX_DELAY,
+  MODE,
+  PRESENCE,
+  R,
+  RAMP,
+  ROOF,
+  STRIDE,
+  TOUCHED,
+  TWIST,
+  W,
+  X,
+  Y,
+  Z,
+} from "../anim/transition";
 import type { Theme } from "../themes/index";
-import type { Rgb } from "../view/color";
-import { folderDepth, PLINTH_THICKNESS, type Placement, plinthTop } from "../view/placements";
+import { parseHex, type Rgb } from "../view/color";
+import { pickBuilding } from "../view/picking";
+import { folderDepth, PLINTH_THICKNESS, plinthTop } from "../view/placements";
 
-export type Pick = { kind: "file"; index: number } | { kind: "folder"; path: string } | null;
+export type Pick =
+  | { kind: "file"; index: number }
+  | { kind: "lot"; index: number }
+  | { kind: "folder"; path: string }
+  | null;
 
-export interface PlacementStyle {
-  /** Instances to draw dimmed (search filter, dimmed tests). */
-  dimmed?: ReadonlySet<number>;
-  /** Instances to leave out entirely. */
-  hidden?: ReadonlySet<number>;
+const MAX_RAMP = 8;
+
+/** Shared by the color and the depth material: where a vertex of a building is, right now. */
+const VERTEX_COMMON = /* glsl */ `
+attribute vec3 aPosA;
+attribute vec3 aPosB;
+attribute vec3 aSizeA;
+attribute vec3 aSizeB;
+attribute vec4 aMiscA; // twist, ramp, mode, roof
+attribute vec4 aMiscB;
+attribute vec3 aColA;
+attribute vec3 aColB;
+attribute vec4 aFx; // touched A, presence A, touched B, presence B
+attribute float aDelay;
+uniform float uProgress;
+varying vec3 vBox;
+varying vec3 vSize;
+varying vec4 vMiscA;
+varying vec4 vMiscB;
+varying vec2 vFx;
+varying float vEase;
+varying vec3 vColor;
+uniform vec3 uRamp[${MAX_RAMP}];
+uniform float uRampCount;
+
+vec3 fcToLinear(vec3 c) {
+  return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
+}
+vec3 fcToSrgb(vec3 c) {
+  vec3 x = clamp(c, 0.0, 1.0);
+  return mix(x * 12.92, 1.055 * pow(x, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, x));
+}
+vec3 fcRampAt(float t) {
+  float pos = clamp(t, 0.0, 1.0) * (uRampCount - 1.0);
+  int i = int(min(floor(pos), uRampCount - 2.0));
+  return mix(uRamp[i], uRamp[i + 1], pos - float(i));
+}
+vec3 fcOklab(vec3 srgb) {
+  vec3 c = fcToLinear(srgb);
+  vec3 lms = pow(vec3(
+    0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b,
+    0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b,
+    0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b), vec3(1.0 / 3.0));
+  return vec3(
+    0.2104542553 * lms.x + 0.7936177850 * lms.y - 0.0040720468 * lms.z,
+    1.9779984951 * lms.x - 2.4285922050 * lms.y + 0.4505937099 * lms.z,
+    0.0259040371 * lms.x + 0.7827717662 * lms.y - 0.8086757660 * lms.z);
+}
+vec3 fcFromOklab(vec3 lab) {
+  vec3 lms = pow(vec3(
+    lab.x + 0.3963377774 * lab.y + 0.2158037573 * lab.z,
+    lab.x - 0.1055613458 * lab.y - 0.0638541728 * lab.z,
+    lab.x - 0.0894841775 * lab.y - 1.2914855480 * lab.z), vec3(3.0));
+  return fcToSrgb(vec3(
+    4.0767416621 * lms.x - 3.3077115913 * lms.y + 0.2309699292 * lms.z,
+    -1.2684380046 * lms.x + 2.6097574011 * lms.y - 0.3413193965 * lms.z,
+    -0.0041960863 * lms.x - 0.7034186147 * lms.y + 1.7076147010 * lms.z));
+}
+/** The building's color in sRGB: the ramp read at the interpolated value, or a perceptual cross-fade. */
+vec3 fcColor(float e) {
+  if (aMiscA.z < 0.5 && aMiscB.z < 0.5) return fcRampAt(mix(aMiscA.y, aMiscB.y, e));
+  if (e <= 0.0) return aColA;
+  if (e >= 1.0) return aColB;
+  return fcFromOklab(mix(fcOklab(aColA), fcOklab(aColB), e));
 }
 
-const HIDDEN_SCALE = 1e-4;
-const AXIS_Y = new THREE.Vector3(0, 1, 0);
-const DIM_MIX = 0.82;
+float fcEase(float t) {
+  return t < 0.5 ? 4.0 * t * t * t : 1.0 - pow(-2.0 * t + 2.0, 3.0) / 2.0;
+}
+float fcLocal() {
+  return fcEase(clamp((uProgress - aDelay) / (1.0 - ${MAX_DELAY.toFixed(4)}), 0.0, 1.0));
+}
+vec3 fcRotate(vec3 v, float angle) {
+  float c = cos(angle);
+  float s = sin(angle);
+  return vec3(v.x * c + v.z * s, v.y, -v.x * s + v.z * c);
+}
+vec3 fcPosition(vec3 p) {
+  float e = fcLocal();
+  vec3 size = mix(aSizeA, aSizeB, e);
+  float twist = mix(aMiscA.x, aMiscB.x, e);
+  vec3 base = mix(aPosA, aPosB, e);
+  float shown = step(0.001, size.y);
+  return base + fcRotate(p * size, twist) * shown;
+}
+`;
 
-/** The 3D city: instanced buildings and plinths, outlines, camera, picking and offscreen rendering. */
+const FRAGMENT_COMMON = /* glsl */ `
+uniform vec3 uEdgeColor;
+uniform vec3 uTouchColor;
+varying vec3 vBox;
+varying vec3 vSize;
+varying vec4 vMiscA;
+varying vec4 vMiscB;
+varying vec2 vFx;
+varying float vEase;
+varying vec3 vColor;
+
+vec3 fcToLinear(vec3 c) {
+  return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
+}
+`;
+
+function patchVertex(shader: { vertexShader: string }): void {
+  shader.vertexShader = shader.vertexShader
+    .replace("#include <common>", `#include <common>\n${VERTEX_COMMON}`)
+    .replace(
+      "#include <begin_vertex>",
+      /* glsl */ `
+      vec3 transformed = fcPosition(position);
+      {
+        float e = fcLocal();
+        vEase = e;
+        vBox = position;
+        vSize = mix(aSizeA, aSizeB, e);
+        vMiscA = aMiscA;
+        vMiscB = aMiscB;
+        vColor = fcColor(e);
+        vFx = vec2(mix(aFx.x, aFx.z, e), mix(aFx.y, aFx.w, e));
+      }`,
+    );
+}
+
+/** The 3D city: buildings interpolated on the GPU, plinths, lots, camera, picking and offscreen rendering. */
 export class CityScene {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -31,28 +167,51 @@ export class CityScene {
   private readonly ground: THREE.Mesh;
   private readonly hoverBuilding: THREE.LineSegments;
   private readonly hoverFolder: THREE.LineSegments;
-  private buildings: THREE.InstancedMesh | undefined;
-  private roofs: THREE.InstancedMesh | undefined;
+  private readonly uniforms = {
+    uProgress: { value: 1 },
+    uRamp: { value: Array.from({ length: MAX_RAMP }, () => new THREE.Vector3()) },
+    uRampCount: { value: 2 },
+    uEdgeColor: { value: new THREE.Vector3() },
+    uTouchColor: { value: new THREE.Vector3() },
+    uLotColor: { value: new THREE.Vector3() },
+  };
+  private buildings: THREE.Mesh | undefined;
+  private lots: THREE.LineSegments | undefined;
   private plinths: THREE.InstancedMesh | undefined;
-  private edges: THREE.LineSegments | undefined;
   private plinthPaths: string[] = [];
-  private hiddenInstances: ReadonlySet<number> = new Set();
-  private placements: Array<Placement | undefined> = [];
+  private parcels: Array<{ x: number; y: number; w: number; h: number } | undefined> = [];
+  private count = 0;
   private size = 1000;
   private dirty = true;
   private frame = 0;
+  private lastTime = 0;
   private resizeObserver: ResizeObserver;
   private theme: Theme;
+  /** Called on every animation frame with the elapsed milliseconds; returns true while something moves. */
+  onTick: ((dtMs: number) => boolean) | undefined;
+  /** Reads the buildings as currently drawn (from the animator), for picking and outlines. */
+  readState: (() => Float32Array) | undefined;
+  /** Current render scale: lowered when images take too long, raised back when there is room. */
+  private pixelRatio = 1;
+  private slow = 0;
+  private fast = 0;
+  /** Images drawn during the last second, for performance checks. */
+  fps = 0;
+  private fpsFrames = 0;
+  private fpsSince = 0;
 
   constructor(
     private readonly container: HTMLElement,
     theme: Theme,
   ) {
     this.theme = theme;
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: false });
+    this.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.shadowMap.enabled = theme.light.shadows;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // shadows depend on the buildings, not on the camera: redraw them only when buildings move
+    this.renderer.shadowMap.autoUpdate = false;
     container.appendChild(this.renderer.domElement);
 
     this.camera = new THREE.PerspectiveCamera(theme.camera.fov, 1, 1, 20000);
@@ -60,6 +219,7 @@ export class CityScene {
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.12;
     this.controls.maxPolarAngle = Math.PI * 0.495;
+    this.controls.autoRotateSpeed = 0.6;
     this.controls.addEventListener("change", () => this.requestRender());
 
     this.scene.add(new THREE.AmbientLight(undefined, theme.light.ambient * Math.PI));
@@ -73,7 +233,7 @@ export class CityScene {
 
     this.hoverBuilding = new THREE.LineSegments(
       this.unitEdges,
-      new THREE.LineBasicMaterial({ linewidth: 2, depthTest: false }),
+      new THREE.LineBasicMaterial({ depthTest: false }),
     );
     this.hoverFolder = new THREE.LineSegments(
       this.unitEdges,
@@ -89,15 +249,54 @@ export class CityScene {
     this.resizeObserver.observe(container);
     this.applyTheme(theme);
     this.resize();
-    const loop = () => {
+    const loop = (time: number) => {
       this.frame = requestAnimationFrame(loop);
+      const dt = this.lastTime ? Math.min(time - this.lastTime, 100) : 0;
+      this.lastTime = time;
+      const animating = this.onTick?.(dt) ?? false;
       const moved = this.controls.update();
-      if (this.dirty || moved) {
+      if (this.dirty || moved || animating) {
         this.dirty = false;
         this.renderer.render(this.scene, this.camera);
+        this.fpsFrames++;
+        if (animating || moved) this.adaptResolution(dt);
+      }
+      if (time - this.fpsSince >= 1000) {
+        this.fps = (this.fpsFrames * 1000) / (time - this.fpsSince);
+        this.fpsFrames = 0;
+        this.fpsSince = time;
       }
     };
-    loop();
+    this.frame = requestAnimationFrame(loop);
+  }
+
+  /**
+   * Keeps motion fluid: when several images in a row take longer than 1/40 s the picture is drawn at a
+   * lower resolution, and the resolution comes back when images are fast again.
+   */
+  private adaptResolution(dtMs: number): void {
+    const max = Math.min(window.devicePixelRatio || 1, 2);
+    if (dtMs > 25) {
+      this.fast = 0;
+      if (++this.slow >= 3 && this.pixelRatio > 0.75) {
+        this.slow = 0;
+        this.setPixelRatio(Math.max(0.75, this.pixelRatio * 0.8));
+      }
+    } else if (dtMs > 0 && dtMs < 14) {
+      this.slow = 0;
+      if (++this.fast >= 90 && this.pixelRatio < max) {
+        this.fast = 0;
+        this.setPixelRatio(Math.min(max, this.pixelRatio * 1.15));
+      }
+    } else {
+      this.slow = 0;
+    }
+  }
+
+  private setPixelRatio(ratio: number): void {
+    this.pixelRatio = ratio;
+    this.renderer.setPixelRatio(ratio);
+    this.resize();
   }
 
   get canvas(): HTMLCanvasElement {
@@ -108,34 +307,54 @@ export class CityScene {
     this.dirty = true;
   }
 
+  setOrbit(on: boolean): void {
+    this.controls.autoRotate = on;
+    this.requestRender();
+  }
+
   applyTheme(theme: Theme): void {
     this.theme = theme;
     const c = (key: string) => new THREE.Color(theme.colors[key] ?? "");
+    const v = (key: string) => new THREE.Vector3(...parseHex(theme.colors[key] ?? ""));
     this.scene.background = c("background");
     (this.ground.material as THREE.MeshLambertMaterial).color = c("ground");
     (this.hoverBuilding.material as THREE.LineBasicMaterial).color = c("hover");
     (this.hoverFolder.material as THREE.LineBasicMaterial).color = c("folderHover");
+    this.uniforms.uEdgeColor.value = v("buildingEdge");
+    this.uniforms.uTouchColor.value = v("accent");
+    this.uniforms.uLotColor.value = v("plinthEdge");
+    this.setRamp(theme.ramps.sequential.map(parseHex));
     this.requestRender();
   }
 
-  /** Builds the plinths and the ground for a layout. Buildings come with `setPlacements`. */
-  setCity(layout: Layout, fileCount: number): void {
+  setRamp(stops: readonly Rgb[]): void {
+    const used = stops.slice(0, MAX_RAMP);
+    used.forEach((s, i) => {
+      this.uniforms.uRamp.value[i]?.set(s[0], s[1], s[2]);
+    });
+    this.uniforms.uRampCount.value = Math.max(used.length, 2);
+    this.requestRender();
+  }
+
+  /** Builds the plinths, the lots and the building buffers for a layout. States come with `setStates`. */
+  setCity(layout: Layout, paths: readonly string[], delays: Float32Array, keepCamera = false): void {
     this.size = Math.max(layout.width, layout.height);
+    this.count = paths.length;
     const theme = this.theme;
     const c = (key: string) => new THREE.Color(theme.colors[key] ?? "");
-
-    for (const m of [this.plinths, this.buildings, this.roofs]) {
-      if (m) {
-        this.scene.remove(m);
-        m.dispose();
-      }
+    for (const m of [this.plinths, this.buildings, this.lots]) {
+      if (!m) continue;
+      this.scene.remove(m);
+      m.geometry.dispose();
     }
+
+    // plinths: one low box per folder
     const plinthColor = c("plinth");
     const folders = [...layout.folders.entries()].sort((a, b) => folderDepth(a[0]) - folderDepth(b[0]));
     this.plinthPaths = folders.map(([path]) => path);
     this.plinths = new THREE.InstancedMesh(
       this.unitBox,
-      new THREE.MeshLambertMaterial({ color: c("plinth") }),
+      new THREE.MeshLambertMaterial(),
       Math.max(folders.length, 1),
     );
     const m4 = new THREE.Matrix4();
@@ -155,28 +374,146 @@ export class CityScene {
     this.plinths.instanceMatrix.needsUpdate = true;
     this.plinths.computeBoundingSphere();
 
-    // the material stays white: per-instance colors carry the data
-    const white = new THREE.MeshLambertMaterial();
-    this.buildings = new THREE.InstancedMesh(this.unitBox, white, Math.max(fileCount, 1));
-    this.buildings.count = fileCount;
+    // buildings: one box, drawn once per file, moved by the vertex shader
+    const box = new THREE.BoxGeometry(1, 1, 1);
+    box.translate(0, 0.5, 0);
+    const geometry = new THREE.InstancedBufferGeometry();
+    geometry.index = box.index;
+    geometry.setAttribute("position", box.getAttribute("position"));
+    geometry.setAttribute("normal", box.getAttribute("normal"));
+    geometry.instanceCount = this.count;
+    const n = Math.max(this.count, 1);
+    const attr = (name: string, size: number, array?: Float32Array) => {
+      const a = new THREE.InstancedBufferAttribute(array ?? new Float32Array(n * size), size);
+      a.setUsage(THREE.DynamicDrawUsage);
+      geometry.setAttribute(name, a);
+    };
+    attr("aPosA", 3);
+    attr("aPosB", 3);
+    attr("aSizeA", 3);
+    attr("aSizeB", 3);
+    attr("aMiscA", 4);
+    attr("aMiscB", 4);
+    attr("aColA", 3);
+    attr("aColB", 3);
+    attr("aFx", 4);
+    const delayArray = new Float32Array(n);
+    delayArray.set(delays.subarray(0, n));
+    attr("aDelay", 1, delayArray);
+
+    const uniforms = this.uniforms;
+    const material = new THREE.MeshLambertMaterial();
+    material.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, uniforms);
+      patchVertex(shader);
+      shader.vertexShader = shader.vertexShader.replace(
+        "#include <beginnormal_vertex>",
+        /* glsl */ `vec3 objectNormal = fcRotate(normal, mix(aMiscA.x, aMiscB.x, fcLocal()));`,
+      );
+      shader.fragmentShader = shader.fragmentShader
+        .replace("#include <common>", `#include <common>\n${FRAGMENT_COMMON}`)
+        .replace(
+          "#include <color_fragment>",
+          /* glsl */ `
+          {
+            vec3 col = vColor;
+            // distance to the nearest edge of the box, in world units, on the face being drawn
+            vec3 dist = (0.5 - abs(vBox - vec3(0.0, 0.5, 0.0))) * max(vSize, vec3(0.0001));
+            float lo = min(dist.x, min(dist.y, dist.z));
+            float hi = max(dist.x, max(dist.y, dist.z));
+            float mid = dist.x + dist.y + dist.z - lo - hi;
+            float width = fwidth(mid) * 1.4;
+            float edge = 1.0 - smoothstep(width * 0.5, width, mid);
+            float touched = vFx.x;
+            float touchWidth = fwidth(mid) * 2.2;
+            float touchEdge = (1.0 - smoothstep(touchWidth * 0.6, touchWidth, mid)) * touched;
+            // roof mark: a darker patch on the roof whose size repeats the category
+            float roof = mix(vMiscA.w, vMiscB.w, vEase);
+            vec2 top = abs(vBox.xz);
+            float onRoof = step(0.999, vBox.y) * step(0.001, roof);
+            float half_ = 0.125 + 0.275 * roof;
+            float mark = onRoof * step(top.x, half_) * step(top.y, half_);
+            col = mix(col, uEdgeColor, max(edge * 0.85, mark * 0.7));
+            col = mix(col, uTouchColor, touchEdge * 0.75);
+            diffuseColor.rgb = fcToLinear(col);
+          }`,
+        );
+    };
+    const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+    depth.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, uniforms);
+      patchVertex(shader);
+    };
+    this.buildings = new THREE.Mesh(geometry, material);
+    this.buildings.customDepthMaterial = depth;
     this.buildings.castShadow = true;
     this.buildings.receiveShadow = true;
-    this.roofs = new THREE.InstancedMesh(
-      this.unitBox,
-      new THREE.MeshLambertMaterial({ color: c("buildingEdge") }),
-      Math.max(fileCount, 1),
-    );
-    this.roofs.count = fileCount;
-    this.scene.add(this.plinths, this.buildings, this.roofs);
+    this.buildings.frustumCulled = false;
+
+    // lots: the outline of every parcel; it fades in when the parcel is empty
+    this.parcels = paths.map((path) => layout.files.get(path));
+    const lotPositions = new Float32Array(n * 8 * 3);
+    const lotIndex = new Float32Array(n * 8);
+    paths.forEach((path, i) => {
+      const r = layout.files.get(path);
+      if (!r) return;
+      const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+      const y = plinthTop(folderDepth(dir)) + 0.06;
+      const inset = Math.min(r.w, r.h) * 0.06;
+      const x0 = r.x + inset;
+      const x1 = r.x + r.w - inset;
+      const z0 = r.y + inset;
+      const z1 = r.y + r.h - inset;
+      const corners = [x0, z0, x1, z0, x1, z0, x1, z1, x1, z1, x0, z1, x0, z1, x0, z0];
+      for (let k = 0; k < 8; k++) {
+        lotPositions[(i * 8 + k) * 3] = corners[k * 2] as number;
+        lotPositions[(i * 8 + k) * 3 + 1] = y;
+        lotPositions[(i * 8 + k) * 3 + 2] = corners[k * 2 + 1] as number;
+        lotIndex[i * 8 + k] = i;
+      }
+    });
+    const lotGeometry = new THREE.BufferGeometry();
+    lotGeometry.setAttribute("position", new THREE.BufferAttribute(lotPositions, 3));
+    const lotFx = new THREE.BufferAttribute(new Float32Array(n * 8 * 2), 2);
+    lotFx.setUsage(THREE.DynamicDrawUsage);
+    lotGeometry.setAttribute("aPresence", lotFx);
+    const lotDelay = new Float32Array(n * 8);
+    for (let k = 0; k < lotDelay.length; k++) lotDelay[k] = delays[lotIndex[k] as number] ?? 0;
+    lotGeometry.setAttribute("aDelay", new THREE.BufferAttribute(lotDelay, 1));
+    const lotMaterial = new THREE.ShaderMaterial({
+      uniforms,
+      transparent: true,
+      depthWrite: false,
+      vertexShader: /* glsl */ `
+        attribute vec2 aPresence;
+        attribute float aDelay;
+        uniform float uProgress;
+        varying float vEmpty;
+        float fcEase(float t) { return t < 0.5 ? 4.0 * t * t * t : 1.0 - pow(-2.0 * t + 2.0, 3.0) / 2.0; }
+        void main() {
+          float e = fcEase(clamp((uProgress - aDelay) / (1.0 - ${MAX_DELAY.toFixed(4)}), 0.0, 1.0));
+          vEmpty = 1.0 - mix(aPresence.x, aPresence.y, e);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: /* glsl */ `
+        uniform vec3 uLotColor;
+        varying float vEmpty;
+        vec3 fcToLinear(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
+        void main() {
+          gl_FragColor = vec4(fcToLinear(uLotColor), mix(0.12, 0.95, vEmpty));
+          #include <colorspace_fragment>
+        }`,
+    });
+    this.lots = new THREE.LineSegments(lotGeometry, lotMaterial);
+    this.lots.frustumCulled = false;
+    this.lots.raycast = () => {};
+    this.scene.add(this.plinths, this.buildings, this.lots);
 
     this.ground.scale.set(this.size * 6, this.size * 6, 1);
     this.ground.position.set(this.size / 2, -0.02, this.size / 2);
     const s = this.size;
-    this.sun.position.set(
-      s / 2 + (theme.light.sunPosition[0] ?? 0) * s,
-      (theme.light.sunPosition[1] ?? 1) * s,
-      s / 2 + (theme.light.sunPosition[2] ?? 0) * s,
-    );
+    const sun = theme.light.sunPosition;
+    this.sun.position.set(s / 2 + (sun[0] ?? 0) * s, (sun[1] ?? 1) * s, s / 2 + (sun[2] ?? 0) * s);
     this.sun.target.position.set(s / 2, 0, s / 2);
     this.sun.castShadow = theme.light.shadows;
     const cam = this.sun.shadow.camera;
@@ -187,7 +524,7 @@ export class CityScene {
     cam.near = 1;
     cam.far = s * 4;
     cam.updateProjectionMatrix();
-    this.sun.shadow.mapSize.set(4096, 4096);
+    this.sun.shadow.mapSize.set(2048, 2048);
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.6;
     this.controls.minDistance = s * 0.03;
@@ -196,7 +533,66 @@ export class CityScene {
     this.camera.updateProjectionMatrix();
     this.hoverBuilding.visible = false;
     this.hoverFolder.visible = false;
-    this.resetCamera();
+    if (!keepCamera) this.resetCamera();
+    this.renderer.shadowMap.needsUpdate = true;
+    this.requestRender();
+  }
+
+  /** Writes both ends of the current move into the instance buffers. Called once per step, not per image. */
+  setStates(start: Float32Array, target: Float32Array): void {
+    const geometry = this.buildings?.geometry;
+    if (!geometry) return;
+    const get = (name: string) => geometry.getAttribute(name) as THREE.InstancedBufferAttribute;
+    const posA = get("aPosA");
+    const posB = get("aPosB");
+    const sizeA = get("aSizeA");
+    const sizeB = get("aSizeB");
+    const miscA = get("aMiscA");
+    const miscB = get("aMiscB");
+    const colA = get("aColA");
+    const colB = get("aColB");
+    const fx = get("aFx");
+    const lotFx = this.lots?.geometry.getAttribute("aPresence") as THREE.BufferAttribute | undefined;
+    const fill = (
+      s: Float32Array,
+      pos: THREE.BufferAttribute,
+      size: THREE.BufferAttribute,
+      misc: THREE.BufferAttribute,
+      col: THREE.BufferAttribute,
+      i: number,
+    ) => {
+      const o = i * STRIDE;
+      pos.setXYZ(i, s[o + X] as number, s[o + Y] as number, s[o + Z] as number);
+      size.setXYZ(i, s[o + W] as number, s[o + H] as number, s[o + D] as number);
+      misc.setXYZW(
+        i,
+        s[o + TWIST] as number,
+        s[o + RAMP] as number,
+        s[o + MODE] as number,
+        s[o + ROOF] as number,
+      );
+      col.setXYZ(i, s[o + R] as number, s[o + G] as number, s[o + B] as number);
+    };
+    for (let i = 0; i < this.count; i++) {
+      fill(start, posA, sizeA, miscA, colA, i);
+      fill(target, posB, sizeB, miscB, colB, i);
+      const o = i * STRIDE;
+      const pa = start[o + PRESENCE] as number;
+      const pb = target[o + PRESENCE] as number;
+      fx.setXYZW(i, start[o + TOUCHED] as number, pa, target[o + TOUCHED] as number, pb);
+      if (lotFx) for (let k = 0; k < 8; k++) lotFx.setXY(i * 8 + k, pa, pb);
+    }
+    for (const a of [posA, posB, sizeA, sizeB, miscA, miscB, colA, colB, fx]) a.needsUpdate = true;
+    this.renderer.shadowMap.needsUpdate = true;
+    if (lotFx) lotFx.needsUpdate = true;
+    this.requestRender();
+  }
+
+  setProgress(u: number): void {
+    if (this.uniforms.uProgress.value === u) return;
+    this.uniforms.uProgress.value = u;
+    this.renderer.shadowMap.needsUpdate = true;
+    this.requestRender();
   }
 
   /** Colors the plinths: districts with a tint get it, the others keep the plain plinth color. */
@@ -214,126 +610,112 @@ export class CityScene {
     this.requestRender();
   }
 
-  setPlacements(placements: Array<Placement | undefined>, style: PlacementStyle = {}): void {
-    if (!this.buildings || !this.roofs) return;
-    this.placements = placements;
-    this.hiddenInstances = style.hidden ?? new Set();
-    const dim = new THREE.Color(this.theme.colors.dim ?? "");
-    const roofColor = new THREE.Color(this.theme.colors.buildingEdge ?? "");
-    const m4 = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    const col = new THREE.Color();
-    const edgeColor = new THREE.Color(this.theme.colors.buildingEdge ?? "");
-    const edgePositions: number[] = [];
-    const unit = this.unitEdges.getAttribute("position");
-
-    placements.forEach((p, i) => {
-      if (!p) {
-        m4.compose(new THREE.Vector3(), q, new THREE.Vector3(HIDDEN_SCALE, HIDDEN_SCALE, HIDDEN_SCALE));
-        this.buildings?.setMatrixAt(i, m4);
-        this.roofs?.setMatrixAt(i, m4);
-        return;
-      }
-      const hidden = style.hidden?.has(i) ?? false;
-      const h = hidden ? HIDDEN_SCALE : p.h;
-      const w = hidden ? HIDDEN_SCALE : p.w;
-      const d = hidden ? HIDDEN_SCALE : p.d;
-      q.setFromAxisAngle(AXIS_Y, p.twist);
-      m4.compose(new THREE.Vector3(p.x, p.baseY + h / 2, p.z), q, new THREE.Vector3(w, h, d));
-      this.buildings?.setMatrixAt(i, m4);
-      col.setRGB(p.color[0], p.color[1], p.color[2], THREE.SRGBColorSpace);
-      if (style.dimmed?.has(i)) col.lerp(dim, DIM_MIX);
-      this.buildings?.setColorAt(i, col);
-
-      // roof mark: a darker patch on top whose size repeats the category, so color is never the only cue
-      const showRoof = !hidden && p.roofMark > 0 && !p.colorUnavailable;
-      const roof = showRoof ? 0.25 + 0.55 * p.roofMark : HIDDEN_SCALE;
-      m4.compose(
-        new THREE.Vector3(p.x, p.baseY + h + 0.3, p.z),
-        q,
-        new THREE.Vector3(showRoof ? w * roof : roof, 0.6, showRoof ? d * roof : roof),
-      );
-      this.roofs?.setMatrixAt(i, m4);
-      this.roofs?.setColorAt(i, roofColor);
-
-      if (!hidden) {
-        for (let k = 0; k < unit.count; k++) {
-          edgePositions.push(
-            p.x + unit.getX(k) * w,
-            p.baseY + h / 2 + unit.getY(k) * h,
-            p.z + unit.getZ(k) * d,
-          );
-        }
-      }
-    });
-    for (const m of [this.buildings, this.roofs]) {
-      m.instanceMatrix.needsUpdate = true;
-      if (m.instanceColor) m.instanceColor.needsUpdate = true;
-      m.computeBoundingSphere();
-    }
-    if (this.edges) {
-      this.scene.remove(this.edges);
-      this.edges.geometry.dispose();
-    }
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.Float32BufferAttribute(edgePositions, 3));
-    this.edges = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: edgeColor }));
-    this.edges.raycast = () => {};
-    this.scene.add(this.edges);
-    this.requestRender();
-  }
-
-  /** Finds what is under the pointer: a building first, else the district's plinth. */
+  /** What is under the pointer: a building as drawn right now, else an empty lot, else the district. */
   pick(clientX: number, clientY: number): Pick {
-    if (!this.buildings || !this.plinths) return null;
+    if (!this.plinths) return null;
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
       ((clientX - rect.left) / rect.width) * 2 - 1,
       -((clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.camera);
-    const hits = this.raycaster
-      .intersectObject(this.buildings, false)
-      .filter((h) => h.instanceId !== undefined && !this.hiddenInstances.has(h.instanceId));
+    const { origin, direction } = this.raycaster.ray;
+    const state = this.readState?.();
     const plinthHit = this.raycaster.intersectObject(this.plinths, false)[0];
-    const building = hits[0];
-    if (
-      building &&
-      building.instanceId !== undefined &&
-      (!plinthHit || building.distance <= plinthHit.distance + 1e-6)
-    ) {
-      return { kind: "file", index: building.instanceId };
+    if (state) {
+      const hit = pickBuilding(
+        [origin.x, origin.y, origin.z],
+        [direction.x, direction.y, direction.z],
+        state,
+      );
+      if (hit && (!plinthHit || hit.distance <= plinthHit.distance + 1e-3))
+        return { kind: "file", index: hit.index };
     }
-    if (plinthHit && plinthHit.instanceId !== undefined) {
-      const path = this.plinthPaths[plinthHit.instanceId];
-      if (path !== undefined) return { kind: "folder", path };
+    if (!plinthHit || plinthHit.instanceId === undefined) return null;
+    if (state) {
+      const { x, z } = plinthHit.point;
+      for (let i = 0; i < this.parcels.length; i++) {
+        const p = this.parcels[i];
+        if (!p || x < p.x || x > p.x + p.w || z < p.y || z > p.y + p.h) continue;
+        if ((state[i * STRIDE + PRESENCE] as number) < 0.5) return { kind: "lot", index: i };
+        break;
+      }
     }
-    return null;
+    const path = this.plinthPaths[plinthHit.instanceId];
+    return path === undefined ? null : { kind: "folder", path };
   }
 
-  setHover(pick: Pick, folderRect?: { x: number; y: number; w: number; h: number }): void {
+  /** Outlines the building or lot under the pointer, and its district. */
+  setHover(
+    pick: Pick,
+    folder?: { path: string; rect: { x: number; y: number; w: number; h: number } },
+  ): void {
     this.hoverBuilding.visible = false;
     this.hoverFolder.visible = false;
-    if (pick?.kind === "file") {
-      const p = this.placements[pick.index];
-      if (p) {
-        this.hoverBuilding.position.set(p.x, p.baseY + p.h / 2, p.z);
-        this.hoverBuilding.scale.set(p.w * 1.01, p.h * 1.01, p.d * 1.01);
-        this.hoverBuilding.rotation.y = p.twist;
+    const state = this.readState?.();
+    if (pick?.kind === "file" && state) {
+      const o = pick.index * STRIDE;
+      const h = state[o + H] as number;
+      this.hoverBuilding.position.set(
+        state[o + X] as number,
+        (state[o + Y] as number) + h / 2,
+        state[o + Z] as number,
+      );
+      this.hoverBuilding.scale.set(
+        (state[o + W] as number) * 1.01,
+        h * 1.01,
+        (state[o + D] as number) * 1.01,
+      );
+      this.hoverBuilding.rotation.y = state[o + TWIST] as number;
+      this.hoverBuilding.visible = true;
+    } else if (pick?.kind === "lot") {
+      const p = this.parcels[pick.index];
+      if (p && state) {
+        this.hoverBuilding.position.set(
+          p.x + p.w / 2,
+          (state[pick.index * STRIDE + Y] as number) + 0.1,
+          p.y + p.h / 2,
+        );
+        this.hoverBuilding.scale.set(p.w * 0.9, 0.2, p.h * 0.9);
+        this.hoverBuilding.rotation.y = 0;
         this.hoverBuilding.visible = true;
       }
     }
-    if (folderRect) {
-      const top = plinthTop(folderDepth(pick?.kind === "folder" ? pick.path : ""));
-      this.hoverFolder.position.set(
-        folderRect.x + folderRect.w / 2,
-        top / 2,
-        folderRect.y + folderRect.h / 2,
-      );
-      this.hoverFolder.scale.set(folderRect.w, top + PLINTH_THICKNESS * 0.2, folderRect.h);
+    if (folder) {
+      const top = plinthTop(folderDepth(folder.path));
+      const r = folder.rect;
+      this.hoverFolder.position.set(r.x + r.w / 2, top / 2, r.y + r.h / 2);
+      this.hoverFolder.scale.set(r.w, top + PLINTH_THICKNESS * 0.2, r.h);
       this.hoverFolder.visible = true;
     }
     this.requestRender();
+  }
+
+  /**
+   * Performance check: draws `images` pictures of a running move one after the other, waiting for the GPU
+   * each time, and returns the mean time of one picture in milliseconds.
+   */
+  benchmark(images = 60, options: { shadows?: boolean; pixelRatio?: number } = {}): number {
+    const gl = this.renderer.getContext();
+    const hadShadows = this.sun.castShadow;
+    const ratio = this.renderer.getPixelRatio();
+    if (options.shadows !== undefined) this.sun.castShadow = options.shadows;
+    if (options.pixelRatio !== undefined) this.renderer.setPixelRatio(options.pixelRatio);
+    const pixel = new Uint8Array(4);
+    const before = this.uniforms.uProgress.value;
+    const started = performance.now();
+    for (let i = 0; i < images; i++) {
+      this.uniforms.uProgress.value = (i % 30) / 30;
+      this.renderer.shadowMap.needsUpdate = true;
+      this.renderer.render(this.scene, this.camera);
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    }
+    const elapsed = performance.now() - started;
+    this.sun.castShadow = hadShadows;
+    this.renderer.setPixelRatio(ratio);
+    this.uniforms.uProgress.value = before;
+    this.requestRender();
+    return elapsed / images;
   }
 
   /** The camera as a three-quarter view of the whole city. */

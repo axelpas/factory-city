@@ -2,10 +2,13 @@ import { createHash } from "node:crypto";
 import { basename, resolve } from "node:path";
 import type { AnalysisManifest, AttributeDescriptor, CcJson, FileNode } from "@factory-city/schema";
 import { buildCcJson, getMetric, nodeId } from "@factory-city/schema";
+import type { HistoryResult } from "./collectors/history.js";
 import { collectHistory, historyMetrics } from "./collectors/history.js";
 import { loadConfig } from "./config.js";
+import type { ContentProblem } from "./inspect.js";
 import { inspectContent } from "./inspect.js";
 import { LANGUAGES } from "./languages/index.js";
+import type { FileMetrics } from "./metrics/file-metrics.js";
 import { computeMetrics, plainMetrics } from "./metrics/file-metrics.js";
 import { getParser } from "./parse.js";
 import { buildImportGraph, folderCohesion, loadResolveContext } from "./resolve.js";
@@ -15,7 +18,9 @@ import type { RepoInfo } from "./source/git.js";
 import { findRepo, GitSource } from "./source/git.js";
 import type { Source } from "./source/types.js";
 
-export const ANALYZER_VERSION = "0.1.0";
+export const ANALYZER_VERSION = "0.2.0";
+
+const LANGUAGE_CODES = new Map(LANGUAGES.map((l, i) => [l.id, i]));
 
 export interface AnalyzeOptions {
   folder: string;
@@ -28,9 +33,22 @@ export interface AnalyzeOptions {
   all?: boolean;
   include?: string[];
   exclude?: string[];
+  /** State shared by the frames of a timeline: caches and a preloaded history. */
+  shared?: AnalyzeShared;
+}
+
+/** What is known about one file content, cached by blob id so that each unique content is parsed once. */
+export type CachedFile = { problem: ContentProblem } | { result: FileMetrics };
+
+export interface AnalyzeShared {
+  fileCache: Map<string, CachedFile>;
+  /** History of the files at a revision; replaces the per-call `git log`. */
+  history?: (rev: string, files: ReadonlySet<string>) => Promise<HistoryResult>;
 }
 
 export interface AnalysisResult {
+  /** Blob id per analyzed path, when the source is a git revision. */
+  blobs: Map<string, string>;
   snapshot: CcJson;
   manifest: AnalysisManifest;
 }
@@ -189,30 +207,44 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
     });
     const candidates = selectEntries(entries, selectOptions, summary);
 
-    const languageIndex = new Map<string, number>();
     const attributesByPath = new Map<string, Record<string, number>>();
     const importsByFile = new Map<string, string[]>();
     const present = new Set<string>();
     let syntaxErrorFiles = 0;
 
+    const blobs = new Map<string, string>();
+    const fileCache = opts.shared?.fileCache;
     for (const { entry, language, isTest } of candidates) {
-      const buffer = await source.read(entry);
-      const inspected = inspectContent(buffer, !opts.all);
-      if (inspected.problem || inspected.text === undefined) {
-        const problem = inspected.problem ?? "non_utf8";
-        if (problem === "generated_or_vendored") bump(summary.files, problem);
-        else bump(summary.warnings, problem);
+      const cacheKey = entry.blobId
+        ? `${entry.blobId}|${language?.id ?? ""}|${isTest ? 1 : 0}|${opts.all ? 1 : 0}`
+        : undefined;
+      let cached = cacheKey ? fileCache?.get(cacheKey) : undefined;
+      if (!cached) {
+        const inspected = inspectContent(await source.read(entry), !opts.all);
+        if (inspected.problem || inspected.text === undefined) {
+          cached = { problem: inspected.problem ?? "non_utf8" };
+        } else {
+          cached = {
+            result: language
+              ? computeMetrics(await getParser(language.grammar), language, inspected.text, isTest)
+              : plainMetrics(inspected.text),
+          };
+        }
+        if (cacheKey) fileCache?.set(cacheKey, cached);
+      }
+      if ("problem" in cached) {
+        if (cached.problem === "generated_or_vendored") bump(summary.files, cached.problem);
+        else bump(summary.warnings, cached.problem);
         continue;
       }
-      const result = language
-        ? computeMetrics(await getParser(language.grammar), language, inspected.text, isTest)
-        : plainMetrics(inspected.text);
+      const result = cached.result;
+      if (entry.blobId) blobs.set(entry.path, entry.blobId);
       if (language?.imports) importsByFile.set(entry.path, result.imports);
       if (result.syntaxErrors) syntaxErrorFiles++;
       const values: Record<string, number> = { ...result.metrics, is_test: isTest ? 1 : 0 };
       if (language) {
-        if (!languageIndex.has(language.id)) languageIndex.set(language.id, languageIndex.size);
-        values.language = languageIndex.get(language.id) as number;
+        // the code is the language's position in the fixed list, so that it means the same in every frame
+        values.language = LANGUAGE_CODES.get(language.id) as number;
       }
       for (const key of Object.keys(values)) present.add(key);
       attributesByPath.set(entry.path, values);
@@ -235,13 +267,13 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
       // level 1: history up to the analyzed revision, never beyond it
       try {
         const config = await loadConfig(resolve(opts.folder));
-        const history = await collectHistory(
-          repo.topLevel,
-          repo.prefix,
-          opts.rev ?? "HEAD",
-          new Set(attributesByPath.keys()),
-          { recentDays: config.windows.recentDays, fixPatterns: config.fixPatterns },
-        );
+        const historyFiles = new Set(attributesByPath.keys());
+        const history = opts.shared?.history
+          ? await opts.shared.history(opts.rev ?? "HEAD", historyFiles)
+          : await collectHistory(repo.topLevel, repo.prefix, opts.rev ?? "HEAD", historyFiles, {
+              recentDays: config.windows.recentDays,
+              fixPatterns: config.fixPatterns,
+            });
         for (const [path, h] of history.files) {
           const values = attributesByPath.get(path);
           if (values) Object.assign(values, historyMetrics(h, history.snapshotTime));
@@ -278,7 +310,6 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
       attributeDescriptors: descriptors,
       attributeTypes: types,
     });
-    const known = new Set(LANGUAGES.map((l) => l.id));
     const manifest: AnalysisManifest = {
       kind: "snapshot",
       schemaVersion: 1,
@@ -290,7 +321,7 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
       git,
       metrics: metricIds,
       categories: {
-        language: [...languageIndex.keys()].filter((id) => known.has(id)),
+        language: LANGUAGES.map((l) => l.id),
         is_test: ["no", "yes"],
       },
       selected: candidates.length,
@@ -299,7 +330,7 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
       warnings,
       snapshot: "snapshot.cc.json",
     };
-    return { snapshot, manifest };
+    return { snapshot, manifest, blobs };
   } finally {
     await source.close();
   }

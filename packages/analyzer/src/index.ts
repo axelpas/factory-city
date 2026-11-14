@@ -7,3 +7,5 @@ export { LANGUAGES, languageForPath } from "./languages/index.js";
 export { outputRoot, readIndex, updateIndex, writeAnalysis } from "./output.js";
 export type { RunningServer, ServerOptions } from "./server.js";
 export { defaultViewerDir, openBrowser, startServer } from "./server.js";
+export type { TimelineOptions, TimelineResult } from "./timeline.js";
+export { buildTimeline, kindOfSubject } from "./timeline.js";

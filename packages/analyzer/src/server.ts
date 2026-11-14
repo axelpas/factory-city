@@ -95,11 +95,12 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
         );
         return;
       }
-      const data = /^\/data\/([^/]+)\/([^/]+)$/.exec(path);
+      const data = /^\/data\/([^/]+)\/((?:frames\.[a-z]+\/)?[^/]+)$/.exec(path);
       if (data) {
         const entry = (await projects()).find((p) => p.slug === data[1]);
         const name = data[2] as string;
-        if (!entry || !/^[\w.-]+$/.test(name) || name.startsWith(".")) {
+        const leaf = name.replace(/^frames\.[a-z]+\//, "");
+        if (!entry || !/^[\w.-]+$/.test(leaf) || leaf.startsWith(".")) {
           res.writeHead(404).end("Not found");
           return;
         }

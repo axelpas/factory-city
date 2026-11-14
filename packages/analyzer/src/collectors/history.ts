@@ -42,7 +42,7 @@ function git(cwd: string, args: string[]): Promise<string> {
   });
 }
 
-interface RawCommit {
+export interface RawCommit {
   hash: string;
   time: number;
   author: string;
@@ -105,16 +105,13 @@ async function fixBranchCommits(topLevel: string, rev: string): Promise<Set<stri
  * Per-file history up to `rev` and no further: the windows end at the revision's own date, so a past
  * snapshot never sees later commits. Reads the object database through `git log`; nothing is written.
  */
-export async function collectHistory(
-  topLevel: string,
-  prefix: string,
-  rev: string,
-  files: ReadonlySet<string>,
-  options: HistoryOptions,
-): Promise<HistoryResult> {
-  const snapshotTime = Number(
-    (await git(topLevel, ["show", "-s", "--format=%ct", `${rev}^{commit}`])).trim(),
-  );
+/** The commits reachable from a revision, read once and reusable for every earlier revision. */
+export interface HistoryLog {
+  commits: RawCommit[];
+  fixBranch: Set<string>;
+}
+
+export async function loadHistoryLog(topLevel: string, rev: string): Promise<HistoryLog> {
   const raw = await git(topLevel, [
     "log",
     rev,
@@ -125,8 +122,43 @@ export async function collectHistory(
     "-z",
     "--format=%x01%H%x02%ct%x02%ae%x02%s%x03",
   ]);
-  const commits = parseLog(raw);
-  const fixBranch = await fixBranchCommits(topLevel, rev);
+  return { commits: parseLog(raw), fixBranch: await fixBranchCommits(topLevel, rev) };
+}
+
+/** Hashes of the non-merge commits reachable from a revision. */
+export async function reachableCommits(topLevel: string, rev: string): Promise<Set<string>> {
+  return new Set((await git(topLevel, ["rev-list", "--no-merges", rev])).split("\n").filter(Boolean));
+}
+
+export async function revisionTime(topLevel: string, rev: string): Promise<number> {
+  return Number((await git(topLevel, ["show", "-s", "--format=%ct", `${rev}^{commit}`])).trim());
+}
+
+export async function collectHistory(
+  topLevel: string,
+  prefix: string,
+  rev: string,
+  files: ReadonlySet<string>,
+  options: HistoryOptions,
+): Promise<HistoryResult> {
+  const log = await loadHistoryLog(topLevel, rev);
+  return computeHistory(log, await revisionTime(topLevel, rev), undefined, prefix, files, options);
+}
+
+/**
+ * History of the given files from a log. `reachable` restricts the log to the commits of one revision,
+ * so that a frame of a timeline never uses a later commit.
+ */
+export function computeHistory(
+  log: HistoryLog,
+  snapshotTime: number,
+  reachable: ReadonlySet<string> | undefined,
+  prefix: string,
+  files: ReadonlySet<string>,
+  options: HistoryOptions,
+): HistoryResult {
+  const commits = reachable ? log.commits.filter((c) => reachable.has(c.hash)) : log.commits;
+  const fixBranch = log.fixBranch;
   const fixPatterns = options.fixPatterns.map((p) => new RegExp(p, "i"));
   const windowStart = snapshotTime - options.recentDays * DAY;
   const cut = prefix ? prefix.length + 1 : 0;

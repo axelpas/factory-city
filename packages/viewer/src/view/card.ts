@@ -1,4 +1,5 @@
 import { categoryLabel, type Model, percentileRank } from "../data/model";
+import type { TimelineData } from "../data/timeline";
 import type { Formatter } from "../lib/format";
 import type { Mapping } from "../presets/index";
 
@@ -64,7 +65,8 @@ export function metricRow(
   return {
     label: metric.label,
     value: `${fmt.number(value)}${unit}`,
-    marker: stats ? percentileRank(stats, value) : undefined,
+    // a marker says where the value stands in the city: meaningless when every file has the same value
+    marker: stats && stats.max > stats.min ? percentileRank(stats, value) : undefined,
   };
 }
 
@@ -138,4 +140,85 @@ export function folderCard(model: Model, path: string, fmt: Formatter, worstMetr
     rows,
     worst,
   };
+}
+
+export interface LotCard {
+  kind: "lot";
+  title: string;
+  folder: string;
+  /** Which file will stand here, or stood here, and at which frame. */
+  text: string;
+}
+
+function frameName(data: TimelineData, frame: number): string {
+  const info = data.frames[frame]?.info;
+  return info ? `frame ${frame + 1} (${info.label})` : `frame ${frame + 1}`;
+}
+
+function signed(value: number, fmt: Formatter): string {
+  return `${value > 0 ? "+" : value < 0 ? "−" : "±"}${fmt.number(Math.abs(value))}`;
+}
+
+/** What the current frame did to a file: change of the mapped values, lines added and deleted, first appearance. */
+export function frameChangeRows(
+  data: TimelineData,
+  frame: number,
+  union: number,
+  mapping: Mapping,
+  fmt: Formatter,
+): CardRow[] {
+  const current = data.frames[frame];
+  if (!current || data.frames.length < 2) return [];
+  const path = data.paths[union] as string;
+  const rows: CardRow[] = [];
+  const now = current.model.files[current.modelIndex[union] as number];
+  const previous = frame > 0 ? data.frames[frame - 1] : undefined;
+  const before = previous ? previous.model.files[previous.modelIndex[union] as number] : undefined;
+  if (now && previous && !before) rows.push({ label: "This frame", value: "added the file" });
+  if (now && before) {
+    for (const id of new Set([mapping.area, mapping.height, mapping.color, mapping.twist])) {
+      if (!id) continue;
+      const metric = current.model.metrics.get(id);
+      const a = before.values[id];
+      const b = now.values[id];
+      if (!metric || metric.kind === "category" || a === undefined || b === undefined || a === b) continue;
+      rows.push({ label: `${metric.label}, this frame`, value: signed(b - a, fmt) });
+    }
+  }
+  const lines = current.info?.lines[path];
+  if (lines && (lines[0] > 0 || lines[1] > 0)) {
+    rows.push({ label: "Lines, this frame", value: `+${fmt.integer(lines[0])} −${fmt.integer(lines[1])}` });
+  }
+  const first = data.firstFrame[union] as number;
+  if (first >= 0) rows.push({ label: "Appeared at", value: frameName(data, first) });
+  return rows;
+}
+
+/** Card of an empty parcel: which file will stand there, or stood there, and at which frame. */
+export function lotCard(data: TimelineData, frame: number, union: number): LotCard {
+  const path = data.paths[union] as string;
+  const cut = path.lastIndexOf("/");
+  const first = data.firstFrame[union] as number;
+  const last = data.lastFrame[union] as number;
+  let next = -1;
+  for (let f = frame + 1; f < data.frames.length; f++) {
+    if ((data.frames[f]?.modelIndex[union] as number) >= 0) {
+      next = f;
+      break;
+    }
+  }
+  let previous = -1;
+  for (let f = frame - 1; f >= 0; f--) {
+    if ((data.frames[f]?.modelIndex[union] as number) >= 0) {
+      previous = f;
+      break;
+    }
+  }
+  let text: string;
+  if (frame < first) text = `This file will stand here from ${frameName(data, first)}.`;
+  else if (frame > last) text = `This file stood here until ${frameName(data, last)}.`;
+  else if (previous >= 0 && next >= 0)
+    text = `This file stood here until ${frameName(data, previous)} and comes back at ${frameName(data, next)}.`;
+  else text = "This file is hidden by the current filter.";
+  return { kind: "lot", title: path.slice(cut + 1), folder: cut < 0 ? "(root)" : path.slice(0, cut), text };
 }

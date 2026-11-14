@@ -1,14 +1,22 @@
-import type { AnalysisManifest, CcJson } from "@factory-city/schema";
+import type { AnalysisManifest, CcJson, TimelineManifest, TimelineMode } from "@factory-city/schema";
 
 export interface ProjectList {
   current?: string;
   projects: Array<{ slug: string; name: string }>;
 }
 
+export type SourceKey = "snapshot" | TimelineMode;
+
 export interface Loaded {
-  cc: CcJson;
-  manifest?: AnalysisManifest;
+  snapshots: CcJson[];
+  manifest?: AnalysisManifest | TimelineManifest;
 }
+
+/** What a project's data folder holds: a single snapshot and/or timelines, by mode. */
+export type Available = Partial<Record<SourceKey, AnalysisManifest | TimelineManifest>>;
+
+const MODES: TimelineMode[] = ["commit", "day", "issue", "revs"];
+const PARALLEL = 6;
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -16,18 +24,57 @@ async function getJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function loadProjects(): Promise<ProjectList> {
+async function tryJson<T>(url: string): Promise<T | undefined> {
   try {
-    return await getJson<ProjectList>("projects.json");
+    return await getJson<T>(url);
   } catch {
-    return { projects: [] };
+    return undefined;
   }
 }
 
-export async function loadProject(slug: string): Promise<Loaded> {
-  const manifest = await getJson<AnalysisManifest>(`data/${encodeURIComponent(slug)}/analysis.json`);
-  const cc = await getJson<CcJson>(`data/${encodeURIComponent(slug)}/${manifest.snapshot}`);
-  return { cc, manifest };
+export async function loadProjects(): Promise<ProjectList> {
+  return (await tryJson<ProjectList>("projects.json")) ?? { projects: [] };
+}
+
+function base(slug: string): string {
+  return `data/${encodeURIComponent(slug)}/`;
+}
+
+export async function loadAvailable(slug: string): Promise<Available> {
+  const out: Available = {};
+  const snapshot = await tryJson<AnalysisManifest>(`${base(slug)}analysis.json`);
+  if (snapshot) out.snapshot = snapshot;
+  for (const mode of MODES) {
+    const timeline = await tryJson<TimelineManifest>(`${base(slug)}timeline.${mode}.json`);
+    if (timeline) out[mode] = timeline;
+  }
+  return out;
+}
+
+/** The most recently written source: what the user analyzed last. */
+export function latestSource(available: Available): SourceKey | undefined {
+  const entries = Object.entries(available) as Array<[SourceKey, AnalysisManifest | TimelineManifest]>;
+  return entries.sort((a, b) => (a[1].createdAt < b[1].createdAt ? 1 : -1))[0]?.[0];
+}
+
+export async function loadSource(
+  slug: string,
+  manifest: AnalysisManifest | TimelineManifest,
+  onProgress?: (done: number, total: number) => void,
+): Promise<Loaded> {
+  const files = manifest.kind === "timeline" ? manifest.frames.map((f) => f.snapshot) : [manifest.snapshot];
+  const snapshots = new Array<CcJson>(files.length);
+  let next = 0;
+  let done = 0;
+  const worker = async () => {
+    while (next < files.length) {
+      const i = next++;
+      snapshots[i] = await getJson<CcJson>(`${base(slug)}${files[i]}`);
+      onProgress?.(++done, files.length);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(PARALLEL, files.length) }, worker));
+  return { snapshots, manifest };
 }
 
 function isCcJson(value: unknown): value is CcJson {
@@ -55,5 +102,5 @@ export async function readDropped(files: readonly File[]): Promise<Loaded> {
     else if (isManifest(parsed)) manifest = parsed;
   }
   if (!cc) throw new Error("Drop a snapshot.cc.json file (and its analysis.json) to open a city.");
-  return { cc, manifest };
+  return { snapshots: [cc], manifest };
 }

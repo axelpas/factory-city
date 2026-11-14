@@ -8,6 +8,7 @@ import { doctor } from "../doctor.js";
 import { LANGUAGES } from "../languages/index.js";
 import { outputRoot, readIndex, updateIndex, writeAnalysis } from "../output.js";
 import { defaultViewerDir, openBrowser, startServer } from "../server.js";
+import { buildTimeline } from "../timeline.js";
 
 const program = new Command();
 program.name("factory-city").description("Turn a codebase into a 3D city.").version(ANALYZER_VERSION);
@@ -100,9 +101,10 @@ program
     let entry: { slug: string; name: string; dataDir: string; updatedAt: string } | undefined;
     if (dataDir) {
       const dir = resolve(dataDir);
-      if (!existsSync(join(dir, "analysis.json")))
+      const known = ["analysis.json", "timeline.commit.json", "timeline.day.json", "timeline.revs.json"];
+      if (!known.some((f) => existsSync(join(dir, f))))
         throw new Error(
-          `No analysis.json in ${dir}. Run \`factory-city analyze\` first, or pass the folder written by it.`,
+          `No analysis.json or timeline in ${dir}. Run \`factory-city analyze\` first, or pass the folder written by it.`,
         );
       entry = {
         slug: slugFor(dir),
@@ -162,6 +164,99 @@ program
       return;
     }
     for (const l of LANGUAGES) console.log(`${l.label.padEnd(12)} tier ${l.tier}  ${l.extensions.join(" ")}`);
+  });
+
+program
+  .command("timeline")
+  .description("Build the timeline of a repository: one snapshot per commit or per day")
+  .argument("[repo]", "repository to analyze", ".")
+  .option("--by <mode>", "one frame per commit or per day", "commit")
+  .option("--branch <branch>", "branch to follow (default: the current one)")
+  .option("--all-commits", "every commit instead of the first-parent history")
+  .option("--since <date>", "only commits after this date")
+  .option("--until <date>", "only commits before this date")
+  .option("--range <A..B>", "only the commits of this range")
+  .option("--revs <a,b,c>", "an explicit list of revisions")
+  .option("--max-frames <n>", "even sampling, always keeping the first and the last frame")
+  .option("--path <dir>", "restrict the analysis to a subfolder")
+  .option("--all", "include every text file, with no default exclusion")
+  .option("--include <glob>", "include files matching the glob (repeatable)", collect, [])
+  .option("--exclude <glob>", "exclude files matching the glob (repeatable)", collect, [])
+  .option("-o, --out <dir>", "output folder (default: ~/.factory-city/<project>)")
+  .option("--json", "print machine-readable output")
+  .action(async (repoPath: string, opts: Record<string, unknown>) => {
+    const by = opts.by as string;
+    if (by === "issue")
+      throw new Error("--by issue is not available yet in this version. Use --by commit or --by day.");
+    if (by !== "commit" && by !== "day") throw new Error(`Unknown --by "${by}". Use commit or day.`);
+    const maxFrames = opts.maxFrames === undefined ? undefined : Number(opts.maxFrames);
+    if (maxFrames !== undefined && (!Number.isInteger(maxFrames) || maxFrames < 2)) {
+      throw new Error("--max-frames must be a whole number of at least 2.");
+    }
+    const folder = resolve(repoPath);
+    const slug = slugFor(folder);
+    const dataDir = opts.out ? resolve(opts.out as string) : join(outputRoot(), slug);
+    const started = Date.now();
+    const quiet = Boolean(opts.json) || !process.stderr.isTTY;
+    const result = await buildTimeline(
+      {
+        folder,
+        by,
+        branch: opts.branch as string | undefined,
+        allCommits: opts.allCommits as boolean | undefined,
+        since: opts.since as string | undefined,
+        until: opts.until as string | undefined,
+        range: opts.range as string | undefined,
+        revs:
+          typeof opts.revs === "string"
+            ? opts.revs
+                .split(",")
+                .map((r) => r.trim())
+                .filter(Boolean)
+            : undefined,
+        maxFrames,
+        path: opts.path as string | undefined,
+        all: opts.all as boolean | undefined,
+        include: opts.include as string[],
+        exclude: opts.exclude as string[],
+        onProgress: quiet ? undefined : (done, total) => process.stderr.write(`\rframe ${done}/${total}`),
+      },
+      dataDir,
+    );
+    if (!quiet) process.stderr.write("\n");
+    if (!opts.out)
+      await updateIndex({
+        slug,
+        name: result.manifest.project,
+        dataDir,
+        updatedAt: new Date().toISOString(),
+      });
+    const seconds = (Date.now() - started) / 1000;
+    if (opts.json) {
+      console.log(
+        JSON.stringify(
+          {
+            dataDir,
+            frames: result.manifest.frames.length,
+            seconds,
+            cache: result.cache,
+            dataLevel: result.manifest.dataLevel,
+          },
+          null,
+          2,
+        ),
+      );
+      return;
+    }
+    const sampled = result.manifest.source.sampledFrom
+      ? ` (sampled from ${result.manifest.source.sampledFrom})`
+      : "";
+    console.log(
+      `Timeline of ${result.manifest.frames.length} frames${sampled} written to ${dataDir} in ${seconds.toFixed(1)} s.`,
+    );
+    console.log(`Parsed ${result.cache.parsed} file contents, reused ${result.cache.reused} from the cache.`);
+    for (const warning of result.manifest.warnings) console.warn(`warning: ${warning}`);
+    console.log("Run `factory-city view` to play it.");
   });
 
 program

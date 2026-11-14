@@ -35,3 +35,17 @@ describe("theme tokens", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("browser build", () => {
+  it("imports only types from the schema package root, which holds Node-only code", () => {
+    const offenders: string[] = [];
+    const root = new RegExp(`from "@factory-city/${"schema"}";`);
+    for (const file of walk(SRC).filter((f) => f.endsWith(".ts"))) {
+      for (const statement of readFileSync(file, "utf8").split(";\n")) {
+        if (root.test(`${statement};`) && !/import type /.test(statement))
+          offenders.push(relative(SRC, file));
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
