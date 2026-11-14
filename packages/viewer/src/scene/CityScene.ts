@@ -2,6 +2,7 @@ import type { Layout } from "@factory-city/layout";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { Theme } from "../themes/index";
+import type { Rgb } from "../view/color";
 import { folderDepth, PLINTH_THICKNESS, type Placement, plinthTop } from "../view/placements";
 
 export type Pick = { kind: "file"; index: number } | { kind: "folder"; path: string } | null;
@@ -14,6 +15,7 @@ export interface PlacementStyle {
 }
 
 const HIDDEN_SCALE = 1e-4;
+const AXIS_Y = new THREE.Vector3(0, 1, 0);
 const DIM_MIX = 0.82;
 
 /** The 3D city: instanced buildings and plinths, outlines, camera, picking and offscreen rendering. */
@@ -128,6 +130,7 @@ export class CityScene {
         m.dispose();
       }
     }
+    const plinthColor = c("plinth");
     const folders = [...layout.folders.entries()].sort((a, b) => folderDepth(a[0]) - folderDepth(b[0]));
     this.plinthPaths = folders.map(([path]) => path);
     this.plinths = new THREE.InstancedMesh(
@@ -144,6 +147,7 @@ export class CityScene {
         new THREE.Vector3(Math.max(r.w, 0.01), top, Math.max(r.h, 0.01)),
       );
       this.plinths?.setMatrixAt(i, m4);
+      this.plinths?.setColorAt(i, plinthColor);
     });
     this.plinths.count = folders.length;
     this.plinths.receiveShadow = true;
@@ -195,6 +199,21 @@ export class CityScene {
     this.resetCamera();
   }
 
+  /** Colors the plinths: districts with a tint get it, the others keep the plain plinth color. */
+  setPlinthTints(tints: ReadonlyMap<string, Rgb>): void {
+    if (!this.plinths) return;
+    const base = new THREE.Color(this.theme.colors.plinth ?? "");
+    const col = new THREE.Color();
+    this.plinthPaths.forEach((path, i) => {
+      const t = tints.get(path);
+      if (t) col.setRGB(t[0], t[1], t[2], THREE.SRGBColorSpace);
+      else col.copy(base);
+      this.plinths?.setColorAt(i, col);
+    });
+    if (this.plinths.instanceColor) this.plinths.instanceColor.needsUpdate = true;
+    this.requestRender();
+  }
+
   setPlacements(placements: Array<Placement | undefined>, style: PlacementStyle = {}): void {
     if (!this.buildings || !this.roofs) return;
     this.placements = placements;
@@ -219,6 +238,7 @@ export class CityScene {
       const h = hidden ? HIDDEN_SCALE : p.h;
       const w = hidden ? HIDDEN_SCALE : p.w;
       const d = hidden ? HIDDEN_SCALE : p.d;
+      q.setFromAxisAngle(AXIS_Y, p.twist);
       m4.compose(new THREE.Vector3(p.x, p.baseY + h / 2, p.z), q, new THREE.Vector3(w, h, d));
       this.buildings?.setMatrixAt(i, m4);
       col.setRGB(p.color[0], p.color[1], p.color[2], THREE.SRGBColorSpace);
@@ -299,6 +319,7 @@ export class CityScene {
       if (p) {
         this.hoverBuilding.position.set(p.x, p.baseY + p.h / 2, p.z);
         this.hoverBuilding.scale.set(p.w * 1.01, p.h * 1.01, p.d * 1.01);
+        this.hoverBuilding.rotation.y = p.twist;
         this.hoverBuilding.visible = true;
       }
     }

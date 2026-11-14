@@ -1,6 +1,9 @@
 import type { Model } from "../data/model";
+import cohesion from "./cohesion.json";
 import language from "./language.json";
+import shortcuts from "./shortcuts.json";
 import structure from "./structure.json";
+import threeCs from "./three-cs.json";
 
 /** A preset sets all channels at once and states the question it answers. Declarative: no viewer code per preset. */
 export interface Preset {
@@ -18,13 +21,22 @@ export interface Preset {
   tint?: string;
 }
 
-export const PRESETS: readonly Preset[] = [structure as Preset, language as Preset];
+export const PRESETS: readonly Preset[] = [
+  structure as Preset,
+  cohesion as Preset,
+  threeCs as Preset,
+  shortcuts as Preset,
+  language as Preset,
+];
 export const MIN_COVERAGE = 0.5;
 
 export interface Mapping {
   area: string;
   height: string;
   color: string | null;
+  /** Optional channels, off by default: twist turns a building, tint colors the plinth of a district. */
+  twist: string | null;
+  tint: string | null;
   scale: "linear" | "sqrt" | "log";
   clampP99: boolean;
 }
@@ -48,6 +60,13 @@ export function presetStatus(model: Model, preset: Preset): PresetStatus {
       return { preset, available: false, reason: `"${id}" is not available for at least half of the code.` };
     }
   }
+  if (preset.twist && !covered(model, preset.twist)) {
+    return {
+      preset,
+      available: false,
+      reason: `"${preset.twist}" is not available for at least half of the code.`,
+    };
+  }
   const color = preset.color.find((id) => covered(model, id));
   if (!color) {
     return {
@@ -59,7 +78,16 @@ export function presetStatus(model: Model, preset: Preset): PresetStatus {
   return {
     preset,
     available: true,
-    mapping: { area: preset.area, height: preset.height, color, scale: "sqrt", clampP99: true },
+    mapping: {
+      area: preset.area,
+      height: preset.height,
+      color,
+      twist: preset.twist ?? null,
+      // the tint is an extra: the preset stays available when too few folders have a value
+      tint: preset.tint && covered(model, preset.tint) ? preset.tint : null,
+      scale: "sqrt",
+      clampP99: true,
+    },
   };
 }
 
@@ -76,6 +104,14 @@ export function defaultMapping(model: Model): { preset: Preset; mapping: Mapping
   const preset = PRESETS[0] as Preset;
   return {
     preset,
-    mapping: { area: fallback, height: fallback, color: null, scale: "sqrt", clampP99: true },
+    mapping: {
+      area: fallback,
+      height: fallback,
+      color: null,
+      twist: null,
+      tint: null,
+      scale: "sqrt",
+      clampP99: true,
+    },
   };
 }

@@ -16,6 +16,46 @@ export interface LanguageConfig {
   logical: { nodeTypes: string[]; operators: string[] };
   nesting: string[];
   nestingExceptParent: Record<string, string[]>;
+  /** Where module dependencies come from; absent for languages without coupling support. */
+  imports?: ImportsConfig;
+  /** Which syntax nodes make up the file's units for cohesion; absent when cohesion is unavailable. */
+  cohesion?: CohesionConfig;
+  /** Declarative rules for places where a check was silenced. */
+  shortcuts: ShortcutRule[];
+}
+
+export interface ImportsConfig {
+  /** Statement nodes carrying the module in `sourceField` (import, export-from). */
+  statements: string[];
+  sourceField: string;
+  calls: { nodeType: string; functionField: string; argumentsField: string; callees: string[] };
+}
+
+export interface CohesionConfig {
+  wrappers: string[];
+  functionDeclarations: string[];
+  variableDeclarations: string[];
+  functionValues: string[];
+  classDeclarations: string[];
+  methods: string[];
+  constructorName: string;
+  fields: string[];
+  otherDeclarations: string[];
+  identifiers: string[];
+  memberExpression: string;
+  selfObject: string;
+  barrelStatements: string[];
+  /** Two functions whose names start with the same word of at least this length are linked. */
+  minStemLength: number;
+}
+
+/** One shortcut kind. `comment` matches comment text, `node` matches a node type and its text, `call` matches the callee, `emptyBlock` matches a node whose body has no statement. */
+export interface ShortcutRule {
+  kind: string;
+  type: "comment" | "node" | "call" | "emptyBlock";
+  pattern?: string;
+  nodeType?: string;
+  bodyField?: string;
 }
 
 type RawConfig = Partial<LanguageConfig> &
@@ -34,6 +74,7 @@ function resolve(raw: RawConfig, all: Map<string, RawConfig>): LanguageConfig {
     logical: { nodeTypes: [], operators: [] },
     nesting: [],
     nestingExceptParent: {},
+    shortcuts: [],
     ...base,
     ...raw,
   } as LanguageConfig;

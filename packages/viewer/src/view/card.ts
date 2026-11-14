@@ -76,13 +76,14 @@ export function fileCard(model: Model, index: number, mapping: Mapping, fmt: For
     ["Ground area", mapping.area],
     ["Height", mapping.height],
     ["Color", mapping.color],
+    ["Twist", mapping.twist],
   ];
   for (const [role, id] of roles) {
     if (!id) continue;
     const row = metricRow(model, id, file.values, fmt);
     if (row) channels.push({ ...row, label: `${role}: ${row.label}` });
   }
-  const mapped = new Set([mapping.area, mapping.height, mapping.color]);
+  const mapped = new Set([mapping.area, mapping.height, mapping.color, mapping.twist]);
   const metrics = KEY_METRICS.filter((id) => !mapped.has(id))
     .map((id) => metricRow(model, id, file.values, fmt))
     .filter((r): r is CardRow => r !== undefined);
@@ -116,8 +117,20 @@ export function folderCard(model: Model, path: string, fmt: Formatter, worstMetr
     { label: "Files", value: fmt.integer(folder.files.length) },
     { label: "Real lines", value: fmt.integer(folder.rloc) },
   ];
-  if (model.metrics.has("folder_cohesion"))
-    rows.push({ label: "Folder cohesion", value: "n/a", note: "Needs at least 5 import links." });
+  const cohesionInfo = model.metrics.get("folder_cohesion");
+  if (cohesionInfo) {
+    const cohesion = folder.values.folder_cohesion;
+    const stats = model.folderStats.get("folder_cohesion");
+    rows.push(
+      cohesion === undefined
+        ? { label: cohesionInfo.label, value: "n/a", note: "Needs at least 5 import links." }
+        : {
+            label: cohesionInfo.label,
+            value: fmt.number(cohesion),
+            marker: stats ? percentileRank(stats, cohesion) : undefined,
+          },
+    );
+  }
   return {
     kind: "folder",
     title: folder.name === "" || path === "" ? "(root)" : folder.name,

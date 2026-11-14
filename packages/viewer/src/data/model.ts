@@ -17,6 +17,8 @@ export interface FolderRec {
   depth: number;
   files: number[];
   rloc: number;
+  /** Folder-scope metrics, such as folder cohesion. */
+  values: Record<string, number>;
 }
 
 export interface MetricStats {
@@ -37,6 +39,8 @@ export interface Model {
   folders: Map<string, FolderRec>;
   metrics: Map<string, MetricDefinition>;
   stats: Map<string, MetricStats>;
+  /** Statistics of folder-scope metrics. */
+  folderStats: Map<string, MetricStats>;
   categories: Record<string, string[]>;
   /** Share of code (by real lines, else by files) that has a value, per metric. */
   coverage: Map<string, number>;
@@ -103,10 +107,25 @@ export function buildModel(cc: CcJson, manifest?: AnalysisManifest): Model {
   const files: FileRec[] = [];
   const folders = new Map<string, FolderRec>();
 
+  const folderValues = (id: string): Record<string, number> => {
+    const values: Record<string, number> = {};
+    for (const [key, value] of Object.entries(attributes[id] ?? {})) {
+      if (typeof value === "number" && Number.isFinite(value)) values[key] = value;
+    }
+    return values;
+  };
+
   const visit = (node: FileNode, parts: string[]): void => {
     if (node.type === "Folder") {
       const path = parts.join("/");
-      folders.set(path, { path, name: node.name, depth: parts.length, files: [], rloc: 0 });
+      folders.set(path, {
+        path,
+        name: node.name,
+        depth: parts.length,
+        files: [],
+        rloc: 0,
+        values: folderValues(node.id),
+      });
       for (const child of node.children ?? []) visit(child, [...parts, child.name]);
       return;
     }
@@ -125,7 +144,14 @@ export function buildModel(cc: CcJson, manifest?: AnalysisManifest): Model {
     });
   };
   for (const root of cc.files) {
-    folders.set("", { path: "", name: root.name, depth: 0, files: [], rloc: 0 });
+    folders.set("", {
+      path: "",
+      name: root.name,
+      depth: 0,
+      files: [],
+      rloc: 0,
+      values: folderValues(root.id),
+    });
     for (const child of root.children ?? []) visit(child, [child.name]);
   }
 
@@ -135,10 +161,16 @@ export function buildModel(cc: CcJson, manifest?: AnalysisManifest): Model {
   const metrics = new Map<string, MetricDefinition>();
   for (const id of [...present].sort()) metrics.set(id, REGISTRY.get(id) ?? unknownMetric(id));
 
+  const folderMetricIds = new Set<string>();
+  for (const folder of folders.values()) for (const k of Object.keys(folder.values)) folderMetricIds.add(k);
+  for (const id of [...folderMetricIds].sort()) metrics.set(id, REGISTRY.get(id) ?? unknownMetric(id));
+
   const stats = new Map<string, MetricStats>();
+  const folderStats = new Map<string, MetricStats>();
   const coverage = new Map<string, number>();
   const totalWeight = files.reduce((sum, f) => sum + (f.values.rloc ?? 1), 0) || 1;
   for (const id of metrics.keys()) {
+    if (folderMetricIds.has(id)) continue;
     const values: number[] = [];
     let covered = 0;
     for (const f of files) {
@@ -163,6 +195,22 @@ export function buildModel(cc: CcJson, manifest?: AnalysisManifest): Model {
     }
   });
 
+  for (const id of folderMetricIds) {
+    const values: number[] = [];
+    let covered = 0;
+    let total = 0;
+    for (const folder of folders.values()) {
+      if (folder.depth === 0) continue;
+      total += folder.rloc || 1;
+      const v = folder.values[id];
+      if (v === undefined) continue;
+      values.push(v);
+      covered += folder.rloc || 1;
+    }
+    folderStats.set(id, statsOf(values));
+    coverage.set(id, total === 0 ? 0 : covered / total);
+  }
+
   return {
     project: manifest?.project ?? cc.meta.projectName,
     manifest,
@@ -171,6 +219,7 @@ export function buildModel(cc: CcJson, manifest?: AnalysisManifest): Model {
     folders,
     metrics,
     stats,
+    folderStats,
     categories: manifest?.categories ?? {},
     coverage,
   };

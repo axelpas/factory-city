@@ -6,6 +6,10 @@ import { parseHex, type Rgb, rampColor } from "./color";
 import { makeScale } from "./scales";
 
 export const PLINTH_THICKNESS = 0.35;
+/** Largest twist: a quarter turn, as in VERSO. */
+export const MAX_TWIST = Math.PI / 4;
+/** When twist is on, every footprint shrinks by this factor so that a turned building keeps inside its parcel. */
+export const TWIST_SHRINK = Math.SQRT1_2;
 /** Share of a parcel left empty around its building. */
 export const PARCEL_INSET = 0.12;
 const MIN_HEIGHT = 1.2;
@@ -21,6 +25,8 @@ export interface Placement {
   h: number;
   baseY: number;
   color: Rgb;
+  /** Rotation around the vertical axis, in radians (0 when twist is off or unavailable). */
+  twist: number;
   /** 0..1: which roof mark a category carries, so that color is never the only cue. */
   roofMark: number;
   /** True when the height metric has no value for this file. */
@@ -38,6 +44,28 @@ export interface ColorLegend {
   clamped?: boolean;
   /** Categories in palette order, `other` last when present. */
   categories?: Array<{ label: string; color: Rgb; roofMark: number; count: number; isOther: boolean }>;
+}
+
+/**
+ * Footprint of a building. With twist on, all footprints shrink by the same factor; a last per-building
+ * check guarantees that even a thin parcel still holds the turned building.
+ */
+export function fitFootprint(
+  w: number,
+  d: number,
+  parcel: Rect,
+  twistOn: boolean,
+  twist: number,
+): { w: number; d: number } {
+  if (!twistOn) return { w, d };
+  const sw = w * TWIST_SHRINK;
+  const sd = d * TWIST_SHRINK;
+  const c = Math.cos(twist);
+  const s = Math.sin(twist);
+  const boxW = sw * c + sd * s;
+  const boxD = sw * s + sd * c;
+  const g = Math.min(1, parcel.w / boxW, parcel.h / boxD);
+  return { w: sw * g, d: sd * g };
 }
 
 export function plinthTop(depth: number): number {
@@ -97,6 +125,15 @@ export function computePlacements(
     const { x, z } = parcelCenter(rect);
     const inset = PARCEL_INSET;
     const hv = file.values[mapping.height];
+    const twistValue = mapping.twist ? file.values[mapping.twist] : undefined;
+    const twist = twistValue === undefined ? 0 : Math.min(Math.max(twistValue, 0), 1) * MAX_TWIST;
+    const footprint = fitFootprint(
+      rect.w * (1 - inset * 2),
+      rect.h * (1 - inset * 2),
+      rect,
+      mapping.twist !== null,
+      twist,
+    );
     let color = building;
     let colorUnavailable = false;
     let roofMark = 0;
@@ -116,8 +153,9 @@ export function computePlacements(
     return {
       x,
       z,
-      w: rect.w * (1 - inset * 2),
-      d: rect.h * (1 - inset * 2),
+      w: footprint.w,
+      d: footprint.d,
+      twist,
       h: hv === undefined ? MIN_HEIGHT : MIN_HEIGHT + heightScale(hv) * maxHeight,
       baseY: plinthTop(folderDepth(file.dir)),
       color,
@@ -154,4 +192,19 @@ export function computePlacements(
     };
   }
   return { placements, legend };
+}
+
+/** Light tint of a district's plinth from a folder-scope metric; folders without a value keep the plain plinth. */
+export function computeTints(model: Model, mapping: Mapping, theme: Theme): Map<string, Rgb> {
+  const tints = new Map<string, Rgb>();
+  const id = mapping.tint;
+  const stats = id ? model.folderStats.get(id) : undefined;
+  if (!id || !stats) return tints;
+  const ramp = theme.ramps.tint.map(parseHex);
+  const scale = makeScale(stats, "linear", false);
+  for (const folder of model.folders.values()) {
+    const v = folder.values[id];
+    if (folder.depth > 0 && v !== undefined) tints.set(folder.path, rampColor(ramp, scale(v)));
+  }
+  return tints;
 }

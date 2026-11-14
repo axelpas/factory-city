@@ -1,0 +1,11 @@
+{
+  "id": "cohesion",
+  "label": "Cohesion",
+  "group": "Code",
+  "level": 0,
+  "question": "Which files do several unrelated jobs?",
+  "area": "rloc",
+  "height": "mcc",
+  "color": ["lack_of_cohesion"],
+  "tint": "folder_cohesion"
+}

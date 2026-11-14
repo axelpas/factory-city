@@ -1,10 +1,13 @@
 import type { Node, Parser } from "web-tree-sitter";
-import type { LanguageConfig } from "../languages/index.js";
+import type { LanguageConfig, ShortcutRule } from "../languages/index.js";
+import { computeCohesion } from "./cohesion.js";
 
 /** Metrics of one file. A metric that cannot be computed is absent, never 0. */
 export interface FileMetrics {
   metrics: Record<string, number>;
   syntaxErrors: boolean;
+  /** Module specifiers imported by the file, as written (`./a`, `@scope/pkg`). Empty for languages without coupling support. */
+  imports: string[];
 }
 
 /** Line count: a final line break does not start a new line. */
@@ -17,11 +20,17 @@ export function splitLines(text: string): string[] {
 
 /** Metrics for files without a grammar (other text files): line count only. */
 export function plainMetrics(text: string): FileMetrics {
-  return { metrics: { loc: splitLines(text).length }, syntaxErrors: false };
+  return { metrics: { loc: splitLines(text).length }, syntaxErrors: false, imports: [] };
 }
 
 interface FunctionFrame {
   branches: number;
+}
+
+/** The text of a string literal node, without its quotes. */
+function stringValue(node: Node): string {
+  const fragment = node.namedChildren.find((c) => c?.type === "string_fragment");
+  return fragment ? fragment.text : node.text.slice(1, -1);
 }
 
 class Walker {
@@ -30,6 +39,9 @@ class Walker {
   maxFunctionComplexity: number | undefined;
   maxNesting = 0;
   readonly commentRanges = new Map<number, Array<[number, number]>>();
+  readonly imports: string[] = [];
+  readonly shortcuts = new Map<string, number>();
+  private readonly rules: Array<{ rule: ShortcutRule; re: RegExp | undefined }>;
   private readonly stack: FunctionFrame[] = [];
   private readonly fn: Set<string>;
   private readonly br: Set<string>;
@@ -48,14 +60,51 @@ class Walker {
     this.nest = new Set(lang.nesting);
     this.logicalTypes = new Set(lang.logical.nodeTypes);
     this.logicalOps = new Set(lang.logical.operators);
+    this.rules = lang.shortcuts.map((rule) => ({
+      rule,
+      re: rule.pattern ? new RegExp(rule.pattern) : undefined,
+    }));
+  }
+
+  private count(kind: string): void {
+    this.shortcuts.set(kind, (this.shortcuts.get(kind) ?? 0) + 1);
+  }
+
+  private inspect(node: Node): void {
+    const type = node.type;
+    for (const { rule, re } of this.rules) {
+      if (rule.type === "node" && rule.nodeType === type && (!re || re.test(node.text)))
+        this.count(rule.kind);
+      else if (rule.type === "call" && type === (rule.nodeType ?? "call_expression")) {
+        const callee = node.childForFieldName("function")?.text;
+        if (callee !== undefined && re?.test(callee)) this.count(rule.kind);
+      } else if (rule.type === "emptyBlock" && rule.nodeType === type) {
+        const body = node.childForFieldName(rule.bodyField ?? "body");
+        if (body?.namedChildren.every((c) => !c || c.type === "comment")) this.count(rule.kind);
+      }
+    }
+    const imp = this.lang.imports;
+    if (!imp) return;
+    if (imp.statements.includes(type)) {
+      const source = node.childForFieldName(imp.sourceField);
+      if (source) this.imports.push(stringValue(source));
+    } else if (type === imp.calls.nodeType) {
+      const callee = node.childForFieldName(imp.calls.functionField)?.text;
+      const first = node.childForFieldName(imp.calls.argumentsField)?.namedChildren[0];
+      if (callee && imp.calls.callees.includes(callee) && first?.type === "string")
+        this.imports.push(stringValue(first));
+    }
   }
 
   visit(node: Node, depth: number, parentType: string): void {
     const type = node.type;
     if (this.cm.has(type)) {
       this.addComment(node);
+      for (const { rule, re } of this.rules)
+        if (rule.type === "comment" && re?.test(node.text)) this.count(rule.kind);
       return;
     }
+    this.inspect(node);
     let nextDepth = depth;
     if (this.nest.has(type) && !this.lang.nestingExceptParent[type]?.includes(parentType)) {
       nextDepth = depth + 1;
@@ -123,7 +172,12 @@ function countCodeLines(lines: string[], comments: Map<number, Array<[number, nu
   return { code, commentOnly };
 }
 
-export function computeMetrics(parser: Parser, lang: LanguageConfig, text: string): FileMetrics {
+export function computeMetrics(
+  parser: Parser,
+  lang: LanguageConfig,
+  text: string,
+  isTest = false,
+): FileMetrics {
   const lines = splitLines(text);
   const tree = parser.parse(text);
   if (!tree) return plainMetrics(text);
@@ -141,7 +195,24 @@ export function computeMetrics(parser: Parser, lang: LanguageConfig, text: strin
     };
     if (walker.maxFunctionComplexity !== undefined)
       metrics.max_function_complexity = walker.maxFunctionComplexity;
-    return { metrics, syntaxErrors: tree.rootNode.hasError };
+    if (lang.shortcuts.length > 0) {
+      let total = 0;
+      for (const rule of lang.shortcuts) {
+        const n = walker.shortcuts.get(rule.kind) ?? 0;
+        metrics[`escape_${rule.kind}`] = n;
+        total += n;
+      }
+      metrics.escape_hatches = total;
+      if (code > 0) metrics.escape_hatch_density = (total / code) * 1000;
+    }
+    if (lang.cohesion && !isTest) {
+      const cohesion = computeCohesion(tree.rootNode, lang.cohesion);
+      if (cohesion && !cohesion.barrel) {
+        metrics.cohesion_groups = cohesion.groups;
+        metrics.lack_of_cohesion = cohesion.nodes > 1 ? (cohesion.groups - 1) / (cohesion.nodes - 1) : 0;
+      }
+    }
+    return { metrics, syntaxErrors: tree.rootNode.hasError, imports: walker.imports };
   } finally {
     tree.delete();
   }

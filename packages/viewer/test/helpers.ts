@@ -7,7 +7,11 @@ export interface FileSpec {
   values: Record<string, number>;
 }
 
-export function makeModel(specs: FileSpec[], manifest?: Partial<AnalysisManifest>): Model {
+export function makeModel(
+  specs: FileSpec[],
+  manifest?: Partial<AnalysisManifest>,
+  folderValues: Record<string, Record<string, number>> = {},
+): Model {
   const root: FileNode = { id: nodeId("/root"), name: "root", type: "Folder", children: [] };
   const folders = new Map<string, FileNode>([["", root]]);
   const attributes: Record<string, Record<string, number>> = {};
@@ -21,12 +25,14 @@ export function makeModel(specs: FileSpec[], manifest?: Partial<AnalysisManifest
       type: "Folder",
       children: [],
     };
+    if (folderValues[path]) attributes[node.id] = folderValues[path];
     ensure(path.slice(0, Math.max(cut, 0))).children?.push(node);
     folders.set(path, node);
     return node;
   };
   for (const spec of specs) {
     const cut = spec.path.lastIndexOf("/");
+    if (cut >= 0) ensure(spec.path.slice(0, cut));
     const parent = ensure(cut < 0 ? "" : spec.path.slice(0, cut));
     const node: FileNode = { id: nodeId(`/root/${spec.path}`), name: spec.path.slice(cut + 1), type: "File" };
     parent.children?.push(node);

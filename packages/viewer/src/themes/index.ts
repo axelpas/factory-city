@@ -6,7 +6,7 @@ export interface Theme {
   renderer: "solid" | "voxel" | "wireframe";
   mode: "light" | "dark";
   colors: Record<string, string>;
-  ramps: { sequential: string[]; diverging: string[]; categorical: string[]; other: string };
+  ramps: { sequential: string[]; diverging: string[]; categorical: string[]; other: string; tint: string[] };
   light: { ambient: number; sun: number; sunPosition: number[]; shadows: boolean };
   camera: { type: "perspective" | "orthographic"; fov: number; direction: number[] };
   font: string;

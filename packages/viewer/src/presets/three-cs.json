@@ -1,0 +1,11 @@
+{
+  "id": "three-cs",
+  "label": "Three Cs",
+  "group": "Code",
+  "level": 0,
+  "question": "Complexity, coupling and cohesion at once?",
+  "area": "rloc",
+  "height": "mcc",
+  "color": ["imports_out"],
+  "twist": "lack_of_cohesion"
+}

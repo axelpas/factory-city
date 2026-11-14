@@ -6,7 +6,8 @@ import { inspectContent } from "./inspect.js";
 import { LANGUAGES } from "./languages/index.js";
 import { computeMetrics, plainMetrics } from "./metrics/file-metrics.js";
 import { getParser } from "./parse.js";
-import { bump, emptySummary, makeFolderSkipper, selectEntries } from "./select.js";
+import { buildImportGraph, folderCohesion, loadResolveContext } from "./resolve.js";
+import { bump, emptySummary, folderReason, makeFolderSkipper, selectEntries } from "./select.js";
 import { DiskSource } from "./source/disk.js";
 import { findRepo, GitSource } from "./source/git.js";
 import type { Source } from "./source/types.js";
@@ -31,7 +32,61 @@ export interface AnalysisResult {
   manifest: AnalysisManifest;
 }
 
-const ABSOLUTE = new Set(["loc", "rloc", "comment_lines", "functions", "mcc"]);
+const ABSOLUTE = new Set([
+  "loc",
+  "rloc",
+  "comment_lines",
+  "functions",
+  "mcc",
+  "imports_out",
+  "imports_in",
+  "escape_hatches",
+]);
+
+/** Resolves imports across the analyzed files, then adds `imports_out`, `imports_in` and `folder_cohesion`. */
+async function addCoupling(
+  source: Source,
+  entryPaths: string[],
+  attributesByPath: Map<string, Record<string, number>>,
+  importsByFile: Map<string, string[]>,
+  folderAttributes: Map<string, Record<string, number>>,
+): Promise<void> {
+  if (importsByFile.size === 0) return;
+  const entries = new Map(
+    (await source.list({ skipDir: (_p, name) => folderReason(name) })).map((e) => [e.path, e]),
+  );
+  const reader = async (path: string): Promise<string | undefined> => {
+    const entry = entries.get(path);
+    if (entry?.kind !== "file" || entry.size > 1_000_000) return undefined;
+    try {
+      return (await source.read(entry)).toString("utf8");
+    } catch {
+      return undefined;
+    }
+  };
+  const files = new Set(attributesByPath.keys());
+  const ctx = await loadResolveContext(entryPaths, files, reader);
+  const graph = buildImportGraph(importsByFile, ctx);
+  const incoming = new Map<string, number>();
+  for (const targets of graph.values()) for (const t of targets) incoming.set(t, (incoming.get(t) ?? 0) + 1);
+  for (const [file, targets] of graph) {
+    const values = attributesByPath.get(file);
+    if (!values) continue;
+    values.imports_out = targets.size;
+    values.imports_in = incoming.get(file) ?? 0;
+  }
+  const folders = new Set<string>();
+  for (const file of graph.keys()) {
+    const parts = file.split("/").slice(0, -1);
+    for (let i = 1; i <= parts.length; i++) folders.add(parts.slice(0, i).join("/"));
+  }
+  const graphFiles = [...graph.keys()];
+  for (const folder of folders) {
+    const inside = graphFiles.filter((f) => f.startsWith(`${folder}/`));
+    const value = folderCohesion(folder, inside, graph);
+    if (value !== undefined) folderAttributes.set(folder, { folder_cohesion: value });
+  }
+}
 
 async function openSource(
   opts: AnalyzeOptions,
@@ -57,7 +112,11 @@ async function openSource(
   return { source: new DiskSource(folder), git };
 }
 
-function buildTree(paths: string[], attributesByPath: Map<string, Record<string, number>>) {
+function buildTree(
+  paths: string[],
+  attributesByPath: Map<string, Record<string, number>>,
+  folderAttributes: Map<string, Record<string, number>>,
+) {
   const attributes: Record<string, Record<string, number>> = {};
   const rootPath = "/root";
   const root: FileNode = { id: nodeId(rootPath), name: "root", type: "Folder", children: [] };
@@ -76,6 +135,8 @@ function buildTree(paths: string[], attributesByPath: Map<string, Record<string,
     };
     parent.children?.push(node);
     folders.set(rel, node);
+    const own = folderAttributes.get(rel);
+    if (own) attributes[node.id] = own;
     return node;
   };
 
@@ -121,6 +182,7 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
 
     const languageIndex = new Map<string, number>();
     const attributesByPath = new Map<string, Record<string, number>>();
+    const importsByFile = new Map<string, string[]>();
     const present = new Set<string>();
     let syntaxErrorFiles = 0;
 
@@ -134,8 +196,9 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
         continue;
       }
       const result = language
-        ? computeMetrics(await getParser(language.grammar), language, inspected.text)
+        ? computeMetrics(await getParser(language.grammar), language, inspected.text, isTest)
         : plainMetrics(inspected.text);
+      if (language?.imports) importsByFile.set(entry.path, result.imports);
       if (result.syntaxErrors) syntaxErrorFiles++;
       const values: Record<string, number> = { ...result.metrics, is_test: isTest ? 1 : 0 };
       if (language) {
@@ -150,8 +213,19 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
     for (const [key, n] of Object.entries(summary.warnings))
       warnings.push(`${n} entr${n === 1 ? "y" : "ies"} skipped: ${key}.`);
 
+    const folderAttributes = new Map<string, Record<string, number>>();
+    await addCoupling(
+      source,
+      entries.map((e) => e.path),
+      attributesByPath,
+      importsByFile,
+      folderAttributes,
+    );
+    for (const values of attributesByPath.values()) for (const key of Object.keys(values)) present.add(key);
+    for (const values of folderAttributes.values()) for (const key of Object.keys(values)) present.add(key);
+
     const project = basename(resolve(opts.folder));
-    const { root, attributes } = buildTree([...attributesByPath.keys()], attributesByPath);
+    const { root, attributes } = buildTree([...attributesByPath.keys()], attributesByPath, folderAttributes);
     const metricIds = [...present].sort();
     const descriptors: Record<string, AttributeDescriptor> = {};
     const types: Record<string, "absolute" | "relative"> = {};

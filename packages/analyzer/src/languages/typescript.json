@@ -23,7 +23,10 @@
     "catch_clause",
     "ternary_expression"
   ],
-  "logical": { "nodeTypes": ["binary_expression"], "operators": ["&&", "||", "??"] },
+  "logical": {
+    "nodeTypes": ["binary_expression"],
+    "operators": ["&&", "||", "??"]
+  },
   "nesting": [
     "if_statement",
     "for_statement",
@@ -36,5 +39,82 @@
     "arrow_function",
     "function_expression"
   ],
-  "nestingExceptParent": { "if_statement": ["else_clause"] }
+  "nestingExceptParent": {
+    "if_statement": ["else_clause"]
+  },
+  "imports": {
+    "statements": ["import_statement", "export_statement"],
+    "sourceField": "source",
+    "calls": {
+      "nodeType": "call_expression",
+      "functionField": "function",
+      "argumentsField": "arguments",
+      "callees": ["require", "import"]
+    }
+  },
+  "cohesion": {
+    "wrappers": ["export_statement"],
+    "functionDeclarations": ["function_declaration", "generator_function_declaration"],
+    "variableDeclarations": ["lexical_declaration", "variable_declaration"],
+    "functionValues": ["arrow_function", "function_expression", "generator_function"],
+    "classDeclarations": ["class_declaration", "abstract_class_declaration"],
+    "methods": ["method_definition", "abstract_method_signature"],
+    "constructorName": "constructor",
+    "fields": ["public_field_definition", "field_definition"],
+    "otherDeclarations": ["type_alias_declaration", "interface_declaration", "enum_declaration"],
+    "identifiers": [
+      "identifier",
+      "type_identifier",
+      "shorthand_property_identifier",
+      "shorthand_property_identifier_pattern"
+    ],
+    "memberExpression": "member_expression",
+    "selfObject": "this",
+    "barrelStatements": ["import_statement", "export_statement"],
+    "minStemLength": 4
+  },
+  "shortcuts": [
+    {
+      "kind": "any",
+      "type": "node",
+      "nodeType": "predefined_type",
+      "pattern": "^any$"
+    },
+    {
+      "kind": "ts_ignore",
+      "type": "comment",
+      "pattern": "@ts-ignore"
+    },
+    {
+      "kind": "ts_expect_error",
+      "type": "comment",
+      "pattern": "@ts-expect-error"
+    },
+    {
+      "kind": "ts_nocheck",
+      "type": "comment",
+      "pattern": "@ts-nocheck"
+    },
+    {
+      "kind": "lint_disable",
+      "type": "comment",
+      "pattern": "(eslint|tslint|oxlint|stylelint)-disable|biome-ignore"
+    },
+    {
+      "kind": "skipped_test",
+      "type": "call",
+      "pattern": "^((it|test|describe)\\.skip|xit|xtest|xdescribe)$"
+    },
+    {
+      "kind": "focused_test",
+      "type": "call",
+      "pattern": "^((it|test|describe)\\.only|fit|fdescribe)$"
+    },
+    {
+      "kind": "empty_catch",
+      "type": "emptyBlock",
+      "nodeType": "catch_clause",
+      "bodyField": "body"
+    }
+  ]
 }

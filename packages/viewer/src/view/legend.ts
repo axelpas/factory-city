@@ -2,7 +2,7 @@ import type { Model } from "../data/model";
 import type { Mapping } from "../presets/index";
 
 export interface LegendLine {
-  channel: "Ground area" | "Height" | "Color";
+  channel: "Ground area" | "Height" | "Color" | "Twist" | "District tint";
   metric: string;
   /** Plain language: "taller = more complex". */
   text: string;
@@ -35,6 +35,20 @@ export function legendLines(model: Model, mapping: Mapping): LegendLine[] {
         ? "each color is one value; the roof mark repeats it"
         : reading(model, mapping.color, (h) => `darker = ${h}`);
     lines.push({ channel: "Color", metric: label(mapping.color), text });
+  }
+  if (mapping.twist) {
+    lines.push({
+      channel: "Twist",
+      metric: label(mapping.twist),
+      text: reading(model, mapping.twist, (h) => `more twisted = ${h}`),
+    });
+  }
+  if (mapping.tint) {
+    lines.push({
+      channel: "District tint",
+      metric: label(mapping.tint),
+      text: reading(model, mapping.tint, (h) => `darker ground = ${h}`),
+    });
   }
   return lines;
 }

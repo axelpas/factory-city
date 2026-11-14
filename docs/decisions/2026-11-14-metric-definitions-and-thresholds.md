@@ -14,3 +14,7 @@ Every metric is declared in a registry (id, definition, computation, direction, 
 
 ## Consequences
 Adding a metric needs no viewer change. Thresholds are configurable and printed in the output.
+
+## Addendum: cohesion links (milestone 3, 2026-11-14)
+Structural cohesion alone scores sibling components (`Card`, `CardHeader`) and themed helpers (`formatDate`, `formatNumber`) as scattered. Decision: besides name references and shared declarations (variables, types, classes, class fields through `this.`), two functions are linked when their names start with the same word of at least 4 characters (camelCase or PascalCase words), or when one name starts with the other. Fixtures cover both cases and their opposite: `Card` with `Table` stay two groups, a class whose methods share no leading word and no field splits into one group per method.
+Known limit: two unrelated functions that happen to share a verb of four letters or more (`parseA`, `parseB`) are linked. Constructors are never nodes. Shortcut kinds and the cohesion node types live in the language's declarative file, not in the engine.

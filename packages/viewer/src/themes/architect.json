@@ -25,7 +25,8 @@
     "sequential": ["#eaf0f6", "#b9cfe3", "#7aa6c9", "#3f7ba8", "#1d4f7c"],
     "diverging": ["#b2182b", "#ef8a62", "#f7f7f7", "#67a9cf", "#2166ac"],
     "categorical": ["#e69f00", "#56b4e9", "#009e73", "#f0e442", "#0072b2", "#d55e00", "#cc79a7", "#4d4d4d"],
-    "other": "#9b9b94"
+    "other": "#9b9b94",
+    "tint": ["#e6e2d6", "#d9dfd2", "#c6dacd", "#aed3c9", "#92c8c4"]
   },
   "light": { "ambient": 0.7, "sun": 0.85, "sunPosition": [-0.45, 1, 0.65], "shadows": true },
   "camera": { "type": "perspective", "fov": 38, "direction": [0.75, 0.95, 1.1] },

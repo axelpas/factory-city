@@ -11,12 +11,12 @@ import { applyTheme, DEFAULT_THEME, type Theme } from "../themes/index";
 import { type CardRow, type FileCard, type FolderCard, fileCard, folderCard, metricRow } from "../view/card";
 import { cssGradient, parseHex, toCss } from "../view/color";
 import { dataLevelLine, hiddenContentLine, legendLines } from "../view/legend";
-import { type ColorLegend, computePlacements } from "../view/placements";
+import { type ColorLegend, computePlacements, computeTints } from "../view/placements";
 import { SCALE_KINDS, type ScaleKind } from "../view/scales";
 import { drawOverlay } from "./overlay";
 
 type TestsMode = "show" | "dim" | "hide";
-type Role = "area" | "height" | "color";
+type Role = "area" | "height" | "color" | "twist" | "tint";
 
 interface State {
   model: Model;
@@ -205,6 +205,12 @@ export class App {
     this.panel.append(this.picker("area", "Ground area", "Metric that sets how much ground a file gets"));
     this.panel.append(this.picker("height", "Height", "Metric that sets how tall a building is"));
     this.panel.append(this.picker("color", "Color", "Metric that colors a building"));
+    this.panel.append(
+      this.picker("twist", "Twist", "Optional: turns a building by a metric (more twist = less cohesive)"),
+    );
+    this.panel.append(
+      this.picker("tint", "District tint", "Optional: tints the plinth of a district by a folder metric"),
+    );
 
     const scale = el("select", {
       title: "How values become heights",
@@ -272,7 +278,8 @@ export class App {
     if (!s) return [];
     return [...s.model.metrics.values()]
       .filter((m) => m.id !== "is_test")
-      .filter((m) => role === "color" || m.kind === "number")
+      .filter((m) => (role === "tint" ? m.scope === "folder" : m.scope === "file"))
+      .filter((m) => role === "color" || m.kind !== "category")
       .filter((m) => (s.model.coverage.get(m.id) ?? 0) >= MIN_COVERAGE)
       .map((m) => m.id);
   }
@@ -281,6 +288,8 @@ export class App {
     const s = this.state as State;
     const select = el("select", { title, attrs: { "aria-label": label } });
     if (role === "color") select.append(el("option", { text: "none (white)", attrs: { value: "" } }));
+    if (role === "twist" || role === "tint")
+      select.append(el("option", { text: "none", attrs: { value: "" } }));
     const current = s.mapping[role];
     for (const id of this.usable(role)) {
       const m = s.model.metrics.get(id);
@@ -289,7 +298,8 @@ export class App {
       select.append(o);
     }
     select.addEventListener("change", () => {
-      this.setMapping(role === "color" ? { color: select.value || null } : { [role]: select.value });
+      const optional = role === "color" || role === "twist" || role === "tint";
+      this.setMapping({ [role]: optional ? select.value || null : select.value });
     });
     const help = el(
       "details",
@@ -405,6 +415,7 @@ export class App {
       if (f.isTest && s.tests === "hide") hidden.add(i);
     });
     this.scene.setPlacements(placements, { dimmed, hidden });
+    this.scene.setPlinthTints(computeTints(s.model, s.mapping, this.theme));
     this.renderLegend();
     this.renderStatus();
     this.updatePresetSelect();

@@ -1,0 +1,10 @@
+{
+  "id": "shortcuts",
+  "label": "Shortcuts",
+  "group": "Code",
+  "level": 0,
+  "question": "Where were checks silenced instead of problems solved?",
+  "area": "rloc",
+  "height": "mcc",
+  "color": ["escape_hatch_density"]
+}
