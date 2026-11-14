@@ -50,3 +50,14 @@ export async function updateIndex(entry: IndexEntry): Promise<void> {
   );
   await writeAtomic(path, `${JSON.stringify({ version: 1, projects }, null, 2)}\n`);
 }
+
+export async function readIndex(): Promise<IndexEntry[]> {
+  try {
+    const parsed = JSON.parse(await readFile(join(outputRoot(), "index.json"), "utf8")) as {
+      projects?: IndexEntry[];
+    };
+    return parsed.projects ?? [];
+  } catch {
+    return [];
+  }
+}

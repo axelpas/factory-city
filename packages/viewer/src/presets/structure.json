@@ -1,0 +1,10 @@
+{
+  "id": "structure",
+  "label": "Structure",
+  "group": "Code",
+  "level": 0,
+  "question": "Where is the code large, complex and entangled?",
+  "area": "rloc",
+  "height": "mcc",
+  "color": ["imports_out", "max_nesting_level"]
+}

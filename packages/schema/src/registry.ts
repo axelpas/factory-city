@@ -19,6 +19,8 @@ export interface MetricDefinition {
   limits: string;
   experimental: boolean;
   retrospective: boolean;
+  /** Plain-language reading of a high value, for legends: "more complex". */
+  higherMeans?: string;
 }
 
 function metric(
@@ -35,6 +37,7 @@ function metric(
 export const METRICS: readonly MetricDefinition[] = [
   metric({
     id: "loc",
+    higherMeans: "longer",
     label: "Lines",
     definition: "Total number of lines in the file.",
     computation: "Count of line breaks plus one for a last unterminated line.",
@@ -46,6 +49,7 @@ export const METRICS: readonly MetricDefinition[] = [
   }),
   metric({
     id: "rloc",
+    higherMeans: "more code",
     label: "Real lines",
     definition: "Lines that are neither blank nor made only of comments.",
     computation: "Lines of the file minus blank lines and lines covered only by comment nodes.",
@@ -57,6 +61,7 @@ export const METRICS: readonly MetricDefinition[] = [
   }),
   metric({
     id: "comment_lines",
+    higherMeans: "more comments",
     label: "Comment lines",
     definition: "Lines made only of comments.",
     computation: "Lines entirely covered by comment syntax nodes.",
@@ -68,6 +73,7 @@ export const METRICS: readonly MetricDefinition[] = [
   }),
   metric({
     id: "functions",
+    higherMeans: "more functions",
     label: "Functions",
     definition: "Number of functions and methods declared in the file.",
     computation: "Count of function, method and arrow-function syntax nodes.",
@@ -79,6 +85,7 @@ export const METRICS: readonly MetricDefinition[] = [
   }),
   metric({
     id: "mcc",
+    higherMeans: "more complex",
     label: "Complexity",
     definition: "Cyclomatic complexity of the file, summed over its functions.",
     computation:
@@ -91,6 +98,7 @@ export const METRICS: readonly MetricDefinition[] = [
   }),
   metric({
     id: "max_function_complexity",
+    higherMeans: "a harder function",
     label: "Worst function complexity",
     definition: "Cyclomatic complexity of the most complex function in the file.",
     computation: "Maximum of the per-function complexity.",
@@ -102,6 +110,7 @@ export const METRICS: readonly MetricDefinition[] = [
   }),
   metric({
     id: "max_nesting_level",
+    higherMeans: "deeper nesting",
     label: "Deepest nesting",
     definition: "Deepest level of nested control structures in the file.",
     computation: "Maximum depth of nested if, loop, switch, try and callback nodes.",

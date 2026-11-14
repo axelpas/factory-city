@@ -1,0 +1,34 @@
+{
+  "id": "architect",
+  "label": "Architect's Model",
+  "renderer": "solid",
+  "mode": "light",
+  "colors": {
+    "background": "#f3f1ec",
+    "ground": "#e9e6df",
+    "plinth": "#dcd8cd",
+    "plinthEdge": "#c6c1b3",
+    "building": "#ffffff",
+    "buildingEdge": "#b4afa0",
+    "unavailable": "#d4d0c6",
+    "hover": "#1f3a5f",
+    "folderHover": "#6a86a8",
+    "dim": "#e3e0d8",
+    "text": "#26282b",
+    "textMuted": "#5d6066",
+    "panel": "#fbfaf8",
+    "panelBorder": "#d8d4c9",
+    "accent": "#1f3a5f",
+    "accentText": "#ffffff"
+  },
+  "ramps": {
+    "sequential": ["#eaf0f6", "#b9cfe3", "#7aa6c9", "#3f7ba8", "#1d4f7c"],
+    "diverging": ["#b2182b", "#ef8a62", "#f7f7f7", "#67a9cf", "#2166ac"],
+    "categorical": ["#e69f00", "#56b4e9", "#009e73", "#f0e442", "#0072b2", "#d55e00", "#cc79a7", "#4d4d4d"],
+    "other": "#9b9b94"
+  },
+  "light": { "ambient": 0.7, "sun": 0.85, "sunPosition": [-0.45, 1, 0.65], "shadows": true },
+  "camera": { "type": "perspective", "fov": 38, "direction": [0.75, 0.95, 1.1] },
+  "font": "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+  "heightScale": 0.11
+}

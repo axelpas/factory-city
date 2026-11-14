@@ -1,3 +1,4 @@
+import type { IgnoreSummary } from "@factory-city/schema";
 import { globToRegExp, matchesAny } from "./glob.js";
 import type { LanguageConfig } from "./languages/index.js";
 import { languageForPath } from "./languages/index.js";
@@ -65,15 +66,6 @@ export interface SelectOptions {
   exclude: string[];
   /** Restrict to this subfolder (posix, relative). */
   subPath?: string;
-}
-
-export interface IgnoreSummary {
-  /** Files left out, by reason. */
-  files: Record<string, number>;
-  /** Folders skipped before reading them, by reason. */
-  folders: Record<string, number>;
-  /** Entries skipped with a warning (binary, submodule, ...). */
-  warnings: Record<string, number>;
 }
 
 export function emptySummary(): IgnoreSummary {

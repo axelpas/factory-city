@@ -1,12 +1,11 @@
 import { createHash } from "node:crypto";
 import { basename, resolve } from "node:path";
-import type { AttributeDescriptor, CcJson, FileNode } from "@factory-city/schema";
+import type { AnalysisManifest, AttributeDescriptor, CcJson, FileNode } from "@factory-city/schema";
 import { buildCcJson, getMetric, nodeId } from "@factory-city/schema";
 import { inspectContent } from "./inspect.js";
 import { LANGUAGES } from "./languages/index.js";
 import { computeMetrics, plainMetrics } from "./metrics/file-metrics.js";
 import { getParser } from "./parse.js";
-import type { IgnoreSummary } from "./select.js";
 import { bump, emptySummary, makeFolderSkipper, selectEntries } from "./select.js";
 import { DiskSource } from "./source/disk.js";
 import { findRepo, GitSource } from "./source/git.js";
@@ -25,26 +24,6 @@ export interface AnalyzeOptions {
   all?: boolean;
   include?: string[];
   exclude?: string[];
-}
-
-export interface AnalysisManifest {
-  kind: "snapshot";
-  schemaVersion: 1;
-  analyzerVersion: string;
-  createdAt: string;
-  project: string;
-  source: { kind: "disk" | "git"; rev?: string; commit?: string; path?: string };
-  /** Highest data level whose metrics are in this snapshot. */
-  dataLevel: 0 | 1 | 2 | 3;
-  git: { available: boolean; shallow: boolean };
-  metrics: string[];
-  /** Labels of category metrics: the snapshot stores the index. */
-  categories: Record<string, string[]>;
-  selected: number;
-  analyzed: number;
-  ignored: IgnoreSummary;
-  warnings: string[];
-  snapshot: string;
 }
 
 export interface AnalysisResult {

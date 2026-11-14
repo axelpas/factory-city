@@ -1,0 +1,10 @@
+{
+  "id": "language",
+  "label": "Languages",
+  "group": "Code",
+  "level": 0,
+  "question": "Which languages is the code written in?",
+  "area": "rloc",
+  "height": "mcc",
+  "color": ["language"]
+}

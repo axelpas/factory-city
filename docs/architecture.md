@@ -41,3 +41,6 @@ Four independent collectors, one per data level; each declares the metrics it pr
 No JVM and no native compilation; local first, read-only on analyzed code; no source code in outputs; unavailable is never zero.
 
 Decisions: see `decisions/`.
+
+## Serving the viewer
+`factory-city view` starts a small HTTP server bound to 127.0.0.1. It serves the built viewer (located by path, never imported), `/projects.json` (from `~/.factory-city/index.json`) and `/data/<slug>/<file>` for the files of an analyzed project. Path traversal and unknown projects are refused. The analyzer and the viewer still share nothing but data files.
