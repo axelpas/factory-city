@@ -3,6 +3,7 @@
 Instructions for every coding agent and contributor working on this repository. `CLAUDE.md` imports this file.
 
 ## Project
+
 - Name: Factory City
 - Goal: turn a codebase into a 3D city (folders are districts, files are buildings) to show what a software factory builds, how its quality evolves and what its process leaves behind. An analyzer (CLI) writes data files; a viewer (static web app) reads them. Full specification: `docs/specs/factory-city-brief.md`.
 - Stack: strict TypeScript, pnpm workspaces monorepo, Node.js >= 22, Vitest, Vite, three.js, web-tree-sitter (WebAssembly). Dependency choices are recorded as ADRs in `docs/decisions/`.
@@ -12,6 +13,7 @@ Instructions for every coding agent and contributor working on this repository. 
 - Mode: exploration (prototype, no users yet)
 
 ## Layout
+
 - `packages/schema`: types, JSON Schemas and validators of the data contracts.
 - `packages/analyzer`: the CLI; depends on `schema` only.
 - `packages/layout`: the parcel layout, a pure deterministic function (no DOM, no Node API).
@@ -20,6 +22,7 @@ Instructions for every coding agent and contributor working on this repository. 
 - `docs/`: `architecture.md`, `data-model.md`, `glossary.md`, `decisions/` (ADRs), `modules/<package>.md`, `specs/`.
 
 ## Where the knowledge is
+
 - Specification: `docs/specs/factory-city-brief.md`
 - Architecture and boundaries: `docs/architecture.md`
 - Data contracts: `docs/data-model.md`
@@ -27,6 +30,7 @@ Instructions for every coding agent and contributor working on this repository. 
 - Decisions: `docs/decisions/` (`YYYY-MM-DD-title.md`, about 10 lines: context, decision, consequences)
 
 ## Invariants
+
 - The analyzer and the viewer share nothing but the data files; neither imports the other.
 - Read-only on analyzed code: never check out, modify or write into an analyzed folder.
 - No source code in outputs: paths, metrics, git and issue metadata, and declaration names only where the report needs them.
@@ -38,6 +42,7 @@ Instructions for every coding agent and contributor working on this repository. 
 - Each invariant gets a test; until it has one, say so in the issue.
 
 ## Conventions
+
 - Everything in English: code, identifiers, commits, issues, docs.
 - Tests are written with the code, from the acceptance criteria. Typecheck, lint and tests are green before an issue is closed.
 - No `any`, no `@ts-ignore`, no stray `console.log`, no hard-coded secret. Fixtures that contain shortcuts on purpose are excluded from lint and from guard tests.
@@ -48,5 +53,6 @@ Instructions for every coding agent and contributor working on this repository. 
 - No changelog file: history is read from merged pull requests, closed issues and commits.
 
 ## Known pitfalls
+
 - Avoid dependencies that need Python or a C/C++ toolchain at install time (for example `metric-gardener`); prefer pure JavaScript or WebAssembly.
 - The cc.json snapshot format must stay valid for CodeCharta's schema: numeric attributes only, categories stored as integer codes with labels in the manifest.

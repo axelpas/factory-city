@@ -1,0 +1,8 @@
+{
+  "id": "tsx",
+  "label": "TSX",
+  "tier": 1,
+  "extends": "typescript",
+  "grammar": "tsx",
+  "extensions": [".tsx"]
+}

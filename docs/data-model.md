@@ -25,3 +25,6 @@ Keyed by issue number or commit hash. Known fields: `issue`, `commit`, `date`, `
 
 ## Metric registry entry
 `id`, label, definition, computation, why it matters, unit, direction, kind (number, ratio, category), scope (file, folder, frame, factory), data level, limits, flags `experimental` and `retrospective`.
+
+## Analysis manifest (single snapshot)
+Until timelines exist, `factory-city analyze` writes `snapshot.cc.json` and `analysis.json` next to each other. `analysis.json` holds: `kind`, `schemaVersion`, `analyzerVersion`, `createdAt` (UTC), `project`, `source` (`disk` or `git`, with `rev` and short `commit`), `dataLevel`, `git` availability, the metric ids present, `categories` (labels of `language` and `is_test`), `selected` and `analyzed` counts, `ignored` (files and folders left out by reason, and entries skipped with a warning), `warnings` and the snapshot file name. It holds no absolute path and no source code. `~/.factory-city/index.json` lists `{slug, name, dataDir, updatedAt}` per project.

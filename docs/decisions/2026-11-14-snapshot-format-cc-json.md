@@ -11,3 +11,6 @@ Target cc.json 2.0 (valid for any 2.x reader), validated with the published sche
 
 ## Consequences
 Folder-scope metrics fit `lenses.metrics.attributes` (folders have ids), so no manifest fallback is expected. The older 1.x format (`nodes`, `projectName`) is not produced. Our own validators ship a copy of the CodeCharta schema with its license notice.
+
+## Addendum (milestone 1, 2026-11-14)
+Verified against the published schema: `files` is an array holding the single root folder named `root`; node ids hash the canonical path `/root/<path>`; `attributeTypes` maps each metric to `absolute` or `relative`. CodeCharta names in use: `loc`, `rloc`, `comment_lines`, `functions`, `mcc` (our complexity), `max_function_complexity`, `max_nesting_level`; `fix_commits`, `number_of_commits` and `number_of_authors` are confirmed to exist for milestone 4. The category metrics `language` and `is_test` are stored as integers, with their labels in `analysis.json`.

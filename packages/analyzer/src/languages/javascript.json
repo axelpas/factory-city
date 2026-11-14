@@ -1,0 +1,8 @@
+{
+  "id": "javascript",
+  "label": "JavaScript",
+  "tier": 1,
+  "extends": "typescript",
+  "grammar": "javascript",
+  "extensions": [".js", ".mjs", ".cjs", ".jsx"]
+}
