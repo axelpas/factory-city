@@ -816,6 +816,33 @@ export class CityScene {
     this.requestRender();
   }
 
+  /** Where the camera is, to come back to it after an export that moved it. */
+  cameraState(): { position: THREE.Vector3; target: THREE.Vector3; zoom: number } {
+    return {
+      position: this.camera.position.clone(),
+      target: this.controls.target.clone(),
+      zoom: this.camera.zoom,
+    };
+  }
+
+  /**
+   * Places the camera at a saved view turned by an angle around the vertical axis through its target.
+   * The result depends on the arguments only, so that two exports give the same images.
+   */
+  setCameraState(state: { position: THREE.Vector3; target: THREE.Vector3; zoom: number }, angle = 0): void {
+    const offset = state.position
+      .clone()
+      .sub(state.target)
+      .applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+    this.controls.target.copy(state.target);
+    this.camera.position.copy(state.target).add(offset);
+    this.camera.zoom = state.zoom;
+    this.camera.lookAt(state.target);
+    this.camera.updateProjectionMatrix();
+    this.camera.updateMatrixWorld();
+    this.requestRender();
+  }
+
   /** The camera as a three-quarter view of the whole city. */
   resetCamera(): void {
     const s = this.size;

@@ -42,3 +42,9 @@ A theme is one token file in `themes/` (palette, ramps, lighting, camera, typogr
 - The legend words the color scale for the background: darker on light themes, brighter on the dark one.
 - `lib/contrast.ts` holds the checks the tests run on every theme: WCAG contrast of text on its panel, a sequential ramp whose luminance is monotonic, diverging ends that stay apart for red-green color vision deficiencies, risk colors that read in gray.
 - Adding a theme with an existing renderer is adding a token file and listing it in `themes/index.ts`: no scene code.
+
+## Export
+- Image: PNG of the current view at 1x, 2x or 4K, with or without the overlay (title, frame label, legend).
+- Video (`export/video.ts`): `planVideo` puts the film on a virtual clock (images per second, seconds per frame, a hold at the end, an optional slow orbit); `encodeVideo` draws each image and encodes it. The film carries the same interpolated animation as the live view, and reduced motion never applies to it. The Export menu offers it at 30 or 60 images per second.
+- Standalone file (`data/embedded.ts`): when the page holds embedded data it is read from the page and nothing is fetched.
+- `window.factoryCity` is the hook for headless rendering: `ready`, `capture(width, height, overlay)`, `video(options)`, `imageHashes(positions, width, height)`.

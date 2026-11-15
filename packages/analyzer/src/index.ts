@@ -1,5 +1,6 @@
 export type { AnalysisResult, AnalyzeOptions } from "./analyze.js";
 export { ANALYZER_VERSION, analyze, slugFor, summaryLine } from "./analyze.js";
+export { listSources, loadBundle, writeBundle } from "./bundle.js";
 export { importFacts } from "./collectors/facts.js";
 export type { DiffOptions, DiffResult } from "./diff.js";
 export { buildDiff, defaultBranch, diffText, summarize } from "./diff.js";
@@ -13,8 +14,10 @@ export { reportMarkdown } from "./health/markdown.js";
 export type { LanguageConfig } from "./languages/index.js";
 export { LANGUAGES, languageForPath } from "./languages/index.js";
 export { outputRoot, readIndex, updateIndex, writeAnalysis } from "./output.js";
-export { parseSize, renderImage } from "./render.js";
+export { redactBundle } from "./redact.js";
+export { parseSize, probeImages, renderImage, renderVideo } from "./render.js";
 export type { RunningServer, ServerOptions } from "./server.js";
 export { defaultViewerDir, openBrowser, startServer } from "./server.js";
+export { buildStandalone, formatBytes, writeStandalone } from "./standalone.js";
 export type { TimelineOptions, TimelineResult } from "./timeline.js";
 export { buildTimeline, kindOfSubject } from "./timeline.js";

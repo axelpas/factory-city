@@ -12,6 +12,8 @@ export interface OverlayInput {
   legend: ColorLegend;
   /** An extra legend line, such as what one block is worth. */
   note?: string;
+  /** Label of the frame shown, for a timeline. */
+  frame?: string;
 }
 
 /** Draws the title and the legend on top of an exported picture. Sizes scale with the picture. */
@@ -34,6 +36,11 @@ export function drawOverlay(
   ctx.font = `${16 * k}px ${theme.font}`;
   ctx.fillText(input.preset, pad, pad + 36 * k);
 
+  if (input.frame) {
+    ctx.fillStyle = text;
+    ctx.font = `${17 * k}px ${theme.font}`;
+    ctx.fillText(input.frame, pad, pad + 62 * k);
+  }
   const lineHeight = 22 * k;
   const texts = [
     ...input.lines.map((l) => `${l.channel}: ${l.metric} — ${l.text}`),

@@ -2,6 +2,7 @@ import type { Layout, Rect } from "@factory-city/layout";
 import { computeLayout } from "@factory-city/layout";
 import type { Factory, Report } from "@factory-city/schema";
 import { Animator } from "../anim/animator";
+import { readEmbedded } from "../data/embedded";
 import {
   type Available,
   type Loaded,
@@ -15,6 +16,7 @@ import {
 import { type Model, percentileRank } from "../data/model";
 import { syntheticSnapshots } from "../data/synthetic";
 import { buildTimelineData, layoutWeights, type TimelineData } from "../data/timeline";
+import { type EncodedVideo, encodeVideo, pixelHash, planVideo, type VideoOptions } from "../export/video";
 import { clear, el } from "../lib/dom";
 import { format } from "../lib/format";
 import { makePathFilter } from "../lib/glob";
@@ -138,6 +140,9 @@ export class App {
     attrs: { "aria-label": "Theme" },
   });
   private glow = true;
+  private exporting = false;
+  private videoFps = 30;
+  private videoOrbit = false;
   private scaleBeforeTheme: ScaleKind | undefined;
   private readonly bar: TimelineBar;
   private state: State | undefined;
@@ -212,6 +217,12 @@ export class App {
     if (synthetic > 0) {
       const frames = Math.max(1, Number(params.get("frames")) || 1);
       this.open({ snapshots: syntheticSnapshots(Math.min(synthetic, 50000), Math.min(frames, 60)) });
+      return;
+    }
+    // a standalone file carries its own data: nothing to fetch, it opens offline
+    const embedded = await readEmbedded();
+    if (embedded) {
+      this.open(embedded);
       return;
     }
     const list = await loadProjects();
@@ -375,6 +386,31 @@ export class App {
       );
     }
     list.append(el("label", { class: "check" }, overlay, " with title and legend"));
+    const fps = el("select", {
+      title: "Images per second of the video",
+      attrs: { "aria-label": "Video images per second" },
+    });
+    for (const n of [30, 60])
+      fps.append(el("option", { text: `Video at ${n} images per second`, attrs: { value: String(n) } }));
+    fps.addEventListener("change", () => {
+      this.videoFps = Number(fps.value);
+    });
+    const orbit = el("input", { attrs: { type: "checkbox" } });
+    orbit.addEventListener("change", () => {
+      this.videoOrbit = orbit.checked;
+    });
+    list.append(
+      button(
+        "Video of the timelapse",
+        "Render the timelapse image by image and download it (MP4, or WebM)",
+        () => {
+          exportMenu.open = false;
+          void this.exportVideo();
+        },
+      ),
+      fps,
+      el("label", { class: "check" }, orbit, " slow orbit in the video"),
+    );
     exportMenu.append(list);
     return el(
       "header",
@@ -1742,6 +1778,131 @@ export class App {
     );
   }
 
+  /** Label of the frame under the playhead, for exported pictures; undefined for a single snapshot. */
+  private frameText(): string | undefined {
+    const s = this.state;
+    const info = s?.data.frames[this.animator?.frame ?? 0]?.info;
+    if (!s || !info || s.data.frames.length < 2) return undefined;
+    return `${info.label} · ${format.date(info.date)}`;
+  }
+
+  /** Paints the image of the film at a playhead position on a canvas. A pure function of its arguments. */
+  private paintAt(
+    target: CanvasRenderingContext2D,
+    position: number,
+    width: number,
+    height: number,
+    overlay: boolean,
+  ): void {
+    const a = this.animator;
+    if (!a) return;
+    a.setPosition(position);
+    this.updateFrameViews();
+    const picture = this.picture(width, height, overlay);
+    if (picture) target.drawImage(picture, 0, 0);
+  }
+
+  /**
+   * Renders the timelapse offline, image by image, on a virtual clock: never a screen recording. The film
+   * carries the same interpolated animation as the live view.
+   */
+  async video(
+    options: VideoOptions,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<EncodedVideo | undefined> {
+    const s = this.state;
+    const a = this.animator;
+    if (!s || !a) return undefined;
+    this.settle();
+    const before = { position: a.position, camera: this.scene.cameraState(), reduced: a.reducedMotion };
+    // a film is made of in-between images: movement is never replaced by cuts here
+    a.reducedMotion = false;
+    const canvas = document.createElement("canvas");
+    canvas.width = options.width;
+    canvas.height = options.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return undefined;
+    const plan = planVideo(s.data.frames.length, options);
+    try {
+      a.reset(s.data.frames.length, (f) => this.stateOf(f), 0);
+      return await encodeVideo(
+        canvas,
+        plan,
+        (i) => {
+          this.scene.setCameraState(before.camera, plan.angleAt(i));
+          this.paintAt(ctx, plan.positionAt(i), options.width, options.height, options.overlay);
+        },
+        onProgress,
+      );
+    } finally {
+      a.reducedMotion = before.reduced;
+      this.scene.setCameraState(before.camera);
+      a.reset(s.data.frames.length, (f) => this.stateOf(f), before.position);
+      this.updateFrameViews(true);
+    }
+  }
+
+  /** Fingerprints of the images at some playhead positions: lets a test compare two renders image for image. */
+  imageHashes(positions: number[], width: number, height: number): string[] {
+    const s = this.state;
+    const a = this.animator;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!s || !a || !ctx) return [];
+    this.settle();
+    const reduced = a.reducedMotion;
+    a.reducedMotion = false;
+    a.reset(s.data.frames.length, (f) => this.stateOf(f), 0);
+    const out = positions.map((p) => {
+      this.paintAt(ctx, p, width, height, false);
+      return pixelHash(ctx.getImageData(0, 0, width, height).data);
+    });
+    a.reducedMotion = reduced;
+    return out;
+  }
+
+  /** Asks for the video options, renders the film and offers it for download. */
+  private async exportVideo(): Promise<void> {
+    const s = this.state;
+    if (!s || this.exporting) return;
+    this.exporting = true;
+    const note = el("div", { class: "export-note", text: "Rendering the video…" });
+    this.stage.append(note);
+    try {
+      const result = await this.video(
+        {
+          width: 1920,
+          height: 1080,
+          fps: this.videoFps,
+          secondsPerFrame: this.animator?.secondsPerFrame ?? 1.4,
+          overlay: true,
+          orbit: this.videoOrbit,
+        },
+        (done, total) => {
+          note.textContent = `Rendering the video: image ${format.integer(done)} of ${format.integer(total)}`;
+        },
+      );
+      if (!result) return;
+      const url = URL.createObjectURL(new Blob([result.bytes.slice().buffer], { type: result.mime }));
+      const link = el("a", {
+        attrs: {
+          href: url,
+          download: `${s.model.project}-timelapse.${result.mime === "video/mp4" ? "mp4" : "webm"}`,
+        },
+      });
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (err) {
+      note.textContent = `The video could not be rendered: ${err instanceof Error ? err.message : String(err)}`;
+      await new Promise((wait) => setTimeout(wait, 4000));
+    } finally {
+      note.remove();
+      this.exporting = false;
+    }
+  }
+
   private picture(width: number, height: number, withOverlay: boolean): HTMLCanvasElement | undefined {
     const s = this.state;
     if (!s) return undefined;
@@ -1756,6 +1917,7 @@ export class App {
           lines: legendLines(s.model, s.mapping, this.theme.mode),
           legend: s.legend,
           note: this.blockNote(),
+          frame: this.frameText(),
         });
     }
     return canvas;

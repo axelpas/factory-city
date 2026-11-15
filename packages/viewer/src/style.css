@@ -800,3 +800,15 @@ summary::-webkit-details-marker {
 .status > .level {
   flex: 0 0 auto;
 }
+
+.export-note {
+  position: absolute;
+  left: 50%;
+  top: 84px;
+  transform: translateX(-50%);
+  z-index: 45;
+  padding: 8px 14px;
+  background: var(--c-panel);
+  border: 1px solid var(--c-panel-border);
+  border-radius: 8px;
+}

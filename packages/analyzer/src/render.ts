@@ -88,6 +88,96 @@ export async function renderImage(options: RenderImageOptions): Promise<void> {
   }
 }
 
+export interface RenderVideoOptions extends Omit<RenderImageOptions, "out"> {
+  out: string;
+  fps: number;
+  secondsPerFrame: number;
+  orbit: boolean;
+}
+
+export interface RenderedVideo {
+  /** Where the film was written: the extension follows the container the browser could encode. */
+  path: string;
+  bytes: number;
+  images: number;
+  codec: string;
+}
+
+/** Opens the viewer on a project in a headless browser and hands the page to `use`. */
+async function withPage<T>(
+  options: Pick<RenderImageOptions, "entry" | "source" | "preset" | "theme" | "width" | "height">,
+  use: (page: PageLike) => Promise<T>,
+): Promise<T> {
+  const server = await startServer({
+    viewerDir: defaultViewerDir(),
+    current: options.entry.slug,
+    extra: [options.entry],
+    port: 0,
+  });
+  let browser: BrowserLike | undefined;
+  try {
+    browser = await launch();
+    const page = await browser.newPage({
+      viewport: { width: Math.min(options.width, 1920), height: Math.min(options.height, 1080) },
+      deviceScaleFactor: 1,
+    });
+    const query = new URLSearchParams({ project: options.entry.slug });
+    if (options.source) query.set("source", options.source);
+    if (options.preset) query.set("preset", options.preset);
+    if (options.theme) query.set("theme", options.theme);
+    await page.goto(`${server.url}?${query.toString()}`);
+    await page.waitForFunction("window.factoryCity && window.factoryCity.ready === true", undefined, {
+      timeout: 120_000,
+    });
+    return await use(page);
+  } finally {
+    await browser?.close();
+    await server.close();
+  }
+}
+
+/**
+ * Renders the timelapse of a project to a video, image by image on a virtual clock, through the viewer's own
+ * export code. MP4 (H.264) when the browser can encode it, otherwise WebM, written with the matching extension.
+ */
+export async function renderVideo(options: RenderVideoOptions): Promise<RenderedVideo> {
+  const settings = JSON.stringify({
+    width: Math.round(options.width),
+    height: Math.round(options.height),
+    fps: options.fps,
+    secondsPerFrame: options.secondsPerFrame,
+    overlay: options.overlay !== false,
+    orbit: options.orbit,
+  });
+  const result = await withPage(options, (page) =>
+    page.evaluate<{ base64: string; mime: string; codec: string; images: number } | null>(
+      `window.factoryCity.video(${settings})`,
+    ),
+  );
+  if (!result)
+    throw new Error(
+      "The viewer produced no video (WebGL or video encoding may be unavailable in this browser).",
+    );
+  const data = Buffer.from(result.base64, "base64");
+  const webm = result.mime === "video/webm";
+  const path =
+    webm && !/\.webm$/i.test(options.out) ? `${options.out.replace(/\.[^./\\]+$/, "")}.webm` : options.out;
+  await writeFile(path, data);
+  return { path, bytes: data.length, images: result.images, codec: result.codec };
+}
+
+/** Fingerprints of the images at some playhead positions, to compare two renders image for image. */
+export async function probeImages(
+  options: Omit<RenderImageOptions, "out" | "overlay">,
+  positions: number[],
+): Promise<string[]> {
+  return withPage(options, (page) =>
+    page.evaluate<string[]>(
+      `window.factoryCity.imageHashes(${JSON.stringify(positions)}, ${Math.round(options.width)}, ${Math.round(options.height)})`,
+    ),
+  );
+}
+
 /** Parses `1920x1080`. */
 export function parseSize(
   text: string | undefined,

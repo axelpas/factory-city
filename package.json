@@ -13,7 +13,7 @@
     "typecheck": "tsc -b && tsc -p packages/viewer --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "test": "tsc -b && vitest run",
+    "test": "pnpm build && vitest run",
     "licenses:check": "node scripts/licenses-check.mjs"
   },
   "devDependencies": {
