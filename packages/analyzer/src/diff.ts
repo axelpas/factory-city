@@ -1,7 +1,13 @@
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { CcJson, DiffFileChange, DiffSummary, TimelineManifest } from "@factory-city/schema";
+import type {
+  CcJson,
+  DiffFileChange,
+  DiffSummary,
+  FrameHealth,
+  TimelineManifest,
+} from "@factory-city/schema";
 import { findRepo } from "./source/git.js";
 import { buildTimeline } from "./timeline.js";
 
@@ -61,12 +67,9 @@ function attributesByPath(cc: CcJson): Map<string, Record<string, number>> {
 }
 
 /** What a branch does to the city, from the snapshots of its base and of its head. */
-export function summarize(
-  project: string,
-  base: { rev: string; commit: string; cc: CcJson },
-  head: { rev: string; commit: string; cc: CcJson },
-  top = 10,
-): DiffSummary {
+type Side = { rev: string; commit: string; cc: CcJson; health?: FrameHealth };
+
+export function summarize(project: string, base: Side, head: Side, top = 10): DiffSummary {
   const before = attributesByPath(base.cc);
   const after = attributesByPath(head.cc);
   const changes: DiffFileChange[] = [];
@@ -122,6 +125,15 @@ export function summarize(
     },
     shortcuts: { added: shortcuts, byKind },
     biggest: changes.slice(0, top),
+    quality: {
+      base: base.health?.score ?? 0,
+      head: head.health?.score ?? 0,
+      delta: Math.round(((head.health?.score ?? 0) - (base.health?.score ?? 0)) * 10) / 10,
+    },
+    hotspots: {
+      created: (head.health?.hotspots ?? []).filter((p) => !(base.health?.hotspots ?? []).includes(p)),
+      resolved: (base.health?.hotspots ?? []).filter((p) => !(head.health?.hotspots ?? []).includes(p)),
+    },
   };
 }
 
@@ -152,8 +164,8 @@ export async function buildDiff(opts: DiffOptions, dataDir: string): Promise<Dif
     JSON.parse(await readFile(join(dataDir, snapshot), "utf8")) as CcJson;
   const summary = summarize(
     manifest.project,
-    { rev: base, commit: first.commit, cc: await read(first.snapshot) },
-    { rev: head, commit: last.commit, cc: await read(last.snapshot) },
+    { rev: base, commit: first.commit, cc: await read(first.snapshot), health: first.health },
+    { rev: head, commit: last.commit, cc: await read(last.snapshot), health: last.health },
     opts.top,
   );
   return { summary, manifest, dataDir };
@@ -170,6 +182,7 @@ export function diffText(s: DiffSummary): string {
   const lines = [
     `${s.head.rev} (${s.head.commit}) against ${s.base.commit}: ${f.added} files added, ${f.modified} changed, ${f.removed} removed.`,
     `Real lines ${signed(s.totals.delta.rloc)}, complexity ${signed(s.totals.delta.mcc)}, silenced checks ${signed(s.shortcuts.added)}.`,
+    `Score ${s.quality.head} out of 100 (${signed(s.quality.delta)}); hotspots created: ${s.hotspots.created.length}, resolved: ${s.hotspots.resolved.length}.`,
   ];
   if (f.added + f.modified + f.removed === 0) lines.push("No source file changed.");
   for (const c of s.biggest.slice(0, 5))

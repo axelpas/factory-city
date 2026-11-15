@@ -1,12 +1,14 @@
 import { createHash } from "node:crypto";
 import { basename, resolve } from "node:path";
-import type { AnalysisManifest, AttributeDescriptor, CcJson, FileNode } from "@factory-city/schema";
+import type { AnalysisManifest, AttributeDescriptor, CcJson, FileNode, Report } from "@factory-city/schema";
 import { buildCcJson, getMetric, nodeId } from "@factory-city/schema";
 import type { HistoryResult } from "./collectors/history.js";
 import { collectHistory, historyMetrics } from "./collectors/history.js";
 import { buildLineage } from "./collectors/lineage.js";
 import type { FileProvenance } from "./collectors/provenance.js";
-import { loadConfig } from "./config.js";
+import { type Config, DEFAULT_CONFIG, loadConfig } from "./config.js";
+import { resolveDimensions } from "./health/dimensions.js";
+import { computeHealth, findHiddenLinks, findHotspots, type HealthFile } from "./health/health.js";
 import type { ContentProblem } from "./inspect.js";
 import { inspectContent } from "./inspect.js";
 import { LANGUAGES } from "./languages/index.js";
@@ -20,7 +22,11 @@ import type { RepoInfo } from "./source/git.js";
 import { findRepo, GitSource, revParse } from "./source/git.js";
 import type { Source } from "./source/types.js";
 
-export const ANALYZER_VERSION = "0.2.0";
+export const ANALYZER_VERSION = "0.3.0";
+
+/** Shown with every score. */
+export const SCORE_NOTICE =
+  "The score is a heuristic: the share of code in files that are low risk on every static dimension. It is meaningful against the same project's past, not across projects.";
 
 const LANGUAGE_CODES = new Map(LANGUAGES.map((l, i) => [l.id, i]));
 
@@ -44,6 +50,8 @@ export type CachedFile = { problem: ContentProblem } | { result: FileMetrics };
 
 export interface AnalyzeShared {
   fileCache: Map<string, CachedFile>;
+  /** The configuration, read once for all frames. */
+  config?: Config;
   /** History of the files at a revision; replaces the per-call `git log`. */
   history?: (rev: string, files: ReadonlySet<string>) => Promise<HistoryResult>;
   /** Line provenance at a revision (full hash), from the timeline's single replay. */
@@ -55,6 +63,10 @@ export interface AnalysisResult {
   blobs: Map<string, string>;
   snapshot: CcJson;
   manifest: AnalysisManifest;
+  /** Code-health report of the snapshot. */
+  report: Report;
+  /** Per-file values, for callers that compute more from them (frame health). */
+  files: HealthFile[];
 }
 
 const ABSOLUTE = new Set([
@@ -83,8 +95,8 @@ async function addCoupling(
   attributesByPath: Map<string, Record<string, number>>,
   importsByFile: Map<string, string[]>,
   folderAttributes: Map<string, Record<string, number>>,
-): Promise<void> {
-  if (importsByFile.size === 0) return;
+): Promise<Array<[string, string]>> {
+  if (importsByFile.size === 0) return [];
   const entries = new Map(
     (await source.list({ skipDir: (_p, name) => folderReason(name) })).map((e) => [e.path, e]),
   );
@@ -119,6 +131,9 @@ async function addCoupling(
     const value = folderCohesion(folder, inside, graph);
     if (value !== undefined) folderAttributes.set(folder, { folder_cohesion: value });
   }
+  const links: Array<[string, string]> = [];
+  for (const [file, targets] of graph) for (const target of targets) links.push([file, target]);
+  return links;
 }
 
 async function openSource(
@@ -215,6 +230,7 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
 
     const attributesByPath = new Map<string, Record<string, number>>();
     const importsByFile = new Map<string, string[]>();
+    const groupNames = new Map<string, string[][]>();
     const present = new Set<string>();
     let syntaxErrorFiles = 0;
 
@@ -248,6 +264,7 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
       if (language?.imports) importsByFile.set(entry.path, result.imports);
       if (result.syntaxErrors) syntaxErrorFiles++;
       const values: Record<string, number> = { ...result.metrics, is_test: isTest ? 1 : 0 };
+      if (result.groups) groupNames.set(entry.path, result.groups);
       if (language) {
         // the code is the language's position in the fixed list, so that it means the same in every frame
         values.language = LANGUAGE_CODES.get(language.id) as number;
@@ -261,7 +278,8 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
       warnings.push(`${n} entr${n === 1 ? "y" : "ies"} skipped: ${key}.`);
 
     const folderAttributes = new Map<string, Record<string, number>>();
-    await addCoupling(
+    let coChange: Array<[string, string]> = [];
+    const importLinks = await addCoupling(
       source,
       entries.map((e) => e.path),
       attributesByPath,
@@ -281,6 +299,7 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
               recentDays: config.windows.recentDays,
               fixPatterns: config.fixPatterns,
             });
+        coChange = history.coupled;
         for (const [path, h] of history.files) {
           const values = attributesByPath.get(path);
           if (values) Object.assign(values, historyMetrics(h, history.snapshotTime));
@@ -370,7 +389,30 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
       warnings,
       snapshot: "snapshot.cc.json",
     };
-    return { snapshot, manifest, blobs };
+    const files: HealthFile[] = [...attributesByPath].map(([path, values]) => ({
+      path,
+      values,
+      isTest: values.is_test === 1,
+    }));
+    const config =
+      opts.shared?.config ?? (await loadConfig(resolve(opts.folder)).catch(() => DEFAULT_CONFIG));
+    const dimensions = resolveDimensions(config.thresholds);
+    const extras = { groups: groupNames, imports: importLinks, coChange };
+    const report: Report = {
+      kind: "report",
+      schemaVersion: 1,
+      analyzerVersion: ANALYZER_VERSION,
+      createdAt: manifest.createdAt,
+      project,
+      ...(source.commit ? { commit: source.commit } : {}),
+      dataLevel,
+      health: computeHealth(files, dimensions),
+      dimensions,
+      hotspots: findHotspots(files, dimensions, extras, 20),
+      hiddenLinks: findHiddenLinks(extras),
+      notice: SCORE_NOTICE,
+    };
+    return { snapshot, manifest, blobs, report, files };
   } finally {
     await source.close();
   }

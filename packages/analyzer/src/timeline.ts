@@ -4,6 +4,7 @@ import { basename, join, resolve } from "node:path";
 import type {
   CoverageReport,
   Frame,
+  FrameHealth,
   FrameIssue,
   FrameKind,
   TimelineManifest,
@@ -23,6 +24,8 @@ import {
 } from "./collectors/issues.js";
 import { buildLineage, type Lineage } from "./collectors/lineage.js";
 import { loadConfig } from "./config.js";
+import { resolveDimensions } from "./health/dimensions.js";
+import { frameHealth } from "./health/health.js";
 import { findRepo } from "./source/git.js";
 
 export interface TimelineOptions {
@@ -314,6 +317,7 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
   const known = lineage;
   const shared: AnalyzeShared = {
     provenance: (hash) => (known ? { metrics: known.at.get(hash), labels: known.labels } : undefined),
+    config,
     fileCache,
     history: async (_rev, files) =>
       computeHistory(log, currentTime, reachable, repo.prefix, files, {
@@ -335,6 +339,9 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
   let previousReachable = new Set<string>();
   let last: Awaited<ReturnType<typeof analyze>> | undefined;
   let lookups = 0;
+  const dimensions = resolveDimensions(config.thresholds);
+  let previousHealth: FrameHealth | undefined;
+  let previousShortcuts = 0;
 
   for (const [index, rev] of revs.entries()) {
     reachable = await reachableCommits(repo.topLevel, rev.hash);
@@ -390,6 +397,19 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
       totals.rloc += values.rloc ?? 0;
       totals.mcc += values.mcc ?? 0;
     }
+    const health = frameHealth(result.files, dimensions);
+    const shortcutCount = result.files.reduce((sum, f) => sum + (f.values.escape_hatches ?? 0), 0);
+    const quality =
+      previousHealth === undefined
+        ? {}
+        : {
+            quality_delta: Math.round((health.score - previousHealth.score) * 10) / 10,
+            hotspots_created: health.hotspots.filter((p) => !previousHealth?.hotspots.includes(p)).length,
+            hotspots_resolved: previousHealth.hotspots.filter((p) => !health.hotspots.includes(p)).length,
+            shortcuts_added: shortcutCount - previousShortcuts,
+          };
+    previousHealth = health;
+    previousShortcuts = shortcutCount;
     const short = rev.hash.slice(0, 8);
     const id = `${String(index + 1).padStart(4, "0")}-${short}`;
     const date = new Date(rev.time * 1000).toISOString();
@@ -413,7 +433,9 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
         lines_added: linesAdded,
         lines_deleted: linesDeleted,
         folders_touched: index === 0 ? 0 : folders.size,
+        ...quality,
       },
+      health,
       lines,
       ...(rev.meta?.issue ? { issue: rev.meta.issue } : {}),
       ...(rev.meta?.unlinked ? { unlinked: true } : {}),
@@ -462,6 +484,7 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
     frames,
   };
   await writeAtomic(join(dataDir, `timeline.${mode}.json`), `${JSON.stringify(manifest)}\n`);
+  await writeAtomic(join(dataDir, `report.${mode}.json`), `${JSON.stringify(last.report, null, 2)}\n`);
   await writeAtomic(cachePath, JSON.stringify({ version: ANALYZER_VERSION, entries: [...fileCache] }));
   return {
     manifest,

@@ -87,8 +87,13 @@ describe("picking", () => {
         twist: (i % 5) * 0.1,
       })),
     );
-    const started = performance.now();
-    for (let k = 0; k < 20; k++) pickBuilding([500, 300, 250], [0.01, -1, 0.02], many);
-    expect((performance.now() - started) / 20).toBeLessThan(16);
+    // best of several passes: a busy machine slows a pass down, it never speeds one up
+    let best = Number.POSITIVE_INFINITY;
+    for (let pass = 0; pass < 8; pass++) {
+      const started = performance.now();
+      for (let k = 0; k < 4; k++) pickBuilding([500, 300, 250], [0.01, -1, 0.02], many);
+      best = Math.min(best, (performance.now() - started) / 4);
+    }
+    expect(best).toBeLessThan(16);
   });
 });

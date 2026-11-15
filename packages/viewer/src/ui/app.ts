@@ -1,5 +1,6 @@
 import type { Layout, Rect } from "@factory-city/layout";
 import { computeLayout } from "@factory-city/layout";
+import type { Report } from "@factory-city/schema";
 import { Animator } from "../anim/animator";
 import {
   type Available,
@@ -33,6 +34,7 @@ import {
 } from "../view/card";
 import { biggestChanges, CHANGE, changePlacements, type FileChange } from "../view/change";
 import { cssGradient, parseHex, toCss } from "../view/color";
+import { healthView, trendPoints } from "../view/health";
 import { dataLevelLine, hiddenContentLine, legendLines } from "../view/legend";
 import { type ColorLegend, computePlacements, computeTints } from "../view/placements";
 import { SCALE_KINDS, type ScaleKind } from "../view/scales";
@@ -95,6 +97,11 @@ export class App {
   private readonly panel = el("aside", { class: "panel", attrs: { "aria-label": "View settings" } });
   private readonly legendBox = el("section", { class: "legend" });
   private readonly changesBox = el("section", { class: "changes", attrs: { hidden: "" } });
+  private readonly healthPanel = el("aside", {
+    class: "details health",
+    attrs: { "aria-label": "Code health", hidden: "" },
+  });
+  private report: Report | undefined;
   private readonly status = el("footer", { class: "status" });
   private readonly projectSelect = el("select", {
     title: "Switch project",
@@ -156,6 +163,7 @@ export class App {
       this.status,
       this.card,
       this.details,
+      this.healthPanel,
       this.helpDialog,
       this.dropZone,
     );
@@ -253,6 +261,7 @@ export class App {
       hover: null,
       pinned: null,
     };
+    this.report = loaded.report;
     document.title = `${data.project} · Factory City`;
     this.animator = undefined;
     this.buildCity(false);
@@ -338,6 +347,7 @@ export class App {
       this.presetSelect,
       this.presetQuestion,
       el("span", { class: "spacer" }),
+      button("Health", "Score, risk profile and hotspots (H)", () => this.toggleHealth()),
       button("Top view", "Look straight down (V)", () => this.scene.topView()),
       button("Reset", "Back to the default view (R)", () => this.scene.resetCamera()),
       exportMenu,
@@ -682,6 +692,7 @@ export class App {
     this.bar.showFrame(a.frame, this.animator?.reducedMotion ?? false);
     this.renderLegend();
     this.renderStatus();
+    if (!this.healthPanel.hidden) this.renderHealth();
   }
 
   /** One animation frame: advance the animator, follow the playhead. */
@@ -1174,6 +1185,7 @@ export class App {
       ["R", "reset the camera"],
       ["V", "top view"],
       ["P", "next preset"],
+      ["H", "code health: score, risk profile, hotspots"],
       ["E", "export a PNG"],
       ["?", "this help"],
       ["Esc", "close panels"],
@@ -1250,10 +1262,15 @@ export class App {
       case "E":
         this.exportPng(2, true);
         break;
+      case "h":
+      case "H":
+        this.toggleHealth();
+        break;
       case "?":
         this.toggleHelp();
         break;
       case "Escape":
+        this.healthPanel.hidden = true;
         this.closeDetails();
         if (!this.helpDialog.hidden) this.hideHelp();
         break;
@@ -1274,6 +1291,191 @@ export class App {
   // ---------------------------------------------------------------- export
 
   /** PNG of the current view at 1x, 2x or 4K, with or without the overlay. */
+  // ---------------------------------------------------------------- health
+
+  private toggleHealth(): void {
+    this.healthPanel.hidden = !this.healthPanel.hidden;
+    if (!this.healthPanel.hidden) {
+      this.closeDetails();
+      this.renderHealth();
+    }
+  }
+
+  /** Flies to a file and opens its details when it exists in the frame shown. */
+  private goToFile(path: string): void {
+    const s = this.state;
+    const union = s?.data.pathIndex.get(path);
+    const rect = s?.layout.files.get(path);
+    if (!s || union === undefined || !rect) return;
+    this.scene.focus(rect.x + rect.w / 2, rect.y + rect.h / 2);
+    this.scene.setHover({ kind: "file", index: union }, this.folderOf({ kind: "file", index: union }));
+  }
+
+  private renderHealth(): void {
+    const s = this.state;
+    if (!s) return;
+    const view = healthView(s.data, this.animator?.frame ?? 0, this.report, format);
+    const panel = this.healthPanel;
+    clear(panel);
+    const close = el("button", { text: "Close", title: "Close (Escape)", attrs: { type: "button" } });
+    close.addEventListener("click", () => {
+      panel.hidden = true;
+    });
+    panel.append(el("div", { class: "details-head" }, el("h2", { text: "Code health" }), close));
+    if (!view.available) {
+      panel.append(el("p", { class: "muted", text: view.reason ?? "" }));
+      return;
+    }
+    panel.append(
+      el(
+        "div",
+        { class: "score" },
+        el("b", { text: format.number(view.score, 1) }),
+        el("span", { class: "muted", text: " out of 100" }),
+      ),
+    );
+    if (view.trend.length > 1) {
+      const points = trendPoints(view.trend, 300, 36);
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("viewBox", "0 -2 300 40");
+      svg.setAttribute("class", "trend");
+      svg.setAttribute("role", "img");
+      svg.setAttribute("aria-label", "Score of each frame");
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+      line.setAttribute("points", points);
+      const mark = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      const x = String((view.frame / (view.trend.length - 1)) * 300);
+      mark.setAttribute("x1", x);
+      mark.setAttribute("x2", x);
+      mark.setAttribute("y1", "-2");
+      mark.setAttribute("y2", "38");
+      mark.setAttribute("class", "now");
+      svg.append(line, mark);
+      panel.append(svg);
+    }
+    panel.append(el("p", { class: "muted", text: view.notice }));
+    if (view.movement) {
+      const m = view.movement;
+      panel.append(
+        el("h3", { text: "This frame" }),
+        el("p", {
+          text: `Score ${m.qualityDelta}. Hotspots created: ${format.integer(m.created.length)}, resolved: ${format.integer(m.resolved.length)}.`,
+        }),
+      );
+    }
+    panel.append(
+      el("h3", { text: "Risk profile" }),
+      el("p", { class: "muted", text: "Share of code, by real lines, at each risk level." }),
+    );
+    const levels = [
+      ["low", "risk-low", "low"],
+      ["moderate", "risk-moderate", "moderate"],
+      ["high", "risk-high", "high"],
+      ["veryHigh", "risk-very-high", "very high"],
+    ] as const;
+    for (const row of view.profile) {
+      const bar = el("div", {
+        class: "risk-bar",
+        attrs: { role: "img", "aria-label": `${row.label}: ${row.text}` },
+      });
+      for (const [key, cls, name] of levels) {
+        const share = row.share[key];
+        if (share <= 0) continue;
+        bar.append(
+          el("i", {
+            class: cls,
+            title: `${name}: ${format.percent(share)}`,
+            style: { width: `${share * 100}%` },
+          }),
+        );
+      }
+      panel.append(
+        el(
+          "details",
+          { class: "risk" },
+          el(
+            "summary",
+            {},
+            el("span", { class: "risk-name", text: row.label }),
+            bar,
+            el("span", { class: "muted risk-text", text: row.text }),
+          ),
+          el("p", { class: "muted", text: row.thresholds }),
+        ),
+      );
+    }
+    panel.append(
+      el(
+        "p",
+        { class: "risk-key muted" },
+        ...levels.flatMap(([, cls, name]) => [el("i", { class: cls }), ` ${name}  `]),
+      ),
+    );
+    if (view.unavailable.length) {
+      panel.append(
+        el("p", {
+          class: "muted",
+          text: `Not rated here: ${view.unavailable.join(", ")} (needs more data, or no code to rate).`,
+        }),
+      );
+    }
+    panel.append(el("h3", { text: "Hotspots" }));
+    if (view.hotspotsFromLatest) {
+      panel.append(
+        el("p", {
+          class: "muted",
+          text: "Hotspots of this frame. Suggested actions are computed for the latest frame only.",
+        }),
+      );
+    }
+    const link = (path: string) => {
+      const b = el("button", {
+        class: "link",
+        text: path,
+        title: `Go to ${path}`,
+        attrs: { type: "button" },
+      });
+      b.addEventListener("click", () => this.goToFile(path));
+      return b;
+    };
+    if (view.hotspots.length === 0) {
+      if (view.hotspotPaths.length === 0) panel.append(el("p", { class: "muted", text: "No hotspot." }));
+      for (const path of view.hotspotPaths) panel.append(el("div", { class: "hotspot" }, link(path)));
+    }
+    for (const h of view.hotspots.slice(0, 5)) {
+      panel.append(
+        el(
+          "div",
+          { class: "hotspot" },
+          el(
+            "div",
+            {},
+            el("b", { text: `${h.rank}. ` }),
+            link(h.path),
+            el("span", { class: "muted", text: ` size ${h.size}` }),
+          ),
+          el("div", {
+            class: "muted",
+            text: h.exceeded.length
+              ? h.exceeded
+                  .map(
+                    (e) =>
+                      `${e.dimension} ${e.level === "veryHigh" ? "very high" : e.level} (${format.number(e.value)})`,
+                  )
+                  .join(", ")
+              : "ranks by complexity and activity",
+          }),
+          el("ul", {}, ...h.actions.map((a) => el("li", { text: a.text }))),
+        ),
+      );
+    }
+    if (view.hiddenLinks.length) {
+      panel.append(el("h3", { text: "Hidden links (experimental)" }));
+      for (const l of view.hiddenLinks)
+        panel.append(el("p", { class: "muted", text: `${l.files.join(" and ")}: ${l.detail}` }));
+    }
+  }
+
   /** Lets every running move finish at once, so that a picture shows the settled city. */
   settle(): void {
     const a = this.animator;

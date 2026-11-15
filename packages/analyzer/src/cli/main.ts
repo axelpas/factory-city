@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 import { existsSync, statSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { METRICS } from "@factory-city/schema";
+import { METRICS, type Report } from "@factory-city/schema";
 import { Command } from "commander";
 import { ANALYZER_VERSION, analyze, slugFor, summaryLine } from "../analyze.js";
 import { coverageLine } from "../collectors/issues.js";
 import { buildDiff, diffText } from "../diff.js";
 import { doctor } from "../doctor.js";
+import { reportMarkdown } from "../health/markdown.js";
 import { LANGUAGES } from "../languages/index.js";
 import { outputRoot, readIndex, updateIndex, writeAnalysis } from "../output.js";
 import { parseSize, renderImage } from "../render.js";
@@ -317,6 +319,32 @@ program
     }
     if (opts.json || opts.open === false) return;
     await serve(entry, { port: opts.port as string | undefined, open: true }, "?source=diff");
+  });
+
+program
+  .command("report")
+  .description("Print the code-health report: score, risk profile and prioritized hotspots")
+  .argument("[path]", "folder to analyze, or a data folder written by analyze or timeline", ".")
+  .option("--format <format>", "md or json", "md")
+  .option("--top <n>", "number of hotspots", "5")
+  .option("--json", "same as --format json")
+  .action(async (path: string, opts: { format: string; top: string; json?: boolean }) => {
+    const dir = resolve(path);
+    const format = opts.json ? "json" : opts.format;
+    if (format !== "md" && format !== "json")
+      throw new Error(`Unknown --format "${format}". Use md or json.`);
+    const top = Number(opts.top);
+    if (!Number.isInteger(top) || top < 1) throw new Error("--top must be a whole number of at least 1.");
+    // a data folder holds a report already; any other folder is analyzed first
+    const stored = ["report.json", "report.issue.json", "report.commit.json", "report.day.json"]
+      .map((f) => join(dir, f))
+      .find((f) => existsSync(f) && !existsSync(join(dir, "package.json")) && !existsSync(join(dir, ".git")));
+    const report: Report = stored
+      ? (JSON.parse(await readFile(stored, "utf8")) as Report)
+      : (await analyzeAndWrite(path, {}, true)).result.report;
+    if (format === "json")
+      console.log(JSON.stringify({ ...report, hotspots: report.hotspots.slice(0, top) }, null, 2));
+    else process.stdout.write(reportMarkdown(report, top));
   });
 
 program

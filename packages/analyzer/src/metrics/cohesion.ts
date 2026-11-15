@@ -6,6 +6,8 @@ export interface Cohesion {
   nodes: number;
   /** True when the file only re-exports: cohesion is not meaningful. */
   barrel: boolean;
+  /** Names of the declarations of each group, largest group first. The report names groups by them. */
+  names: string[][];
 }
 
 interface Unit {
@@ -187,5 +189,15 @@ export function computeCohesion(root: Node, cfg: CohesionConfig): Cohesion | und
     for (const [b, j] of topNames) if (i !== j && b.name.startsWith(a.name)) uf.union(i, j);
   }
 
-  return { groups: uf.count(), nodes: units.length, barrel };
+  const byRoot = new Map<number, string[]>();
+  units.forEach((u, i) => {
+    const root = uf.find(i);
+    const list = byRoot.get(root);
+    if (list) list.push(u.name);
+    else byRoot.set(root, [u.name]);
+  });
+  const names = [...byRoot.values()].sort(
+    (a, b) => b.length - a.length || ((a[0] as string) < (b[0] as string) ? -1 : 1),
+  );
+  return { groups: uf.count(), nodes: units.length, barrel, names };
 }

@@ -66,6 +66,15 @@ describe("local server", () => {
     expect(await res.json()).toEqual({ frame: 1 });
   });
 
+  it("lists the manifests of a project, so the viewer does not probe for missing ones", async () => {
+    const { viewer, dataDir } = fixture();
+    running = await startServer({ viewerDir: viewer, extra: [entry(dataDir)], port: 0 });
+    expect(await (await fetch(`${running.url}data/demo-abc123/sources.json`)).json()).toEqual({
+      files: ["analysis.json"],
+    });
+    expect((await fetch(`${running.url}data/nope/sources.json`)).status).toBe(404);
+  });
+
   it("refuses path traversal and unknown projects", async () => {
     const { viewer, dataDir } = fixture();
     running = await startServer({ viewerDir: viewer, extra: [entry(dataDir)], port: 0 });

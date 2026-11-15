@@ -30,6 +30,7 @@ export async function writeAnalysis(
   const manifestPath = join(dataDir, "analysis.json");
   await writeAtomic(snapshotPath, JSON.stringify(result.snapshot));
   await writeAtomic(manifestPath, `${JSON.stringify(result.manifest, null, 2)}\n`);
+  await writeAtomic(join(dataDir, "report.json"), `${JSON.stringify(result.report, null, 2)}\n`);
   return { snapshotPath, manifestPath };
 }
 

@@ -10,6 +10,8 @@ export interface Config {
   issuePatterns: string[];
   /** Author labels: the first rule whose pattern matches "Name <email>" gives the label. */
   authorLabels: Array<{ pattern: string; label: string }>;
+  /** Risk thresholds by dimension id: the upper bounds of low, moderate and high. */
+  thresholds: Record<string, [number, number, number]>;
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -17,6 +19,7 @@ export const DEFAULT_CONFIG: Config = {
   fixPatterns: [],
   issuePatterns: [],
   authorLabels: [],
+  thresholds: {},
 };
 
 export async function loadConfig(folder: string): Promise<Config> {
@@ -42,6 +45,26 @@ export async function loadConfig(folder: string): Promise<Config> {
     if (typeof v !== "number" || !Number.isFinite(v) || v <= 0)
       throw new Error(`${path}: windows.${key} must be a positive number of days.`);
     return v;
+  };
+  const thresholds = (): Config["thresholds"] => {
+    const map = (json.thresholds ?? {}) as Record<string, unknown>;
+    const ok =
+      typeof map === "object" &&
+      map !== null &&
+      Object.values(map).every(
+        (b) =>
+          Array.isArray(b) &&
+          b.length === 3 &&
+          b.every((n) => typeof n === "number") &&
+          Number(b[0]) <= Number(b[1]) &&
+          Number(b[1]) <= Number(b[2]),
+      );
+    if (!ok) {
+      throw new Error(
+        `${path}: thresholds must map a dimension to three rising numbers, for example { "size": [200, 400, 750] }.`,
+      );
+    }
+    return map as Config["thresholds"];
   };
   const authorLabels = (): Config["authorLabels"] => {
     const list = json.authorLabels ?? [];
@@ -82,5 +105,6 @@ export async function loadConfig(folder: string): Promise<Config> {
     fixPatterns: patterns("fixPatterns"),
     issuePatterns: patterns("issuePatterns"),
     authorLabels: authorLabels(),
+    thresholds: thresholds(),
   };
 }

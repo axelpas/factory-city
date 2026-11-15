@@ -28,3 +28,6 @@ Known limits: one theme; plinths are rebuilt at once when the ground-area metric
 
 ## Compare
 `view/change.ts`: the Change preset colors each building by what the frame did since the previous one, on the theme's diverging ramp (added and removed at the ends, grown and shrunk in between). A removed file is still drawn at the size it had. The panel lists the biggest changes; a click flies to the building. A diff opens on this preset. URL parameters: `project`, `source`, `preset`. `window.factoryCity` (`ready`, `capture`) is the hook used by headless rendering.
+
+## Health panel
+`view/health.ts` builds what the panel shows (key H): the score with its notice, the score trend across frames, what the frame did (score change, hotspots created and resolved), the risk profile as bars with exact shares and thresholds, the hotspots with their suggested actions (a click flies to the building) and the experimental hidden links. It reads `report.json`; in a timeline the score and profile follow the playhead, and the suggested actions describe the latest frame.

@@ -1,4 +1,4 @@
-import type { AnalysisManifest, CcJson, TimelineManifest, TimelineMode } from "@factory-city/schema";
+import type { AnalysisManifest, CcJson, Report, TimelineManifest, TimelineMode } from "@factory-city/schema";
 
 export interface ProjectList {
   current?: string;
@@ -10,6 +10,8 @@ export type SourceKey = "snapshot" | TimelineMode;
 export interface Loaded {
   snapshots: CcJson[];
   manifest?: AnalysisManifest | TimelineManifest;
+  /** Code-health report of the snapshot, or of the timeline's latest frame. */
+  report?: Report;
 }
 
 /** What a project's data folder holds: a single snapshot and/or timelines, by mode. */
@@ -42,9 +44,15 @@ function base(slug: string): string {
 
 export async function loadAvailable(slug: string): Promise<Available> {
   const out: Available = {};
-  const snapshot = await tryJson<AnalysisManifest>(`${base(slug)}analysis.json`);
+  // the local server lists what exists; without that list, try each known name
+  const listed = (await tryJson<{ files: string[] }>(`${base(slug)}sources.json`))?.files;
+  const has = (name: string) => listed === undefined || listed.includes(name);
+  const snapshot = has("analysis.json")
+    ? await tryJson<AnalysisManifest>(`${base(slug)}analysis.json`)
+    : undefined;
   if (snapshot) out.snapshot = snapshot;
   for (const mode of MODES) {
+    if (!has(`timeline.${mode}.json`)) continue;
     const timeline = await tryJson<TimelineManifest>(`${base(slug)}timeline.${mode}.json`);
     if (timeline) out[mode] = timeline;
   }
@@ -74,7 +82,9 @@ export async function loadSource(
     }
   };
   await Promise.all(Array.from({ length: Math.min(PARALLEL, files.length) }, worker));
-  return { snapshots, manifest };
+  const reportFile = manifest.kind === "timeline" ? `report.${manifest.source.mode}.json` : "report.json";
+  const report = await tryJson<Report>(`${base(slug)}${reportFile}`);
+  return { snapshots, manifest, report };
 }
 
 function isCcJson(value: unknown): value is CcJson {

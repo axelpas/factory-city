@@ -31,6 +31,8 @@ export interface HistoryResult {
   commitCount: number;
   /** Unix time of the analyzed revision: the "now" of every window. */
   snapshotTime: number;
+  /** Pairs of files that usually change together. */
+  coupled: Array<[string, string]>;
 }
 
 function git(cwd: string, args: string[]): Promise<string> {
@@ -224,6 +226,7 @@ export function computeHistory(
     }
   }
 
+  const coupled: Array<[string, string]> = [];
   for (const [key, together] of pairs) {
     if (together < MIN_CO_COMMITS) continue;
     const [a, b] = key.split("\0") as [string, string];
@@ -232,9 +235,10 @@ export function computeHistory(
     if (ha && hb && together / ha.commits >= MIN_CO_SHARE && together / hb.commits >= MIN_CO_SHARE) {
       ha.coChangeFiles++;
       hb.coChangeFiles++;
+      coupled.push([a, b]);
     }
   }
-  return { files: history, commitCount: commits.length, snapshotTime };
+  return { files: history, commitCount: commits.length, snapshotTime, coupled };
 }
 
 /** Metrics of one file's history, in registry ids. Days are whole days before the snapshot. */

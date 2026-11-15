@@ -40,3 +40,6 @@ Frame metrics also hold the retrospective `rework_after` (absent while `rework_a
 
 ## Diff summary
 `factory-city diff --json` prints a `DiffSummary`, validated by `packages/schema/src/schemas/diff-summary.schema.json`: `kind`, `schemaVersion`, `project`, `base` and `head` (`rev`, short `commit`), `files` (added, removed, modified, unchanged), `totals` (base, head, delta of files, real lines and complexity), `shortcuts` (`added`, `byKind`) and `biggest` (path, status, change of real lines and complexity). The diff itself is a two-frame timeline written as `timeline.diff.json` with `frames.diff/`.
+
+## Report
+`report.json` (and `report.<mode>.json` for a timeline's latest frame): `kind`, `schemaVersion`, `analyzerVersion`, `createdAt`, `project`, `commit`, `dataLevel`, `health` (`score`, `profile` by dimension with the shares low / moderate / high / veryHigh and `rated`, `scored`), `dimensions` (id, label, metric, kind, bounds, `minRloc`, source), `hotspots` (path, rank, basis, metrics, thresholds exceeded, actions, size), `hiddenLinks` (experimental) and `notice`. In a timeline each frame carries `health` (`score`, `profile`, `hotspots` paths) and the frame metrics `quality_delta`, `hotspots_created`, `hotspots_resolved`, `shortcuts_added`. The diff summary carries `quality` and `hotspots`.

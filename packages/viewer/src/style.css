@@ -559,3 +559,76 @@ summary::-webkit-details-marker {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.health {
+  z-index: 26;
+}
+.score b {
+  font-size: 34px;
+  font-variant-numeric: tabular-nums;
+}
+.trend {
+  display: block;
+  width: 100%;
+  height: 40px;
+  margin: 4px 0;
+}
+.trend polyline {
+  fill: none;
+  stroke: var(--c-accent);
+  stroke-width: 1.5;
+}
+.trend .now {
+  stroke: var(--c-text-muted);
+  stroke-width: 1;
+}
+.risk summary {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 2px 8px;
+  align-items: center;
+  border: 0;
+  padding: 3px 0;
+  background: none;
+}
+.risk-text {
+  grid-column: 2;
+  font-size: 11px;
+}
+.risk-bar {
+  display: flex;
+  height: 12px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--c-panel-border);
+}
+.risk-bar i {
+  display: block;
+  height: 100%;
+}
+.risk-low {
+  background: var(--c-risk-low);
+}
+.risk-moderate {
+  background: var(--c-risk-moderate);
+}
+.risk-high {
+  background: var(--c-risk-high);
+}
+.risk-very-high {
+  background: var(--c-risk-very-high);
+}
+.risk-key i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+.hotspot {
+  margin: 8px 0;
+}
+.hotspot ul {
+  margin: 2px 0 0;
+  padding-left: 18px;
+}

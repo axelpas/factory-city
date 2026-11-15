@@ -8,6 +8,8 @@ export interface FileMetrics {
   syntaxErrors: boolean;
   /** Module specifiers imported by the file, as written (`./a`, `@scope/pkg`). Empty for languages without coupling support. */
   imports: string[];
+  /** Declaration names of each cohesion group, when the file has several: the report names groups by them. */
+  groups?: string[][];
 }
 
 /** Line count: a final line break does not start a new line. */
@@ -205,14 +207,21 @@ export function computeMetrics(
       metrics.escape_hatches = total;
       if (code > 0) metrics.escape_hatch_density = (total / code) * 1000;
     }
+    let groups: string[][] | undefined;
     if (lang.cohesion && !isTest) {
       const cohesion = computeCohesion(tree.rootNode, lang.cohesion);
       if (cohesion && !cohesion.barrel) {
         metrics.cohesion_groups = cohesion.groups;
+        if (cohesion.groups > 1) groups = cohesion.names;
         metrics.lack_of_cohesion = cohesion.nodes > 1 ? (cohesion.groups - 1) / (cohesion.nodes - 1) : 0;
       }
     }
-    return { metrics, syntaxErrors: tree.rootNode.hasError, imports: walker.imports };
+    return {
+      metrics,
+      syntaxErrors: tree.rootNode.hasError,
+      imports: walker.imports,
+      ...(groups ? { groups } : {}),
+    };
   } finally {
     tree.delete();
   }

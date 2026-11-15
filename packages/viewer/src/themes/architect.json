@@ -19,7 +19,11 @@
     "panel": "#fbfaf8",
     "panelBorder": "#d8d4c9",
     "accent": "#1f3a5f",
-    "accentText": "#ffffff"
+    "accentText": "#ffffff",
+    "riskLow": "#cfe0ee",
+    "riskModerate": "#f2d58a",
+    "riskHigh": "#e3915a",
+    "riskVeryHigh": "#9c3a3f"
   },
   "ramps": {
     "sequential": ["#eaf0f6", "#b9cfe3", "#7aa6c9", "#3f7ba8", "#1d4f7c"],
@@ -28,8 +32,17 @@
     "other": "#9b9b94",
     "tint": ["#e6e2d6", "#d9dfd2", "#c6dacd", "#aed3c9", "#92c8c4"]
   },
-  "light": { "ambient": 0.7, "sun": 0.85, "sunPosition": [-0.45, 1, 0.65], "shadows": true },
-  "camera": { "type": "perspective", "fov": 38, "direction": [0.75, 0.95, 1.1] },
+  "light": {
+    "ambient": 0.7,
+    "sun": 0.85,
+    "sunPosition": [-0.45, 1, 0.65],
+    "shadows": true
+  },
+  "camera": {
+    "type": "perspective",
+    "fov": 38,
+    "direction": [0.75, 0.95, 1.1]
+  },
   "font": "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
   "heightScale": 0.11
 }

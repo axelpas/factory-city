@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import type { Server } from "node:http";
 import { createServer } from "node:http";
 import { dirname, extname, join, normalize, resolve, sep } from "node:path";
@@ -93,6 +93,22 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
             projects: list.map((p) => ({ slug: p.slug, name: p.name })),
           }),
         );
+        return;
+      }
+      const sources = /^\/data\/([^/]+)\/sources\.json$/.exec(path);
+      if (sources) {
+        // which manifests exist, so that the viewer does not have to probe for them
+        const entry = (await projects()).find((p) => p.slug === sources[1]);
+        const names = entry
+          ? (await readdir(entry.dataDir).catch(() => [])).filter((n) =>
+              /^(analysis|timeline\.[a-z]+)\.json$/.test(n),
+            )
+          : [];
+        res.writeHead(entry ? 200 : 404, {
+          "content-type": MIME[".json"] as string,
+          "cache-control": "no-cache",
+        });
+        res.end(JSON.stringify({ files: names.sort() }));
         return;
       }
       const data = /^\/data\/([^/]+)\/((?:frames\.[a-z]+\/)?[^/]+)$/.exec(path);

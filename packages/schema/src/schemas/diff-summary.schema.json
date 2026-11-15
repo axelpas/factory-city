@@ -4,22 +4,56 @@
   "title": "Factory City diff summary",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "schemaVersion", "project", "base", "head", "files", "totals", "shortcuts", "biggest"],
+  "required": [
+    "kind",
+    "schemaVersion",
+    "project",
+    "base",
+    "head",
+    "files",
+    "totals",
+    "shortcuts",
+    "biggest",
+    "quality",
+    "hotspots"
+  ],
   "properties": {
-    "kind": { "const": "diff" },
-    "schemaVersion": { "const": 1 },
-    "project": { "type": "string" },
-    "base": { "$ref": "#/definitions/Rev" },
-    "head": { "$ref": "#/definitions/Rev" },
+    "kind": {
+      "const": "diff"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "project": {
+      "type": "string"
+    },
+    "base": {
+      "$ref": "#/definitions/Rev"
+    },
+    "head": {
+      "$ref": "#/definitions/Rev"
+    },
     "files": {
       "type": "object",
       "additionalProperties": false,
       "required": ["added", "removed", "modified", "unchanged"],
       "properties": {
-        "added": { "type": "integer", "minimum": 0 },
-        "removed": { "type": "integer", "minimum": 0 },
-        "modified": { "type": "integer", "minimum": 0 },
-        "unchanged": { "type": "integer", "minimum": 0 }
+        "added": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "removed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "modified": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unchanged": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "totals": {
@@ -27,9 +61,15 @@
       "additionalProperties": false,
       "required": ["base", "head", "delta"],
       "properties": {
-        "base": { "$ref": "#/definitions/Totals" },
-        "head": { "$ref": "#/definitions/Totals" },
-        "delta": { "$ref": "#/definitions/Totals" }
+        "base": {
+          "$ref": "#/definitions/Totals"
+        },
+        "head": {
+          "$ref": "#/definitions/Totals"
+        },
+        "delta": {
+          "$ref": "#/definitions/Totals"
+        }
       }
     },
     "shortcuts": {
@@ -37,27 +77,87 @@
       "additionalProperties": false,
       "required": ["added", "byKind"],
       "properties": {
-        "added": { "type": "integer" },
-        "byKind": { "type": "object", "additionalProperties": { "type": "integer" } }
+        "added": {
+          "type": "integer"
+        },
+        "byKind": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        }
       }
     },
-    "biggest": { "type": "array", "items": { "$ref": "#/definitions/Change" } }
+    "biggest": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Change"
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base", "head", "delta"],
+      "properties": {
+        "base": {
+          "type": "number"
+        },
+        "head": {
+          "type": "number"
+        },
+        "delta": {
+          "type": "number"
+        }
+      }
+    },
+    "hotspots": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["created", "resolved"],
+      "properties": {
+        "created": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "resolved": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
   },
   "definitions": {
     "Rev": {
       "type": "object",
       "additionalProperties": false,
       "required": ["rev", "commit"],
-      "properties": { "rev": { "type": "string" }, "commit": { "type": "string" } }
+      "properties": {
+        "rev": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string"
+        }
+      }
     },
     "Totals": {
       "type": "object",
       "additionalProperties": false,
       "required": ["files", "rloc", "mcc"],
       "properties": {
-        "files": { "type": "integer" },
-        "rloc": { "type": "integer" },
-        "mcc": { "type": "integer" }
+        "files": {
+          "type": "integer"
+        },
+        "rloc": {
+          "type": "integer"
+        },
+        "mcc": {
+          "type": "integer"
+        }
       }
     },
     "Change": {
@@ -65,10 +165,18 @@
       "additionalProperties": false,
       "required": ["path", "status", "rloc", "mcc"],
       "properties": {
-        "path": { "type": "string" },
-        "status": { "enum": ["added", "removed", "modified"] },
-        "rloc": { "type": "integer" },
-        "mcc": { "type": "integer" }
+        "path": {
+          "type": "string"
+        },
+        "status": {
+          "enum": ["added", "removed", "modified"]
+        },
+        "rloc": {
+          "type": "integer"
+        },
+        "mcc": {
+          "type": "integer"
+        }
       }
     }
   }
