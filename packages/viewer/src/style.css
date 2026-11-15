@@ -350,13 +350,75 @@ button[aria-pressed="true"] {
   position: absolute;
   top: var(--below-bar);
   left: var(--gutter);
-  bottom: var(--above-status);
+  /* as tall as its content, up to the status line */
+  max-height: calc(100vh - var(--below-bar) - var(--above-status));
   width: var(--panel-w);
   overflow: auto;
   padding: var(--s-12);
   background: var(--c-panel);
   border: var(--line);
   border-radius: var(--radius-4);
+}
+/* folded: a rail with one button */
+.panel.rail {
+  width: auto;
+  padding: var(--s-6);
+  overflow: visible;
+}
+.rail-dot {
+  position: absolute;
+  top: var(--s-4);
+  right: var(--s-4);
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-round);
+  background: var(--c-accent);
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.panel-head h2 {
+  margin: 0;
+}
+.panel-state {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: var(--s-4) 0 var(--s-8);
+}
+.more {
+  margin: var(--s-8) 0;
+}
+.more > summary {
+  padding: var(--s-4) 0;
+  color: var(--c-text-muted);
+  cursor: pointer;
+}
+.more > summary::before {
+  content: "+ ";
+}
+.more[open] > summary::before {
+  content: "– ";
+}
+/* a choice among a few values, all visible */
+.segmented {
+  display: flex;
+  flex: 1;
+}
+.segmented button {
+  flex: 1;
+  border-radius: 0;
+}
+.segmented button + button {
+  border-left: 0;
+}
+.segmented button:first-child {
+  border-radius: var(--radius-3) 0 0 var(--radius-3);
+}
+.segmented button:last-child {
+  border-radius: 0 var(--radius-3) var(--radius-3) 0;
 }
 .panel h2,
 .details h2,
@@ -864,7 +926,7 @@ button[aria-pressed="true"] {
 
 .timeline {
   position: absolute;
-  left: calc(var(--panel-w) + 2 * var(--gutter));
+  left: calc(var(--free-left, 0px) + var(--gutter));
   right: var(--gutter);
   bottom: 40px;
   padding: var(--s-8) var(--s-12);

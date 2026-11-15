@@ -17,6 +17,10 @@ const PATHS = {
   /** Into a tray. */
   export: ["M8 2.5v7.5", "M5 7.2l3 3 3-3", "M3 13h10"],
   chevron: ["M4.5 6.5l3.5 3.5 3.5-3.5"],
+  /** Settings to adjust. */
+  sliders: ["M2.5 5h11", "M2.5 11h11", "M6 3.3v3.4", "M10 9.3v3.4"],
+  /** Fold a side panel away. */
+  fold: ["M9.5 4.5L6 8l3.5 3.5", "M12.5 3v10"],
   /** Channels of the legend: the ground a building takes, its height, its color, the ring on its roof, its district. */
   area: ["M2.5 9.5h11v3h-11z"],
   height: ["M6 13.5v-11h4v11z"],

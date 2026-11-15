@@ -100,6 +100,67 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
     });
   });
 
+  it("starts with the view panel folded to a rail, and gives its room to the city and the timeline", async () => {
+    const r = await inPage<Record<string, unknown>>(`
+      const panel = document.querySelector(".panel");
+      const rail = { isRail: panel.classList.contains("rail"), width: box(panel).w, timelineLeft: box(document.querySelector(".timeline")).x };
+      await openPanel();
+      const open = {
+        isRail: panel.classList.contains("rail"),
+        width: box(panel).w,
+        timelineLeft: box(document.querySelector(".timeline")).x,
+        main: [...panel.querySelectorAll(":scope > .picker label")].map((l) => l.textContent),
+        moreOpen: panel.querySelector("details.more").open,
+        inMore: [...panel.querySelectorAll("details.more label")].map((l) => l.textContent.trim()),
+        stored: localStorage.getItem("fc.panel"),
+        tests: [...panel.querySelectorAll(".segmented button")].map((b) => b.textContent + ":" + b.getAttribute("aria-pressed")),
+      };
+      panel.querySelector(".panel-head button").click();
+      await wait(60);
+      return { rail, open, foldedAgain: panel.classList.contains("rail"), storedAfter: localStorage.getItem("fc.panel") };
+    `);
+    expect(r.rail).toMatchObject({ isRail: true });
+    const rail = r.rail as { width: number; timelineLeft: number };
+    const open = r.open as { width: number; timelineLeft: number };
+    expect(rail.width).toBeLessThan(60);
+    expect(open.width).toBeGreaterThan(250);
+    // the timeline follows the panel: it starts further left when the panel is a rail
+    expect(rail.timelineLeft).toBeLessThan(open.timelineLeft - 200);
+    expect(r.open).toMatchObject({
+      isRail: false,
+      main: ["Area", "Height", "Color"],
+      moreOpen: false,
+      inMore: expect.arrayContaining(["Marker", "District tint", "Scale"]),
+      stored: "open",
+      tests: ["show:true", "dim:false", "hide:false"],
+    });
+    expect(r.foldedAgain).toBe(true);
+    expect(r.storedAfter).toBe("rail");
+  });
+
+  it("says when the channels were changed by hand, and offers the way back to the preset", async () => {
+    const r = await inPage<Record<string, unknown>>(`
+      await openPanel();
+      const panel = document.querySelector(".panel");
+      const state = () => panel.querySelector(".panel-state");
+      const lens = () => document.querySelector(".lens-menu .lens-name").textContent;
+      const before = { hidden: state().hidden, lens: lens() };
+      const color = panel.querySelectorAll(":scope > .picker select")[2];
+      color.selectedIndex = color.selectedIndex === 1 ? 2 : 1;
+      color.dispatchEvent(new Event("change", { bubbles: true }));
+      await wait(80);
+      const modified = { hidden: state().hidden, text: state().textContent, lens: lens() };
+      state().querySelector("button").click();
+      await wait(80);
+      return { before, modified, after: { hidden: state().hidden, lens: lens() } };
+    `);
+    const before = r.before as { hidden: boolean; lens: string };
+    expect(before.hidden).toBe(true);
+    expect(r.modified).toMatchObject({ hidden: false, lens: "Custom" });
+    expect((r.modified as { text: string }).text).toBe(`modifiedBack to ${before.lens}`);
+    expect(r.after).toEqual({ hidden: true, lens: before.lens });
+  });
+
   it("opens the help of a channel as a popover: the row keeps its layout", async () => {
     const r = await inPage<{
       before: number;
@@ -107,6 +168,7 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
       open: boolean;
       button: { w: number; h: number };
     }>(`
+      await openPanel();
       const row = document.querySelector(".picker .row");
       const select = row.querySelector("select");
       const help = row.querySelector("details.metric-help");
@@ -123,6 +185,7 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
 
   it("closes menus and popovers the same way: one at a time, Escape, a press outside", async () => {
     const r = await inPage<Record<string, boolean>>(`
+      await openPanel();
       const help = document.querySelector(".picker details.metric-help");
       const menu = document.querySelector("details.export-menu");
       const toggle = async (d) => { d.querySelector("summary").click(); await wait(60); };

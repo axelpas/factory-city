@@ -20,7 +20,14 @@ import { type EncodedVideo, encodeVideo, pixelHash, planVideo, type VideoOptions
 import { clear, el } from "../lib/dom";
 import { format } from "../lib/format";
 import { makePathFilter } from "../lib/glob";
-import { defaultMapping, type Mapping, MIN_COVERAGE, type Preset, presetStatuses } from "../presets/index";
+import {
+  defaultMapping,
+  type Mapping,
+  MIN_COVERAGE,
+  PRESETS,
+  type Preset,
+  presetStatuses,
+} from "../presets/index";
 import { type CameraState, CityScene, type Pick } from "../scene/CityScene";
 import { applyTheme, DEFAULT_THEME, THEMES, type Theme, themeById } from "../themes/index";
 import {
@@ -80,6 +87,7 @@ type MotionSetting = "auto" | "full" | "reduced";
 
 const HELP_KEY = "fc.help.seen";
 const THEME_KEY = "fc.theme";
+const PANEL_KEY = "fc.panel";
 
 /** The theme to start with: `?theme=` in the address, else the last one chosen, else the default. */
 function initialTheme(): Theme {
@@ -116,6 +124,12 @@ export class App {
   });
   private readonly dropZone = el("div", { class: "drop" });
   private readonly panel = el("aside", { class: "panel", attrs: { "aria-label": "View settings" } });
+  private readonly panelState = el("p", { class: "panel-state", attrs: { hidden: "" } });
+  /** Folded to a rail unless the user opened it: a preset is enough for most sessions. */
+  private panelOpen = safeStorage(() => localStorage.getItem(PANEL_KEY)) === "open";
+  private moreOpen = false;
+  /** The preset in force before a channel was changed by hand: the way back. */
+  private lastPreset: string | undefined;
   private readonly legendBox = el("section", {
     class: "legend",
     attrs: { "aria-label": "Legend", hidden: "" },
@@ -586,22 +600,54 @@ export class App {
 
   // ----------------------------------------------------------------- panel
 
+  /** Opens the view panel or folds it to a rail; the choice is remembered. */
+  private setPanelOpen(open: boolean): void {
+    this.panelOpen = open;
+    safeStorage(() => localStorage.setItem(PANEL_KEY, open ? "open" : "rail"));
+    this.buildPanel();
+  }
+
+  /**
+   * The view panel. Folded, it is a rail with one button: a preset is enough for most sessions. Open, it
+   * shows the three main channels, then the rest (marker, tint, scale) in a section closed by default, then
+   * the filter.
+   */
   private buildPanel(): void {
     const s = this.state;
     if (!s) return;
     clear(this.panel);
-    this.panel.append(el("h2", { text: "View" }));
+    this.panel.classList.toggle("rail", !this.panelOpen);
+    if (!this.panelOpen) {
+      const open = el(
+        "button",
+        {
+          class: "icon quiet",
+          title: "Channels and filter: choose the metrics yourself, search files",
+          attrs: { type: "button", "aria-label": "Open the view panel", "aria-expanded": "false" },
+        },
+        icon("sliders"),
+      );
+      open.addEventListener("click", () => this.setPanelOpen(true));
+      this.panel.append(open);
+      if (!s.preset)
+        this.panel.append(el("i", { class: "rail-dot", title: "The mapping was changed by hand" }));
+      return;
+    }
+    const fold = el(
+      "button",
+      {
+        class: "icon quiet",
+        title: "Fold the panel",
+        attrs: { type: "button", "aria-label": "Fold the view panel", "aria-expanded": "true" },
+      },
+      icon("fold"),
+    );
+    fold.addEventListener("click", () => this.setPanelOpen(false));
+    this.panel.append(el("div", { class: "panel-head" }, el("h2", { text: "View" }), fold), this.panelState);
+    this.renderPanelState();
     this.panel.append(this.picker("area", "Area", "Metric that sets how much ground a file gets"));
     this.panel.append(this.picker("height", "Height", "Metric that sets how tall a building is"));
     this.panel.append(this.picker("color", "Color", "Metric that colors a building"));
-    this.panel.append(
-      this.picker("marker", "Marker", "Optional: marks the roof of the files above a threshold on a metric"),
-    );
-    const threshold = this.markerThreshold();
-    if (threshold) this.panel.append(threshold);
-    this.panel.append(
-      this.picker("tint", "District tint", "Optional: tints the plinth of a district by a folder metric"),
-    );
 
     const scale = el("select", {
       title: "How values become heights",
@@ -616,7 +662,13 @@ export class App {
     const clamp = el("input", { attrs: { type: "checkbox" } });
     clamp.checked = s.mapping.clampP99;
     clamp.addEventListener("change", () => this.setMapping({ clampP99: clamp.checked }));
-    this.panel.append(
+    const more = el(
+      "details",
+      { class: "more" },
+      el("summary", { text: "More: marker, district tint, scale" }),
+      this.picker("marker", "Marker", "Optional: marks the roof of the files above a threshold on a metric"),
+      this.markerThreshold(),
+      this.picker("tint", "District tint", "Optional: tints the plinth of a district by a folder metric"),
       el(
         "div",
         { class: "row" },
@@ -634,6 +686,12 @@ export class App {
         " clamp outliers (99th percentile)",
       ),
     );
+    // open when it holds something in use, or when the user opened it
+    more.open = this.moreOpen || s.mapping.marker !== null || s.mapping.tint !== null;
+    more.addEventListener("toggle", () => {
+      this.moreOpen = more.open;
+    });
+    this.panel.append(more);
 
     this.panel.append(el("h2", { text: "Filter" }));
     const search = el("input", {
@@ -644,25 +702,50 @@ export class App {
       },
       title: "Plain text matches anywhere in the path; * and ? make it a glob",
     });
+    search.value = s.search;
     search.addEventListener("input", () => {
       s.search = search.value;
       this.refresh();
     });
-    const tests = el("select", {
+    const tests = el("div", {
+      class: "segmented",
       title: "Test files: show, dim or hide",
-      attrs: { "aria-label": "Test files" },
+      attrs: { role: "group", "aria-label": "Test files" },
     });
     for (const mode of ["show", "dim", "hide"] as const) {
-      const o = el("option", { text: `Tests: ${mode}`, attrs: { value: mode } });
-      if (mode === s.tests) o.selected = true;
-      tests.append(o);
+      const b = el("button", {
+        text: mode,
+        attrs: { type: "button", "aria-pressed": String(mode === s.tests) },
+      });
+      b.addEventListener("click", () => {
+        s.tests = mode;
+        for (const other of tests.children) other.setAttribute("aria-pressed", String(other === b));
+        this.refresh();
+      });
+      tests.append(b);
     }
-    tests.addEventListener("change", () => {
-      s.tests = tests.value as TestsMode;
-      this.refresh();
-    });
-    this.panel.append(search, tests);
+    this.panel.append(search, el("div", { class: "row" }, el("label", { text: "Tests" }), tests));
     this.panel.append(this.changesBox);
+  }
+
+  /** Says when the channels no longer match a preset, and offers the way back. */
+  private renderPanelState(): void {
+    const s = this.state;
+    clear(this.panelState);
+    this.panelState.hidden = !s || s.preset !== undefined;
+    if (!s || s.preset) return;
+    const last = PRESETS.find((p) => p.id === this.lastPreset);
+    this.panelState.append(el("span", { class: "badge", text: "modified" }));
+    if (last) {
+      const back = el("button", {
+        class: "link",
+        text: `Back to ${last.label}`,
+        title: `Drop your changes and show the ${last.label} preset again`,
+        attrs: { type: "button" },
+      });
+      back.addEventListener("click", () => this.choosePreset(last.id));
+      this.panelState.append(back);
+    }
   }
 
   private usable(role: Role): string[] {
@@ -783,10 +866,12 @@ export class App {
     if (!s) return;
     const areaChanged = patch.area !== undefined && patch.area !== s.mapping.area;
     s.mapping = { ...s.mapping, ...patch };
+    if (s.preset) this.lastPreset = s.preset.id;
     s.preset = undefined;
     if (areaChanged) this.relayoutAndRefresh();
     else this.refresh();
     this.updatePresetSelect();
+    this.renderPanelState();
   }
 
   private layoutFor(data: TimelineData, mapping: Mapping): Layout {

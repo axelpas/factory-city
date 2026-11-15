@@ -36,11 +36,15 @@ export function uiSample(): Promise<string> {
   return sample;
 }
 
-/** Helpers every page script can use: `wait(ms)`, `key(k)`, `press(el)`, `box(el)`. */
+/** Helpers every page script can use: `wait(ms)`, `key(k)`, `press(el)`, `box(el)`, `openPanel()`. */
 const PRELUDE = `
   const wait = (ms) => new Promise((done) => setTimeout(done, ms));
   const key = (k) => window.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
   const press = (el) => el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+  const openPanel = async () => {
+    const open = document.querySelector('.panel.rail button');
+    if (open) { open.click(); await wait(60); }
+  };
   const box = (el) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, right: r.right, bottom: r.bottom }; };
 `;
 
