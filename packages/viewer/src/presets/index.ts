@@ -1,6 +1,7 @@
 import type { Model } from "../data/model";
 import agents from "./agents.json";
 import bugMagnets from "./bug-magnets.json";
+import change from "./change.json";
 import cohesion from "./cohesion.json";
 import contention from "./contention.json";
 import hotspots from "./hotspots.json";
@@ -37,6 +38,7 @@ export const PRESETS: readonly Preset[] = [
   waste as Preset,
   contention as Preset,
   agents as Preset,
+  change as Preset,
 ];
 
 /** Default preset, in order of preference: Hotspots with git history, Structure without. */

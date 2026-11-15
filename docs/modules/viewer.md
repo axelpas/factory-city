@@ -25,3 +25,6 @@ Twist rotates a building by `lack_of_cohesion` times 45 degrees. All footprints 
 - `?synthetic=5000&frames=6&fps` opens a made-up city and shows images per second; `factoryCityBenchmark()` in the console returns milliseconds per image.
 
 Known limits: one theme; plinths are rebuilt at once when the ground-area metric changes (buildings glide, plinths do not); loading a long timeline fetches every snapshot up front.
+
+## Compare
+`view/change.ts`: the Change preset colors each building by what the frame did since the previous one, on the theme's diverging ramp (added and removed at the ends, grown and shrunk in between). A removed file is still drawn at the size it had. The panel lists the biggest changes; a click flies to the building. A diff opens on this preset. URL parameters: `project`, `source`, `preset`. `window.factoryCity` (`ready`, `capture`) is the hook used by headless rendering.

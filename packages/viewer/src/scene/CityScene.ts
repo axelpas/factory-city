@@ -718,6 +718,18 @@ export class CityScene {
     return elapsed / images;
   }
 
+  /** Moves the view to a point of the map, keeping the viewing direction and coming closer. */
+  focus(x: number, z: number): void {
+    const offset = this.camera.position.clone().sub(this.controls.target);
+    const distance = Math.min(offset.length(), this.size * 0.6);
+    this.controls.target.set(x, 0, z);
+    this.camera.position
+      .copy(this.controls.target)
+      .add(offset.setLength(Math.max(distance, this.size * 0.15)));
+    this.controls.update();
+    this.requestRender();
+  }
+
   /** The camera as a three-quarter view of the whole city. */
   resetCamera(): void {
     const s = this.size;

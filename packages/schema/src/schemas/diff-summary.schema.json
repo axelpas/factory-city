@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://factory-city.dev/schemas/diff-summary-1.schema.json",
+  "title": "Factory City diff summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schemaVersion", "project", "base", "head", "files", "totals", "shortcuts", "biggest"],
+  "properties": {
+    "kind": { "const": "diff" },
+    "schemaVersion": { "const": 1 },
+    "project": { "type": "string" },
+    "base": { "$ref": "#/definitions/Rev" },
+    "head": { "$ref": "#/definitions/Rev" },
+    "files": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["added", "removed", "modified", "unchanged"],
+      "properties": {
+        "added": { "type": "integer", "minimum": 0 },
+        "removed": { "type": "integer", "minimum": 0 },
+        "modified": { "type": "integer", "minimum": 0 },
+        "unchanged": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base", "head", "delta"],
+      "properties": {
+        "base": { "$ref": "#/definitions/Totals" },
+        "head": { "$ref": "#/definitions/Totals" },
+        "delta": { "$ref": "#/definitions/Totals" }
+      }
+    },
+    "shortcuts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["added", "byKind"],
+      "properties": {
+        "added": { "type": "integer" },
+        "byKind": { "type": "object", "additionalProperties": { "type": "integer" } }
+      }
+    },
+    "biggest": { "type": "array", "items": { "$ref": "#/definitions/Change" } }
+  },
+  "definitions": {
+    "Rev": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rev", "commit"],
+      "properties": { "rev": { "type": "string" }, "commit": { "type": "string" } }
+    },
+    "Totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "rloc", "mcc"],
+      "properties": {
+        "files": { "type": "integer" },
+        "rloc": { "type": "integer" },
+        "mcc": { "type": "integer" }
+      }
+    },
+    "Change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "status", "rloc", "mcc"],
+      "properties": {
+        "path": { "type": "string" },
+        "status": { "enum": ["added", "removed", "modified"] },
+        "rloc": { "type": "integer" },
+        "mcc": { "type": "integer" }
+      }
+    }
+  }
+}

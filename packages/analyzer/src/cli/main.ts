@@ -1,13 +1,15 @@
 #!/usr/bin/env node
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { METRICS } from "@factory-city/schema";
 import { Command } from "commander";
 import { ANALYZER_VERSION, analyze, slugFor, summaryLine } from "../analyze.js";
 import { coverageLine } from "../collectors/issues.js";
+import { buildDiff, diffText } from "../diff.js";
 import { doctor } from "../doctor.js";
 import { LANGUAGES } from "../languages/index.js";
 import { outputRoot, readIndex, updateIndex, writeAnalysis } from "../output.js";
+import { parseSize, renderImage } from "../render.js";
 import { defaultViewerDir, openBrowser, startServer } from "../server.js";
 import { buildTimeline } from "../timeline.js";
 
@@ -79,6 +81,7 @@ withAnalyzeOptions(
 async function serve(
   entry: { slug: string; name: string; dataDir: string; updatedAt: string },
   opts: { port?: string; open: boolean; json?: boolean },
+  query = "",
 ) {
   const server = await startServer({
     viewerDir: defaultViewerDir(),
@@ -88,7 +91,7 @@ async function serve(
   });
   if (opts.json) console.log(JSON.stringify({ url: server.url, slug: entry.slug }));
   else console.log(`Factory City is running at ${server.url} (Ctrl+C to stop)`);
-  if (opts.open) openBrowser(server.url);
+  if (opts.open) openBrowser(`${server.url}${query}`);
 }
 
 program
@@ -266,6 +269,54 @@ program
     if (result.manifest.coverage) console.log(coverageLine(result.manifest.coverage));
     for (const warning of result.manifest.warnings) console.warn(`warning: ${warning}`);
     console.log("Run `factory-city view` to play it.");
+  });
+
+program
+  .command("diff")
+  .description("Compare a branch with its base: summary, compare view, or a picture for a pull request")
+  .argument(
+    "[args...]",
+    "[repo] [base] [head]: the base defaults to the merge-base with the default branch, the head to HEAD",
+  )
+  .option("--image <file>", "write a PNG of the compare view instead of opening the viewer")
+  .option("--size <WxH>", "size of the picture", "1600x900")
+  .option("--json", "print the summary as JSON")
+  .option("--top <n>", "number of biggest changes to list", "10")
+  .option("--port <n>", "port to listen on (localhost only)")
+  .option("--no-open", "do not open the browser")
+  .option("-o, --out <dir>", "output folder (default: ~/.factory-city/<project>)")
+  .action(async (args: string[], opts: Record<string, unknown>) => {
+    const rest = [...args];
+    const first = rest[0];
+    const repoPath =
+      first !== undefined && existsSync(first) && statSync(first).isDirectory()
+        ? (rest.shift() as string)
+        : ".";
+    const [base, head] = rest;
+    const folder = resolve(repoPath);
+    const slug = slugFor(folder);
+    const dataDir = opts.out ? resolve(opts.out as string) : join(outputRoot(), slug);
+    const result = await buildDiff({ folder, base, head, top: Number(opts.top) || 10 }, dataDir);
+    const entry = { slug, name: result.manifest.project, dataDir, updatedAt: new Date().toISOString() };
+    if (!opts.out) await updateIndex(entry);
+    if (opts.json) console.log(JSON.stringify(result.summary, null, 2));
+    else console.log(diffText(result.summary));
+    for (const warning of result.manifest.warnings) console.warn(`warning: ${warning}`);
+    if (opts.image) {
+      const [width, height] = parseSize(opts.size as string);
+      await renderImage({
+        entry,
+        source: "diff",
+        preset: "change",
+        width,
+        height,
+        out: resolve(opts.image as string),
+      });
+      if (!opts.json) console.log(`Picture written to ${resolve(opts.image as string)}`);
+      return;
+    }
+    if (opts.json || opts.open === false) return;
+    await serve(entry, { port: opts.port as string | undefined, open: true }, "?source=diff");
   });
 
 program

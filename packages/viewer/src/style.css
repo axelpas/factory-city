@@ -544,3 +544,18 @@ summary::-webkit-details-marker {
     opacity: 1;
   }
 }
+.changes {
+  margin-top: 12px;
+}
+.changes[hidden] {
+  display: none;
+}
+.changes .kv {
+  align-items: baseline;
+}
+.changes .link {
+  flex: 1 1 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

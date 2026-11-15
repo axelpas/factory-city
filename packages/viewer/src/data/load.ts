@@ -15,7 +15,7 @@ export interface Loaded {
 /** What a project's data folder holds: a single snapshot and/or timelines, by mode. */
 export type Available = Partial<Record<SourceKey, AnalysisManifest | TimelineManifest>>;
 
-const MODES: TimelineMode[] = ["commit", "day", "issue", "revs"];
+const MODES: TimelineMode[] = ["commit", "day", "issue", "revs", "diff"];
 const PARALLEL = 6;
 
 async function getJson<T>(url: string): Promise<T> {

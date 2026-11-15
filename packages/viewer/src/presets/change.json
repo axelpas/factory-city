@@ -1,0 +1,10 @@
+{
+  "id": "change",
+  "label": "Change",
+  "group": "Compare",
+  "level": 1,
+  "question": "What did this step do to the city?",
+  "area": "rloc",
+  "height": "mcc",
+  "color": ["@change"]
+}

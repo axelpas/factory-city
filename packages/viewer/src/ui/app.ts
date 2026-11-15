@@ -31,6 +31,7 @@ import {
   lotCard,
   metricRow,
 } from "../view/card";
+import { biggestChanges, CHANGE, changePlacements, type FileChange } from "../view/change";
 import { cssGradient, parseHex, toCss } from "../view/color";
 import { dataLevelLine, hiddenContentLine, legendLines } from "../view/legend";
 import { type ColorLegend, computePlacements, computeTints } from "../view/placements";
@@ -93,6 +94,7 @@ export class App {
   private readonly dropZone = el("div", { class: "drop" });
   private readonly panel = el("aside", { class: "panel", attrs: { "aria-label": "View settings" } });
   private readonly legendBox = el("section", { class: "legend" });
+  private readonly changesBox = el("section", { class: "changes", attrs: { hidden: "" } });
   private readonly status = el("footer", { class: "status" });
   private readonly projectSelect = el("select", {
     title: "Switch project",
@@ -224,7 +226,16 @@ export class App {
       this.renderDropZone("This data holds no frame.");
       return;
     }
-    const { preset, mapping } = defaultMapping(last.model);
+    const params = new URLSearchParams(location.search);
+    const isDiff = loaded.manifest?.kind === "timeline" && loaded.manifest.source.mode === "diff";
+    // a diff opens on the Change preset; `?preset=` chooses another one
+    const wanted = params.get("preset") ?? (isDiff ? "change" : undefined);
+    const chosen = wanted
+      ? presetStatuses(last.model).find((p) => p.preset.id === wanted && p.available)
+      : undefined;
+    const { preset, mapping } = chosen?.mapping
+      ? { preset: chosen.preset, mapping: chosen.mapping }
+      : defaultMapping(last.model);
     this.dropZone.hidden = true;
     const app = this;
     this.state = {
@@ -354,6 +365,7 @@ export class App {
       day: "Timeline per day",
       issue: "Timeline per issue",
       revs: "Chosen revisions",
+      diff: "Branch diff",
     };
     clear(this.sourceSelect);
     const keys = Object.keys(this.available) as SourceKey[];
@@ -458,7 +470,7 @@ export class App {
       safeStorage(() => localStorage.setItem(MOTION_KEY, this.motion));
       this.applyMotion();
     });
-    this.panel.append(search, tests, motion, this.legendBox);
+    this.panel.append(search, tests, motion, this.legendBox, this.changesBox);
   }
 
   private usable(role: Role): string[] {
@@ -595,18 +607,25 @@ export class App {
     const s = this.state;
     const frame = s?.data.frames[frameIndex];
     if (!s || !frame) return new Float32Array(0);
-    const { placements } = computePlacements(frame.model, s.layout, s.mapping, this.theme);
+    const byChange = s.mapping.color === CHANGE;
+    // the Change preset also draws the files the frame removed, so its placements cover the whole timeline
+    const union = byChange
+      ? changePlacements(s.data, frameIndex, s.layout, s.mapping, this.theme).placements
+      : undefined;
+    const own = union ? [] : computePlacements(frame.model, s.layout, s.mapping, this.theme).placements;
+    const previous = frameIndex > 0 ? s.data.frames[frameIndex - 1] : undefined;
     const match = makePathFilter(s.search);
     const dimmed = new Set<number>();
     const hidden = new Set<number>();
     const aligned = s.data.paths.map((path, u) => {
       const m = frame.modelIndex[u] as number;
-      if (m < 0) return undefined;
-      const file = frame.model.files[m];
+      const placement = union ? union[u] : m < 0 ? undefined : own[m];
+      if (!placement) return undefined;
+      const file = m >= 0 ? frame.model.files[m] : previous?.model.files[previous.modelIndex[u] as number];
       if (match && !match(path)) dimmed.add(u);
       if (file?.isTest && s.tests === "dim") dimmed.add(u);
       if (file?.isTest && s.tests === "hide") hidden.add(u);
-      return placements[m];
+      return placement;
     });
     const touched = new Set<number>();
     if (frame.info && frameIndex > 0) {
@@ -653,7 +672,12 @@ export class App {
     if (!s || !a) return;
     if (!force && a.frame === this.shownFrame) return;
     this.shownFrame = a.frame;
-    s.legend = computePlacements(s.model, s.layout, s.mapping, this.theme).legend;
+    const compared =
+      s.mapping.color === CHANGE
+        ? changePlacements(s.data, a.frame, s.layout, s.mapping, this.theme)
+        : undefined;
+    s.legend = compared?.legend ?? computePlacements(s.model, s.layout, s.mapping, this.theme).legend;
+    this.renderChanges(compared ? biggestChanges(compared.changes) : []);
     this.scene.setPlinthTints(computeTints(s.model, s.mapping, this.theme));
     this.bar.showFrame(a.frame, this.animator?.reducedMotion ?? false);
     this.renderLegend();
@@ -702,6 +726,42 @@ export class App {
     canvas.classList.remove("fade");
     void canvas.offsetWidth;
     canvas.classList.add("fade");
+  }
+
+  /** Compare view: the largest changes of the frame; a click flies to the building. */
+  private renderChanges(changes: FileChange[]): void {
+    const s = this.state;
+    clear(this.changesBox);
+    this.changesBox.hidden = changes.length === 0;
+    if (!s || changes.length === 0) return;
+    const metric = s.model.metrics.get(s.mapping.area)?.label.toLowerCase() ?? s.mapping.area;
+    this.changesBox.append(el("h2", { text: "Biggest changes" }));
+    for (const c of changes) {
+      const path = s.data.paths[c.union] ?? "";
+      const go = el("button", {
+        class: "link",
+        text: path,
+        title: `Go to ${path}`,
+        attrs: { type: "button" },
+      });
+      go.addEventListener("click", () => {
+        const rect = s.layout.files.get(path);
+        if (rect) this.scene.focus(rect.x + rect.w / 2, rect.y + rect.h / 2);
+        if (this.modelIndex(c.union) >= 0) this.openDetails(c.union);
+      });
+      const sign = c.delta > 0 ? "+" : "−";
+      this.changesBox.append(
+        el(
+          "div",
+          { class: "kv" },
+          go,
+          el("span", {
+            class: "muted",
+            text: `${c.status}, ${sign}${format.integer(Math.abs(c.delta))} ${metric}`,
+          }),
+        ),
+      );
+    }
   }
 
   private renderLegend(): void {
@@ -1214,12 +1274,41 @@ export class App {
   // ---------------------------------------------------------------- export
 
   /** PNG of the current view at 1x, 2x or 4K, with or without the overlay. */
+  /** Lets every running move finish at once, so that a picture shows the settled city. */
+  settle(): void {
+    const a = this.animator;
+    if (!a) return;
+    a.pause();
+    for (let i = 0; i < 20 && a.tick(100000); i++);
+    this.updateFrameViews(true);
+  }
+
+  /** The current view as a PNG data URL at an exact size, for headless rendering. */
+  capture(width: number, height: number, withOverlay = true): string | undefined {
+    this.settle();
+    return this.picture(width, height, withOverlay)?.toDataURL("image/png");
+  }
+
   private exportPng(size: number | "4k", withOverlay: boolean): void {
     const s = this.state;
     if (!s) return;
     const base = this.stage.getBoundingClientRect();
     const width = size === "4k" ? 3840 : Math.round(base.width * size);
     const height = size === "4k" ? 2160 : Math.round(base.height * size);
+    const canvas = this.picture(width, height, withOverlay);
+    if (!canvas) return;
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = el("a", { attrs: { href: url, download: `${s.model.project}-city.png` } });
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }, "image/png");
+  }
+
+  private picture(width: number, height: number, withOverlay: boolean): HTMLCanvasElement | undefined {
+    const s = this.state;
+    if (!s) return undefined;
     const canvas = this.scene.renderToCanvas(width, height);
     if (withOverlay) {
       const ctx = canvas.getContext("2d");
@@ -1232,12 +1321,6 @@ export class App {
           legend: s.legend,
         });
     }
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = el("a", { attrs: { href: url, download: `${s.model.project}-city.png` } });
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-    }, "image/png");
+    return canvas;
   }
 }

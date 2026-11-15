@@ -1,10 +1,13 @@
 export type { AnalysisResult, AnalyzeOptions } from "./analyze.js";
 export { ANALYZER_VERSION, analyze, slugFor, summaryLine } from "./analyze.js";
+export type { DiffOptions, DiffResult } from "./diff.js";
+export { buildDiff, defaultBranch, diffText, summarize } from "./diff.js";
 export type { DoctorReport } from "./doctor.js";
 export { doctor } from "./doctor.js";
 export type { LanguageConfig } from "./languages/index.js";
 export { LANGUAGES, languageForPath } from "./languages/index.js";
 export { outputRoot, readIndex, updateIndex, writeAnalysis } from "./output.js";
+export { parseSize, renderImage } from "./render.js";
 export type { RunningServer, ServerOptions } from "./server.js";
 export { defaultViewerDir, openBrowser, startServer } from "./server.js";
 export type { TimelineOptions, TimelineResult } from "./timeline.js";

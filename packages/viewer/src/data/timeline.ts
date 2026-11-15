@@ -26,6 +26,22 @@ export interface TimelineData {
   lastFrame: Int32Array;
 }
 
+const CHANGE_METRIC: MetricDefinition = {
+  id: "@change",
+  label: "Change since the previous frame",
+  definition: "What the frame did to the file: added, grown, shrunk or removed.",
+  computation: "The ground-area metric of the file in this frame minus its value in the previous frame.",
+  why: "Shows what a step, an issue or a branch did to the city.",
+  unit: "",
+  direction: "neutral",
+  kind: "number",
+  scope: "file",
+  level: 1,
+  limits: "Compares two frames only; a file that changed without growing or shrinking shows as unchanged.",
+  experimental: false,
+  retrospective: false,
+};
+
 /** A map whose values are computed the first time they are asked for. */
 class LazyMap<V> extends Map<string, V> {
   constructor(
@@ -125,6 +141,12 @@ export function buildTimelineData(
       m.folderStats = folderStats;
       m.metrics = metrics;
     }
+  }
+
+  if (models.length > 1) {
+    // the Change preset colors by what each frame did: available as soon as there is a previous frame
+    metrics.set(CHANGE_METRIC.id, CHANGE_METRIC);
+    for (const m of models) m.coverage.set(CHANGE_METRIC.id, 1);
   }
 
   return {

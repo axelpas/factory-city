@@ -28,6 +28,8 @@ import { findRepo } from "./source/git.js";
 export interface TimelineOptions {
   folder: string;
   by: "commit" | "day" | "issue";
+  /** Overrides the mode written in the manifest and the file names (used by `diff`). */
+  mode?: TimelineMode;
   /** No network: issue titles are not loaded; issues are still found from git data. */
   offline?: boolean;
   /** How `gh` is run; tests replay recorded output. */
@@ -255,7 +257,7 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
   if (!repo.hasCommits) throw new Error("This repository has no commit yet: there is no history to play.");
 
   const branch = opts.branch ?? "HEAD";
-  const mode: TimelineMode = opts.revs?.length ? "revs" : opts.by;
+  const mode: TimelineMode = opts.mode ?? (opts.revs?.length ? "revs" : opts.by);
   const config = await loadConfig(folder);
   const planWarnings: string[] = [];
   let coverage: CoverageReport | undefined;

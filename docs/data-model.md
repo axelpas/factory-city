@@ -37,3 +37,6 @@ Category codes are fixed (a language's code is its position in the analyzer's la
 In issue mode (`timeline.issue.json`) a frame also carries `issue` (`number`, and at data level 2 `title`, `state`, `labels`, `url`; `pullRequest` when known) or `unlinked: true`, and the manifest carries `coverage` (`commits`, `linked`, `byStrategy`, `issues`, `forge`). See `decisions/2026-11-15-issue-resolution.md`.
 
 Frame metrics also hold the retrospective `rework_after` (absent while `rework_after_pending` is true, or without provenance) and `caused_fixes` (experimental). `categories.main_agent` lists the author labels.
+
+## Diff summary
+`factory-city diff --json` prints a `DiffSummary`, validated by `packages/schema/src/schemas/diff-summary.schema.json`: `kind`, `schemaVersion`, `project`, `base` and `head` (`rev`, short `commit`), `files` (added, removed, modified, unchanged), `totals` (base, head, delta of files, real lines and complexity), `shortcuts` (`added`, `byKind`) and `biggest` (path, status, change of real lines and complexity). The diff itself is a two-frame timeline written as `timeline.diff.json` with `frames.diff/`.

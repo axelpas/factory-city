@@ -28,7 +28,13 @@ export function legendLines(model: Model, mapping: Mapping): LegendLine[] {
       text: reading(model, mapping.height, (h) => `taller = ${h}`),
     },
   ];
-  if (mapping.color) {
+  if (mapping.color === "@change") {
+    lines.push({
+      channel: "Color",
+      metric: label(mapping.color),
+      text: "blue = added or grown, red = removed or shrunk; removed files stay visible",
+    });
+  } else if (mapping.color) {
     const metric = model.metrics.get(mapping.color);
     const text =
       metric?.kind === "category"

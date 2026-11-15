@@ -15,3 +15,6 @@ Versions and licenses checked with `npm view` on 2026-11-14.
 
 ## Consequences
 MPL-2.0 is allowed only unmodified. Playwright is a peer or dev dependency; `render` explains how to install a browser when missing.
+
+## Addendum: headless rendering (milestone 8, 2026-11-15)
+Headless pictures use `playwright-core` 1.65.1 (Apache-2.0), an optional dependency of the analyzer: the same project as `playwright` without the browser download, so the core install downloads no browser. It drives the system's Google Chrome first, then a Chromium installed for Playwright; without either, the command says how to install one. The page exposes `window.factoryCity.ready` and `window.factoryCity.capture(width, height, overlay)`, so the picture comes from the viewer's own export code.

@@ -81,7 +81,7 @@ export function fileCard(model: Model, index: number, mapping: Mapping, fmt: For
     ["Twist", mapping.twist],
   ];
   for (const [role, id] of roles) {
-    if (!id) continue;
+    if (!id || id.startsWith("@")) continue;
     const row = metricRow(model, id, file.values, fmt);
     if (row) channels.push({ ...row, label: `${role}: ${row.label}` });
   }
