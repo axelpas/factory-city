@@ -61,19 +61,23 @@ export function factoryMarkdown(factory: Factory, options: FactoryMarkdownOption
       continue;
     }
     const values = Object.keys(group);
+    out.push("", `### By ${name}`, "");
+    // no comparison under 10 issues per group: a small group shows its size, not its values
+    if (!values.some((v) => group[v]?.comparable)) {
+      out.push(
+        `No group has 10 issues yet (${values.map((v) => `${v}: ${group[v]?.issues}`).join(", ")}): too few to compare.`,
+      );
+      continue;
+    }
+    const cell = (v: string, id: string, def: KpiDefinition) =>
+      group[v]?.comparable ? show(group[v]?.kpis[id], def) : "too few issues";
     out.push(
-      "",
-      `### By ${name}`,
-      "",
       `| KPI | ${values.map((v) => `${v} (${group[v]?.issues} issues)`).join(" | ")} |`,
       `|---|${values.map(() => "---").join("|")}|`,
     );
     for (const [id, def] of defs) {
-      if (values.every((v) => group[v]?.kpis[id]?.value === undefined)) continue;
-      out.push(`| ${def.label} | ${values.map((v) => show(group[v]?.kpis[id], def)).join(" | ")} |`);
-    }
-    if (values.some((v) => !group[v]?.comparable)) {
-      out.push("", "Groups under 10 issues are too small to compare: read their values as indications only.");
+      if (values.every((v) => !group[v]?.comparable || group[v]?.kpis[id]?.value === undefined)) continue;
+      out.push(`| ${def.label} | ${values.map((v) => cell(v, id, def)).join(" | ")} |`);
     }
   }
 

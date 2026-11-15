@@ -1,6 +1,6 @@
 import type { Layout, Rect } from "@factory-city/layout";
 import { computeLayout } from "@factory-city/layout";
-import type { Report } from "@factory-city/schema";
+import type { Factory, Report } from "@factory-city/schema";
 import { Animator } from "../anim/animator";
 import {
   type Available,
@@ -34,8 +34,10 @@ import {
 } from "../view/card";
 import { biggestChanges, CHANGE, changePlacements, type FileChange } from "../view/change";
 import { cssGradient, parseHex, toCss } from "../view/color";
+import { factoryView } from "../view/factory";
 import { healthView, trendPoints } from "../view/health";
 import { dataLevelLine, hiddenContentLine, legendLines } from "../view/legend";
+import { hiddenLensesLine } from "../view/lenses";
 import { type ColorLegend, computePlacements, computeTints } from "../view/placements";
 import { SCALE_KINDS, type ScaleKind } from "../view/scales";
 import { buildDelays, buildState } from "../view/state";
@@ -102,6 +104,12 @@ export class App {
     attrs: { "aria-label": "Code health", hidden: "" },
   });
   private report: Report | undefined;
+  private readonly factoryPanel = el("aside", {
+    class: "details health",
+    attrs: { "aria-label": "Factory", hidden: "" },
+  });
+  private factory: Factory | undefined;
+  private factoryPeriod: "last30" | "all" = "last30";
   private readonly status = el("footer", { class: "status" });
   private readonly projectSelect = el("select", {
     title: "Switch project",
@@ -164,6 +172,7 @@ export class App {
       this.card,
       this.details,
       this.healthPanel,
+      this.factoryPanel,
       this.helpDialog,
       this.dropZone,
     );
@@ -262,6 +271,8 @@ export class App {
       pinned: null,
     };
     this.report = loaded.report;
+    this.factory = loaded.factory;
+    this.factoryPanel.hidden = true;
     document.title = `${data.project} · Factory City`;
     this.animator = undefined;
     this.buildCity(false);
@@ -348,6 +359,7 @@ export class App {
       this.presetQuestion,
       el("span", { class: "spacer" }),
       button("Health", "Score, risk profile and hotspots (H)", () => this.toggleHealth()),
+      button("Factory", "Factory KPIs and the issues to look at (F)", () => this.toggleFactory()),
       button("Top view", "Look straight down (V)", () => this.scene.topView()),
       button("Reset", "Back to the default view (R)", () => this.scene.resetCamera()),
       exportMenu,
@@ -597,7 +609,7 @@ export class App {
       this.presetSelect.append(el("option", { text: "Custom", attrs: { value: "", selected: "" } }));
     for (const status of presetStatuses(s.ref)) {
       const o = el("option", {
-        text: `${status.preset.group} · ${status.preset.label}${status.available ? "" : " (unavailable)"}`,
+        text: `${status.preset.group} · ${status.preset.label}${status.preset.experimental ? " (experimental)" : ""}${status.available ? "" : " (unavailable)"}`,
         title: status.available ? status.preset.question : (status.reason ?? ""),
         attrs: { value: status.preset.id },
       });
@@ -1186,6 +1198,7 @@ export class App {
       ["V", "top view"],
       ["P", "next preset"],
       ["H", "code health: score, risk profile, hotspots"],
+      ["F", "factory: KPIs and the issues to look at"],
       ["E", "export a PNG"],
       ["?", "this help"],
       ["Esc", "close panels"],
@@ -1200,6 +1213,9 @@ export class App {
       }),
       el("p", { text: "n/a means a value could not be computed for that file: it is never shown as zero." }),
       sample,
+      ...(hiddenLensesLine(this.bar.lenses)
+        ? [el("p", { class: "muted", text: hiddenLensesLine(this.bar.lenses) })]
+        : []),
       el("h3", { text: "Keyboard" }),
       el(
         "dl",
@@ -1266,11 +1282,16 @@ export class App {
       case "H":
         this.toggleHealth();
         break;
+      case "f":
+      case "F":
+        this.toggleFactory();
+        break;
       case "?":
         this.toggleHelp();
         break;
       case "Escape":
         this.healthPanel.hidden = true;
+        this.factoryPanel.hidden = true;
         this.closeDetails();
         if (!this.helpDialog.hidden) this.hideHelp();
         break;
@@ -1290,12 +1311,125 @@ export class App {
 
   // ---------------------------------------------------------------- export
 
-  /** PNG of the current view at 1x, 2x or 4K, with or without the overlay. */
+  // --------------------------------------------------------------- factory
+
+  private toggleFactory(): void {
+    this.factoryPanel.hidden = !this.factoryPanel.hidden;
+    if (!this.factoryPanel.hidden) {
+      this.healthPanel.hidden = true;
+      this.closeDetails();
+      this.renderFactory();
+    }
+  }
+
+  private renderFactory(): void {
+    const view = factoryView(this.factory, this.factoryPeriod, format);
+    const panel = this.factoryPanel;
+    clear(panel);
+    const close = el("button", { text: "Close", title: "Close (Escape)", attrs: { type: "button" } });
+    close.addEventListener("click", () => {
+      panel.hidden = true;
+    });
+    panel.append(el("div", { class: "details-head" }, el("h2", { text: "Factory" }), close));
+    if (!view.available) {
+      panel.append(el("p", { class: "muted", text: view.reason ?? "" }));
+      return;
+    }
+    panel.append(el("p", { class: "muted", text: view.notice }));
+    const period = el("select", { title: "Period of the KPIs", attrs: { "aria-label": "Period" } });
+    for (const p of view.periods) {
+      const o = el("option", {
+        text: `${p.label} (${format.integer(p.issues)} issues)`,
+        attrs: { value: p.id },
+      });
+      if (p.id === view.period) o.selected = true;
+      period.append(o);
+    }
+    period.addEventListener("change", () => {
+      this.factoryPeriod = period.value as "last30" | "all";
+      this.renderFactory();
+    });
+    panel.append(period);
+    const hasPrevious = view.kpis.some((k) => k.previous !== undefined);
+    for (const k of view.kpis) {
+      panel.append(
+        el(
+          "div",
+          { class: "kpi", title: k.definition },
+          el(
+            "span",
+            { class: "k" },
+            k.label,
+            k.experimental ? el("i", { class: "badge", text: "experimental" }) : undefined,
+          ),
+          el("span", { class: k.value === "n/a" ? "v na" : "v", text: k.value }),
+          el(
+            "span",
+            { class: "note" },
+            k.reason ? `${k.reason} · ` : "",
+            k.sample,
+            hasPrevious && k.previous !== undefined ? ` · previous period: ${k.previous}` : "",
+          ),
+        ),
+      );
+    }
+    if (view.hidden) panel.append(el("p", { class: "muted", text: view.hidden }));
+    for (const g of view.groups) {
+      if (g.rows.length === 0) {
+        const sizes = g.columns.map((c) => `${c.value}: ${format.integer(c.issues)}`).join(", ");
+        panel.append(
+          el("p", {
+            class: "muted",
+            text: `By ${g.name}: no group has 10 issues yet (${sizes}), too few to compare.`,
+          }),
+        );
+        continue;
+      }
+      const table = el("table", { class: "groups" });
+      table.append(
+        el(
+          "tr",
+          {},
+          el("th", { text: `By ${g.name}` }),
+          ...g.columns.map((c) => el("th", { text: `${c.value} (${format.integer(c.issues)})` })),
+        ),
+      );
+      for (const row of g.rows)
+        table.append(
+          el("tr", {}, el("td", { text: row.label }), ...row.cells.map((c) => el("td", { text: c }))),
+        );
+      panel.append(table);
+      if (g.warn)
+        panel.append(
+          el("p", {
+            class: "muted",
+            text: "Groups under 10 issues are too small to compare: their values are not shown.",
+          }),
+        );
+    }
+    for (const list of view.lists) {
+      panel.append(el("h3", { text: list.title }));
+      for (const line of list.lines) {
+        const go = el("button", {
+          class: "link",
+          text: line.label,
+          title: "Go to this frame",
+          attrs: { type: "button" },
+        });
+        go.addEventListener("click", () => this.animator?.goTo(line.frame));
+        panel.append(
+          el("div", { class: "kv" }, go, el("span", { class: "v", text: format.number(line.value, 2) })),
+        );
+      }
+    }
+  }
+
   // ---------------------------------------------------------------- health
 
   private toggleHealth(): void {
     this.healthPanel.hidden = !this.healthPanel.hidden;
     if (!this.healthPanel.hidden) {
+      this.factoryPanel.hidden = true;
       this.closeDetails();
       this.renderHealth();
     }

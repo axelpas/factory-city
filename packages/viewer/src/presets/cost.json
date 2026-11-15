@@ -1,0 +1,11 @@
+{
+  "id": "cost",
+  "label": "Cost",
+  "group": "Factory",
+  "level": 3,
+  "experimental": true,
+  "question": "Where does the money go?",
+  "area": "rloc",
+  "height": "mcc",
+  "color": ["cost_share"]
+}

@@ -1,4 +1,11 @@
-import type { AnalysisManifest, CcJson, Report, TimelineManifest, TimelineMode } from "@factory-city/schema";
+import type {
+  AnalysisManifest,
+  CcJson,
+  Factory,
+  Report,
+  TimelineManifest,
+  TimelineMode,
+} from "@factory-city/schema";
 
 export interface ProjectList {
   current?: string;
@@ -12,6 +19,8 @@ export interface Loaded {
   manifest?: AnalysisManifest | TimelineManifest;
   /** Code-health report of the snapshot, or of the timeline's latest frame. */
   report?: Report;
+  /** Factory KPIs: written with a per-issue timeline. */
+  factory?: Factory;
 }
 
 /** What a project's data folder holds: a single snapshot and/or timelines, by mode. */
@@ -84,7 +93,9 @@ export async function loadSource(
   await Promise.all(Array.from({ length: Math.min(PARALLEL, files.length) }, worker));
   const reportFile = manifest.kind === "timeline" ? `report.${manifest.source.mode}.json` : "report.json";
   const report = await tryJson<Report>(`${base(slug)}${reportFile}`);
-  return { snapshots, manifest, report };
+  const perIssue = manifest.kind === "timeline" && manifest.source.mode === "issue";
+  const factory = perIssue ? await tryJson<Factory>(`${base(slug)}factory.json`) : undefined;
+  return { snapshots, manifest, report, factory };
 }
 
 function isCcJson(value: unknown): value is CcJson {

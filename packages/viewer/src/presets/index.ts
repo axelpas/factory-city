@@ -4,6 +4,7 @@ import bugMagnets from "./bug-magnets.json";
 import change from "./change.json";
 import cohesion from "./cohesion.json";
 import contention from "./contention.json";
+import cost from "./cost.json";
 import hotspots from "./hotspots.json";
 import language from "./language.json";
 import shortcuts from "./shortcuts.json";
@@ -18,6 +19,8 @@ export interface Preset {
   group: string;
   level: number;
   question: string;
+  /** Shown with an experimental badge. */
+  experimental?: boolean;
   area: string;
   height: string;
   /** Candidates in order: the first one available is used. */
@@ -38,6 +41,7 @@ export const PRESETS: readonly Preset[] = [
   waste as Preset,
   contention as Preset,
   agents as Preset,
+  cost as Preset,
   change as Preset,
 ];
 

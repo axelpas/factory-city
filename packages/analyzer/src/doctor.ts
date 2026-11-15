@@ -84,7 +84,7 @@ export async function doctor(folder: string): Promise<DoctorReport> {
       level: 2,
       levelName: "Forge",
       checks,
-      next: "Level 3 needs a facts file (agent, model, outcome, cost per issue); this version does not import facts yet.",
+      next: "Add a facts file (agent, model, outcome, cost per issue) to unlock level 3: factory-city timeline --by issue --facts <file>.",
     };
   }
   return { folder: dir, level: 1, levelName: "History", checks, next };

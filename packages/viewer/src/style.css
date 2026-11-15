@@ -632,3 +632,157 @@ summary::-webkit-details-marker {
   margin: 2px 0 0;
   padding-left: 18px;
 }
+
+.timeline {
+  position: absolute;
+}
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.strip[hidden] {
+  display: none;
+}
+.strip-svg {
+  flex: 1;
+  height: 30px;
+}
+.strip-svg polyline {
+  fill: none;
+  stroke: var(--c-accent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.strip-svg .now {
+  stroke: var(--c-text-muted);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.strip-value {
+  flex: none;
+  min-width: 48px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.tick {
+  width: 3px;
+  margin-left: -1px;
+  border-radius: 1px;
+}
+.kind-feature {
+  background: var(--c-kind-feature);
+}
+.kind-fix {
+  background: var(--c-kind-fix);
+}
+.kind-refactor {
+  background: var(--c-kind-refactor);
+}
+.kind-chore {
+  background: var(--c-kind-chore);
+}
+.kind-docs {
+  background: var(--c-kind-docs);
+}
+.kind-test {
+  background: var(--c-kind-test);
+}
+.kind-unknown {
+  background: var(--c-kind-unknown);
+}
+.mark {
+  position: absolute;
+  left: -1px;
+  width: 5px;
+  height: 5px;
+}
+.mark-ci {
+  top: 12px;
+  border-radius: 50%;
+  background: var(--c-kind-fix);
+}
+.mark-scope {
+  top: 12px;
+  left: -1px;
+  transform: rotate(45deg);
+  background: var(--c-kind-test);
+}
+.mark-quality {
+  top: -7px;
+  width: 0;
+  height: 0;
+  border: 3px solid transparent;
+  border-top-color: var(--c-risk-very-high);
+  background: none;
+}
+.mark-ci + .mark-scope {
+  top: 18px;
+}
+.frame-card {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  width: 280px;
+  z-index: 31;
+  pointer-events: none;
+  padding: 10px 12px;
+  background: var(--c-panel);
+  border: 1px solid var(--c-panel-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--c-text) 14%, transparent);
+}
+.frame-card[hidden] {
+  display: none;
+}
+.kpi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin: 6px 0;
+}
+.kpi .k {
+  flex: 1 1 60%;
+}
+.kpi .v {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.kpi .v.na {
+  color: var(--c-text-muted);
+  font-weight: 400;
+}
+.kpi .note {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: var(--c-text-muted);
+}
+.badge {
+  margin-left: 6px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-style: normal;
+  border: 1px solid var(--c-panel-border);
+  border-radius: 8px;
+  color: var(--c-text-muted);
+}
+.groups {
+  width: 100%;
+  margin: 10px 0 4px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.groups th,
+.groups td {
+  padding: 2px 4px;
+  text-align: right;
+  border-bottom: 1px solid var(--c-panel-border);
+}
+.groups th:first-child,
+.groups td:first-child {
+  text-align: left;
+}
+
+.details {
+  bottom: 176px;
+}

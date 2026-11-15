@@ -31,3 +31,6 @@ Known limits: one theme; plinths are rebuilt at once when the ground-area metric
 
 ## Health panel
 `view/health.ts` builds what the panel shows (key H): the score with its notice, the score trend across frames, what the frame did (score change, hotspots created and resolved), the risk profile as bars with exact shares and thresholds, the hotspots with their suggested actions (a click flies to the building) and the experimental hidden links. It reads `report.json`; in a timeline the score and profile follow the playhead, and the suggested actions describe the latest frame.
+
+## Lenses and Factory panel
+`view/lenses.ts` puts the frame metrics on the timeline bar: ticks colored by the kind of the step, markers (failed first CI run, scope gap, lower score), a trend strip that follows the playhead with a choice of series (files, real lines, complexity, score, rework afterwards, fix share, CI attempts, cost) and a card for the frame under the pointer. A series with under two values is not offered, and the help says what would show it. `view/factory.ts` builds the Factory panel (key F) from `factory.json`: KPIs with their sample size and the previous period, groups side by side from 10 issues each, and the issues to look at; a click jumps to the frame. The Cost preset is experimental and needs a facts file with a cost.

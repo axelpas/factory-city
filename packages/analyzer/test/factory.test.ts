@@ -455,11 +455,29 @@ describe("factory section of the report", () => {
     expect(md).toContain("| Change fail rate (experimental) |");
   });
 
-  it("puts groups side by side with their sizes, and warns about small ones", () => {
+  it("does not compare groups under 10 issues: it shows their sizes only", () => {
     const md = factoryMarkdown(factory, { period: "all", by: "agent" });
     expect(md).toContain("### By agent");
-    expect(md).toContain("a (3 issues) | b (3 issues)");
-    expect(md).toContain("Groups under 10 issues are too small to compare");
+    expect(md).toContain("No group has 10 issues yet (a: 3, b: 3): too few to compare.");
+    expect(md).not.toContain("| KPI | a (3 issues)");
+  });
+
+  it("puts large enough groups side by side with their sizes, and leaves small ones out of the comparison", () => {
+    const many = Array.from({ length: 24 }, (_, i) => ({
+      ...frame(
+        i % 28,
+        { kind: "feature" },
+        { agent: i < 12 ? "a" : i < 22 ? "b" : "c", agent_minutes: i < 12 ? 10 : 30, cost: 1 },
+      ),
+      index: i,
+      issue: { number: i + 1 },
+    }));
+    const md = factoryMarkdown(
+      computeFactory({ project: "demo", analyzerVersion: "t", dataLevel: 3, frames: many }),
+      { period: "all", by: "agent" },
+    );
+    expect(md).toContain("| KPI | a (12 issues) | b (10 issues) | c (2 issues) |");
+    expect(md).toContain("| Minutes per issue | 10 | 30 | too few issues |");
   });
 
   it("hides the KPIs of higher levels and says how many there are", () => {

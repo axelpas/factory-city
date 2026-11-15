@@ -576,6 +576,22 @@ export const METRICS: readonly MetricDefinition[] = [
     experimental: true,
     retrospective: true,
   }),
+  metric({
+    id: "cost_share",
+    higherMeans: "more money spent there",
+    label: "Cost share",
+    definition:
+      "Cost of the issues that touched the file, split in proportion to the lines each one changed there.",
+    computation:
+      "For each issue with a cost in the facts file, its cost is shared among the files it changed by lines added and deleted, and summed per file up to the frame.",
+    why: "Shows where the money goes.",
+    unit: "cost",
+    direction: "neutral",
+    level: 3,
+    limits:
+      "Only as good as the facts file. Lines changed are a rough proxy for effort. Unavailable for files no costed issue touched.",
+    experimental: true,
+  }),
 ];
 
 const BY_ID = new Map(METRICS.map((m) => [m.id, m]));

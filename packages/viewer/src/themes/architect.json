@@ -23,7 +23,14 @@
     "riskLow": "#cfe0ee",
     "riskModerate": "#f2d58a",
     "riskHigh": "#e3915a",
-    "riskVeryHigh": "#9c3a3f"
+    "riskVeryHigh": "#9c3a3f",
+    "kindFeature": "#3f7ba8",
+    "kindFix": "#c0504d",
+    "kindRefactor": "#7a6aa8",
+    "kindChore": "#8a8a82",
+    "kindDocs": "#4f9a7a",
+    "kindTest": "#c79a3a",
+    "kindUnknown": "#b4afa0"
   },
   "ramps": {
     "sequential": ["#eaf0f6", "#b9cfe3", "#7aa6c9", "#3f7ba8", "#1d4f7c"],

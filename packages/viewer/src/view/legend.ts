@@ -81,7 +81,7 @@ export function dataLevelLine(model: Model): string {
   }
   if (level === 2)
     return "Data level 2 (forge): issue titles come from GitHub. A facts file unlocks level 3.";
-  if (level >= 3) return `Data level ${level}.`;
+  if (level >= 3) return "Data level 3 (facts): agent, model, outcome and cost come from your facts file.";
   const next = m?.git.available
     ? "Git history is available in this repository: it will unlock level 1 (changes, fixes)."
     : "Analyze a git repository to unlock level 1 (history).";
