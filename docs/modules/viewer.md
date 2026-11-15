@@ -8,6 +8,7 @@ The static web app (Vite, three.js, no UI framework). It reads `snapshot.cc.json
 - `view/`: pure logic: scales (linear, sqrt, log, 99th-percentile clamp), color ramps, placements (a building never leaves its parcel), hover card and legend builders. Unit-tested.
 - `scene/CityScene.ts`: instanced boxes for buildings and plinths, edges, shadows, exact picking by ray casting, offscreen rendering for export.
 - `ui/`: pickers with registry-based help, legend, hover card, details panel, first-open help, PNG export with optional overlay.
+- `ui/popovers.ts`: one rule for every menu and help popover (a `details` element with the `popover` class): one open at a time, closed by Escape before any panel, or by a press outside. Interface behavior is checked in a real browser by `packages/analyzer/test/ui.test.ts` (page scripts run through `probePage`).
 - `lib/format.ts`: the single place that turns numbers and dates into text (browser locale, fallback `fr-CH`).
 
 The analyzer's `view` command serves the built viewer from `packages/viewer/dist`, located by path (`FACTORY_CITY_VIEWER` overrides it). It is never imported.

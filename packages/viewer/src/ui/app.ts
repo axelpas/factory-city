@@ -45,6 +45,7 @@ import { SCALE_KINDS, type ScaleKind } from "../view/scales";
 import { buildDelays, buildState } from "../view/state";
 import { blockLegend, blockSize, voxelize } from "../view/voxel";
 import { drawOverlay } from "./overlay";
+import { closePopovers, watchPopovers } from "./popovers";
 import { TimelineBar } from "./timeline-bar";
 
 function dirOf(path: string): string {
@@ -367,7 +368,7 @@ export class App {
     });
     const exportMenu = el(
       "details",
-      { class: "menu" },
+      { class: "menu popover" },
       el("summary", { text: "Export", title: "Export the current view as a PNG (E)" }),
     );
     const overlay = el("input", { attrs: { type: "checkbox", checked: "" } });
@@ -606,7 +607,7 @@ export class App {
     });
     const help = el(
       "details",
-      { class: "metric-help" },
+      { class: "metric-help popover" },
       el("summary", { text: "?", title: `What does this ${label.toLowerCase()} metric mean?` }),
       this.metricHelp(current),
     );
@@ -992,6 +993,7 @@ export class App {
       this.onClick(e);
     });
     window.addEventListener("keydown", (e) => this.onKey(e));
+    watchPopovers(document);
     window.addEventListener("dragover", (e) => {
       e.preventDefault();
       this.dropZone.hidden = false;
@@ -1385,6 +1387,8 @@ export class App {
         this.toggleHelp();
         break;
       case "Escape":
+        // a menu or a help popover closes first; the panels stay
+        if (closePopovers(document)) break;
         this.healthPanel.hidden = true;
         this.factoryPanel.hidden = true;
         this.closeDetails();

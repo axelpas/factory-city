@@ -15,7 +15,7 @@ export type { LanguageConfig } from "./languages/index.js";
 export { LANGUAGES, languageForPath } from "./languages/index.js";
 export { outputRoot, readIndex, updateIndex, writeAnalysis } from "./output.js";
 export { redactBundle } from "./redact.js";
-export { parseSize, probeImages, renderImage, renderVideo } from "./render.js";
+export { parseSize, probeImages, probePage, renderImage, renderVideo } from "./render.js";
 export type { RunningServer, ServerOptions } from "./server.js";
 export { defaultViewerDir, openBrowser, startServer } from "./server.js";
 export { buildStandalone, formatBytes, writeStandalone } from "./standalone.js";

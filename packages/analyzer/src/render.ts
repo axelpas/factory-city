@@ -178,6 +178,17 @@ export async function probeImages(
   );
 }
 
+/**
+ * Runs a script in the viewer's page once it is ready, and returns its result: for checks of the interface
+ * in a real browser.
+ */
+export async function probePage<T>(
+  options: Omit<RenderImageOptions, "out" | "overlay">,
+  script: string,
+): Promise<T> {
+  return withPage(options, (page) => page.evaluate<T>(script));
+}
+
 /** Parses `1920x1080`. */
 export function parseSize(
   text: string | undefined,

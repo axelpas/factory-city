@@ -93,7 +93,8 @@ summary::-webkit-details-marker {
   position: absolute;
   right: 0;
   top: calc(100% + 4px);
-  z-index: 20;
+  /* above every panel and the hover card, under the drop overlay */
+  z-index: 48;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -151,6 +152,10 @@ summary::-webkit-details-marker {
   width: 100%;
   margin: 4px 0;
 }
+.metric-help {
+  position: relative;
+  flex: none;
+}
 .metric-help summary {
   padding: 0 6px;
   border-radius: 50%;
@@ -161,6 +166,18 @@ summary::-webkit-details-marker {
   font-size: 12px;
   background: var(--c-background);
   border-radius: 6px;
+}
+/* the help of a channel opens as a popover under its button: the row keeps its layout */
+.metric-help .help-body {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 48;
+  width: 236px;
+  margin: 0;
+  white-space: normal;
+  border: 1px solid var(--c-panel-border);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--c-text) 14%, transparent);
 }
 .help-body p {
   margin: 4px 0;
