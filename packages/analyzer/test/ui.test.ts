@@ -22,6 +22,47 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
     expect(r.overlapping).toEqual([]);
   });
 
+  it("shows the preset and its whole question in the bar of a 1280 px window, with three selects at most", async () => {
+    const r = await inPage<{
+      question: string;
+      cut: boolean;
+      barHeight: number;
+      selects: number;
+      outside: string[];
+      groups: string[];
+      disabled: number;
+    }>(
+      `
+      const bar = document.querySelector(".bar");
+      const question = bar.querySelector(".question");
+      const items = [...bar.children].filter((c) => !c.hidden && c.getBoundingClientRect().width > 0);
+      const outside = items
+        .filter((c) => box(c).right > box(bar).right || box(c).bottom > box(bar).bottom + 1)
+        .map((c) => (c.textContent || c.tagName).slice(0, 12));
+      document.querySelector(".lens-menu > summary").click();
+      await wait(60);
+      return {
+        question: question.textContent,
+        cut: question.scrollWidth > question.clientWidth + 1 || question.scrollHeight > question.clientHeight + 1,
+        barHeight: box(bar).h,
+        selects: [...bar.children].filter((c) => c.tagName === "SELECT" && !c.hidden).length,
+        outside,
+        groups: [...document.querySelectorAll(".lens-list .menu-group")].map((g) => g.textContent),
+        disabled: document.querySelectorAll(".lens-list button:disabled").length,
+      };
+    `,
+      { width: 1280, height: 760 },
+    );
+    expect(r.question).toMatch(/\?$/);
+    expect(r.cut).toBe(false);
+    expect(r.barHeight).toBeLessThanOrEqual(60);
+    expect(r.selects).toBeLessThanOrEqual(3);
+    expect(r.outside).toEqual([]);
+    expect(r.groups).toEqual(["Code", "History", "Factory", "Compare"]);
+    // some presets need data this sample lacks: they are listed, disabled
+    expect(r.disabled).toBeGreaterThan(0);
+  });
+
   it("opens the help of a channel as a popover: the row keeps its layout", async () => {
     const r = await inPage<{
       before: number;
@@ -46,7 +87,7 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
   it("closes menus and popovers the same way: one at a time, Escape, a press outside", async () => {
     const r = await inPage<Record<string, boolean>>(`
       const help = document.querySelector(".picker details.metric-help");
-      const menu = document.querySelector("details.menu");
+      const menu = document.querySelector("details.export-menu");
       const toggle = async (d) => { d.querySelector("summary").click(); await wait(60); };
       await toggle(help);
       await toggle(menu);
@@ -66,7 +107,7 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
 
   it("draws the Export menu above the right panel, and Escape closes the menu before the panel", async () => {
     const r = await inPage<Record<string, boolean>>(`
-      const menu = document.querySelector("details.menu");
+      const menu = document.querySelector("details.export-menu");
       const health = document.querySelector(".health");
       key("h");
       await wait(60);

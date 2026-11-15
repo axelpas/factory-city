@@ -45,6 +45,8 @@ import { type ColorLegend, computePlacements, computeTints } from "../view/place
 import { SCALE_KINDS, type ScaleKind } from "../view/scales";
 import { buildDelays, buildState } from "../view/state";
 import { blockLegend, blockSize, voxelize } from "../view/voxel";
+import { type IconName, icon } from "./icons";
+import { lensGroups, renderLensButton, renderLensList } from "./lens";
 import { drawOverlay } from "./overlay";
 import { closePopovers, watchPopovers } from "./popovers";
 import { TimelineBar } from "./timeline-bar";
@@ -135,9 +137,28 @@ export class App {
     title: "Single snapshot, or a timeline per commit or per day",
     attrs: { "aria-label": "Snapshot or timeline", hidden: "" },
   });
-  private readonly presetSelect = el("select", {
-    title: "Presets set all channels at once and answer one question",
+  /** The preset picker: the main control of the bar. Each preset is listed with the question it answers. */
+  private readonly lensButton = el("summary", {
+    title: "Presets set all channels at once and answer one question (P: next preset)",
     attrs: { "aria-label": "Preset" },
+  });
+  private readonly lensList = el("div", { class: "menu-list lens-list" });
+  private readonly lensMenu = el(
+    "details",
+    { class: "menu popover lens-menu" },
+    this.lensButton,
+    this.lensList,
+  );
+  private readonly appearanceList = el("div", { class: "menu-list" });
+  private readonly healthButton = el("button", {
+    text: "Health",
+    title: "Score, risk profile and hotspots (H)",
+    attrs: { type: "button", "aria-pressed": "false" },
+  });
+  private readonly factoryButton = el("button", {
+    text: "Factory",
+    title: "Factory KPIs and the issues to look at (F)",
+    attrs: { type: "button", "aria-pressed": "false" },
   });
   private readonly presetQuestion = el("span", { class: "question" });
   private readonly themeSelect = el("select", {
@@ -367,7 +388,14 @@ export class App {
       b.addEventListener("click", onClick);
       return b;
     };
-    this.presetSelect.addEventListener("change", () => this.choosePreset(this.presetSelect.value));
+    const iconButton = (name: IconName, label: string, title: string, onClick: () => void) => {
+      const b = el("button", { title, class: "icon quiet", attrs: { type: "button", "aria-label": label } });
+      b.append(icon(name));
+      b.addEventListener("click", onClick);
+      return b;
+    };
+    this.healthButton.addEventListener("click", () => this.toggleHealth());
+    this.factoryButton.addEventListener("click", () => this.toggleFactory());
     for (const t of THEMES) {
       const o = el("option", { text: t.label, attrs: { value: t.id } });
       if (t.id === this.theme.id) o.selected = true;
@@ -386,9 +414,32 @@ export class App {
     });
     const exportMenu = el(
       "details",
-      { class: "menu popover" },
-      el("summary", { text: "Export", title: "Export the current view as a PNG (E)" }),
+      { class: "menu popover export-menu" },
+      el(
+        "summary",
+        {
+          class: "icon quiet",
+          title: "Export a picture, or the timelapse as a video (E: PNG)",
+          attrs: { "aria-label": "Export" },
+        },
+        icon("export"),
+      ),
     );
+    const appearance = el(
+      "details",
+      { class: "menu popover" },
+      el(
+        "summary",
+        {
+          class: "icon quiet",
+          title: "Appearance: theme (T: next theme) and motion",
+          attrs: { "aria-label": "Appearance" },
+        },
+        icon("appearance"),
+      ),
+      this.appearanceList,
+    );
+    this.renderAppearance();
     const overlay = el("input", { attrs: { type: "checkbox", checked: "" } });
     const options: Array<[string, number | "4k"]> = [
       ["PNG 1x", 1],
@@ -437,17 +488,63 @@ export class App {
       el("strong", { class: "brand", text: "Factory City" }),
       this.projectSelect,
       this.sourceSelect,
-      this.presetSelect,
-      this.themeSelect,
+      // what is asked of the city: the preset and its question
+      this.lensMenu,
       this.presetQuestion,
       el("span", { class: "spacer" }),
-      button("Health", "Score, risk profile and hotspots (H)", () => this.toggleHealth()),
-      button("Factory", "Factory KPIs and the issues to look at (F)", () => this.toggleFactory()),
-      button("Top view", "Look straight down (V)", () => this.scene.topView()),
-      button("Reset", "Back to the default view (R)", () => this.scene.resetCamera()),
+      // panels
+      this.healthButton,
+      this.factoryButton,
+      el("span", { class: "bar-rule" }),
+      // view and page actions
+      iconButton("top", "Top view", "Top view: look straight down (V)", () => this.scene.topView()),
+      iconButton("reset", "Reset the view", "Reset the view (R)", () => this.scene.resetCamera()),
+      appearance,
       exportMenu,
-      button("?", "How to read this city, and keyboard shortcuts (?)", () => this.toggleHelp(), "icon"),
+      button("?", "How to read this city, and keyboard shortcuts (?)", () => this.toggleHelp(), "icon quiet"),
     );
+  }
+
+  /** The appearance menu: theme, motion, and the effects of the theme in force. None of it carries data. */
+  private renderAppearance(): void {
+    const motion = el("select", {
+      title: "Auto follows your system's reduced-motion setting",
+      attrs: { "aria-label": "Motion" },
+    });
+    for (const [value, label] of [
+      ["auto", "auto"],
+      ["full", "full"],
+      ["reduced", "reduced"],
+    ] as const) {
+      const o = el("option", { text: label, attrs: { value } });
+      if (value === this.motion) o.selected = true;
+      motion.append(o);
+    }
+    motion.addEventListener("change", () => {
+      this.motion = motion.value as MotionSetting;
+      safeStorage(() => localStorage.setItem(MOTION_KEY, this.motion));
+      this.applyMotion();
+    });
+    this.appearanceList.replaceChildren(
+      el("label", { class: "field" }, el("span", { text: "Theme" }), this.themeSelect),
+      el("label", { class: "field" }, el("span", { text: "Motion" }), motion),
+    );
+    if (this.theme.effects?.glow) {
+      const glow = el("input", { attrs: { type: "checkbox" } });
+      glow.checked = this.glow;
+      glow.addEventListener("change", () => {
+        this.glow = glow.checked;
+        this.scene.setGlow(this.glow);
+      });
+      this.appearanceList.append(
+        el(
+          "label",
+          { class: "check", title: "A soft glow around the edges; it carries no data" },
+          glow,
+          " edge glow",
+        ),
+      );
+    }
   }
 
   private fillProjectSelect(
@@ -559,41 +656,7 @@ export class App {
       s.tests = tests.value as TestsMode;
       this.refresh();
     });
-    const motion = el("select", {
-      title: "Auto follows your system's reduced-motion setting",
-      attrs: { "aria-label": "Motion" },
-    });
-    for (const [value, label] of [
-      ["auto", "Motion: auto"],
-      ["full", "Motion: full"],
-      ["reduced", "Motion: reduced"],
-    ] as const) {
-      const o = el("option", { text: label, attrs: { value } });
-      if (value === this.motion) o.selected = true;
-      motion.append(o);
-    }
-    motion.addEventListener("change", () => {
-      this.motion = motion.value as MotionSetting;
-      safeStorage(() => localStorage.setItem(MOTION_KEY, this.motion));
-      this.applyMotion();
-    });
-    this.panel.append(search, tests, motion);
-    if (this.theme.effects?.glow) {
-      const glow = el("input", { attrs: { type: "checkbox", checked: "" } });
-      glow.checked = this.glow;
-      glow.addEventListener("change", () => {
-        this.glow = glow.checked;
-        this.scene.setGlow(this.glow);
-      });
-      this.panel.append(
-        el(
-          "label",
-          { class: "check", title: "A soft glow around the edges; it carries no data" },
-          glow,
-          " edge glow",
-        ),
-      );
-    }
+    this.panel.append(search, tests);
     this.panel.append(this.legendBox, this.changesBox);
   }
 
@@ -736,20 +799,19 @@ export class App {
   private updatePresetSelect(): void {
     const s = this.state;
     if (!s) return;
-    clear(this.presetSelect);
-    if (!s.preset)
-      this.presetSelect.append(el("option", { text: "Custom", attrs: { value: "", selected: "" } }));
-    for (const status of presetStatuses(s.ref, this.report?.dimensions)) {
-      const o = el("option", {
-        text: `${status.preset.group} · ${status.preset.label}${status.preset.experimental ? " (experimental)" : ""}${status.available ? "" : " (unavailable)"}`,
-        title: status.available ? status.preset.question : (status.reason ?? ""),
-        attrs: { value: status.preset.id },
-      });
-      o.disabled = !status.available;
-      if (s.preset?.id === status.preset.id) o.selected = true;
-      this.presetSelect.append(o);
-    }
-    this.presetQuestion.textContent = s.preset?.question ?? "Custom mapping";
+    const statuses = presetStatuses(s.ref, this.report?.dimensions);
+    renderLensButton(this.lensButton, s.preset?.label ?? "Custom");
+    renderLensList(
+      this.lensList,
+      lensGroups(statuses, s.ref.manifest?.dataLevel ?? 0),
+      s.preset?.id,
+      (id) => {
+        this.lensMenu.open = false;
+        this.choosePreset(id);
+      },
+    );
+    this.presetQuestion.textContent =
+      s.preset?.question ?? "Your own mapping: channels were changed by hand.";
   }
 
   // --------------------------------------------------------------- refresh
@@ -1463,6 +1525,7 @@ export class App {
     this.scene.applyTheme(theme);
     this.scene.setGlow(this.glow);
     this.themeSelect.value = theme.id;
+    this.renderAppearance();
     if (!s) return;
     // a theme may prefer a scale (Blocks counts whole blocks); leaving it gives the previous scale back
     if (this.scaleBeforeTheme && !theme.scale) {
@@ -1816,6 +1879,8 @@ export class App {
     const right = this.rightPanels()
       .map(shown)
       .filter((r) => r !== undefined);
+    this.healthButton.setAttribute("aria-pressed", String(!this.healthPanel.hidden));
+    this.factoryButton.setAttribute("aria-pressed", String(!this.factoryPanel.hidden));
     this.scene.setFreeArea({
       top: header ? header.bottom - stage.top : 0,
       left: left ? left.right - stage.left : 0,
