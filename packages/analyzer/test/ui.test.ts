@@ -2,6 +2,26 @@ import { describe, expect, it } from "vitest";
 import { canRender, inPage } from "./ui-helpers.js";
 
 describe.skipIf(!canRender)("viewer interface in a real browser", () => {
+  it("lays the top bar out on one line: every control inside the bar, none over another", async () => {
+    const r = await inPage<{ outside: string[]; overlapping: string[]; count: number }>(`
+      const bar = box(document.querySelector(".bar"));
+      const items = [...document.querySelector(".bar").children]
+        .filter((c) => !c.hidden && !c.classList.contains("spacer"))
+        .map((c) => ({ name: (c.textContent || c.tagName).slice(0, 12), ...box(c.tagName === "DETAILS" ? c.querySelector("summary") : c) }));
+      const outside = items
+        .filter((i) => i.x < bar.x || i.right > bar.right || i.y < bar.y || i.bottom > bar.bottom)
+        .map((i) => i.name);
+      const overlapping = [];
+      for (let a = 0; a < items.length; a++)
+        for (let b = a + 1; b < items.length; b++)
+          if (items[a].x < items[b].right - 1 && items[b].x < items[a].right - 1) overlapping.push(items[a].name + "/" + items[b].name);
+      return { outside, overlapping, count: items.length };
+    `);
+    expect(r.count).toBeGreaterThan(6);
+    expect(r.outside).toEqual([]);
+    expect(r.overlapping).toEqual([]);
+  });
+
   it("opens the help of a channel as a popover: the row keeps its layout", async () => {
     const r = await inPage<{
       before: number;

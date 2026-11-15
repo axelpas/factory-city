@@ -6,6 +6,7 @@ import {
   D,
   G,
   H,
+  MARK,
   MAX_DELAY,
   MODE,
   PRESENCE,
@@ -14,7 +15,6 @@ import {
   ROOF,
   STRIDE,
   TOUCHED,
-  TWIST,
   W,
   X,
   Y,
@@ -64,7 +64,7 @@ attribute vec3 aPosA;
 attribute vec3 aPosB;
 attribute vec3 aSizeA;
 attribute vec3 aSizeB;
-attribute vec4 aMiscA; // twist, ramp, mode, roof
+attribute vec4 aMiscA; // marker, ramp, mode, roof
 attribute vec4 aMiscB;
 attribute vec3 aColA;
 attribute vec3 aColB;
@@ -128,24 +128,19 @@ float fcEase(float t) {
 float fcLocal() {
   return fcEase(clamp((uProgress - aDelay) / (1.0 - ${MAX_DELAY.toFixed(4)}), 0.0, 1.0));
 }
-vec3 fcRotate(vec3 v, float angle) {
-  float c = cos(angle);
-  float s = sin(angle);
-  return vec3(v.x * c + v.z * s, v.y, -v.x * s + v.z * c);
-}
 vec3 fcPosition(vec3 p) {
   float e = fcLocal();
   vec3 size = mix(aSizeA, aSizeB, e);
-  float twist = mix(aMiscA.x, aMiscB.x, e);
   vec3 base = mix(aPosA, aPosB, e);
   float shown = step(0.001, size.y);
-  return base + fcRotate(p * size, twist) * shown;
+  return base + p * size * shown;
 }
 `;
 
 const FRAGMENT_COMMON = /* glsl */ `
 uniform vec3 uEdgeColor;
 uniform vec3 uTouchColor;
+uniform vec3 uMarkColor;
 // thickness of the building edges, in rendered pixels
 uniform float uEdgeWidth;
 // 0 solid, 1 blocks, 2 wireframe
@@ -212,6 +207,7 @@ export class CityScene {
     uEdgeColor: { value: new THREE.Vector3() },
     uEdgeWidth: { value: 1 },
     uTouchColor: { value: new THREE.Vector3() },
+    uMarkColor: { value: new THREE.Vector3() },
     uLotColor: { value: new THREE.Vector3() },
     uMode: { value: 0 },
     uBlock: { value: 8 },
@@ -408,6 +404,7 @@ export class CityScene {
     (this.hoverFolder.material as THREE.LineBasicMaterial).color = c("folderHover");
     this.uniforms.uEdgeColor.value = v("buildingEdge");
     this.uniforms.uTouchColor.value = v("accent");
+    this.uniforms.uMarkColor.value = v("marker");
     this.uniforms.uLotColor.value = v("plinthEdge");
     this.uniforms.uMode.value = theme.renderer === "voxel" ? 1 : theme.renderer === "wireframe" ? 2 : 0;
     this.uniforms.uFaceAlpha.value = theme.effects?.faceAlpha ?? 0.12;
@@ -524,7 +521,7 @@ export class CityScene {
       patchVertex(shader);
       shader.vertexShader = shader.vertexShader.replace(
         "#include <beginnormal_vertex>",
-        /* glsl */ `vec3 objectNormal = fcRotate(normal, mix(aMiscA.x, aMiscB.x, fcLocal()));`,
+        /* glsl */ `vec3 objectNormal = vec3(normal);`,
       );
       shader.fragmentShader = shader.fragmentShader
         .replace("#include <common>", `#include <common>\n${FRAGMENT_COMMON}`)
@@ -549,6 +546,18 @@ export class CityScene {
             float onRoof = step(0.999, vBox.y) * step(0.001, roof);
             float half_ = 0.125 + 0.275 * roof;
             float mark = onRoof * step(top.x, half_) * step(top.y, half_);
+            // marker: a ring on the roof of the files above the threshold, outlined so that its shape
+            // reads on any roof color
+            float marked = mix(vMiscA.x, vMiscB.x, vEase) * step(0.999, vBox.y);
+            float reach = max(top.x, top.y);
+            float ring = marked * step(0.3, reach) * step(reach, 0.42);
+            float ringWidth = fwidth(reach) * 1.2;
+            float ringLine =
+              marked *
+              max(
+                1.0 - smoothstep(0.0, ringWidth, abs(reach - 0.3)),
+                1.0 - smoothstep(0.0, ringWidth, abs(reach - 0.42))
+              );
             if (uMode > 0.5 && uMode < 1.5) {
               // blocks: seams between the cubes of the stack, and a small shade per cube, both procedural
               vec3 p = (vBox + vec3(0.5, 0.0, 0.5)) * max(vSize, vec3(0.0001)) / uBlock;
@@ -566,10 +575,11 @@ export class CityScene {
               // wireframe: luminous edges, faint faces, an optional capped glow around the edges
               float halo = (1.0 - smoothstep(0.0, fwidth(mid) * 10.0, mid)) * uGlow;
               float alpha = max(max(edge, touchEdge), max(halo * 0.55, uFaceAlpha));
-              vec3 wire = mix(col, uTouchColor, touchEdge);
-              fcWire = vec4(wire, alpha);
+              vec3 wire = mix(mix(col, uTouchColor, touchEdge), uMarkColor, ring);
+              fcWire = vec4(wire, max(alpha, ring * 0.9));
             }
-            col = mix(col, uEdgeColor, max(edge * 0.85, mark * 0.7));
+            col = mix(col, uMarkColor, ring * 0.92);
+            col = mix(col, uEdgeColor, max(max(edge, ringLine) * 0.85, mark * 0.7));
             col = mix(col, uTouchColor, touchEdge * 0.75);
             diffuseColor.rgb = fcToLinear(col);
           }`,
@@ -720,7 +730,7 @@ export class CityScene {
       size.setXYZ(i, s[o + W] as number, s[o + H] as number, s[o + D] as number);
       misc.setXYZW(
         i,
-        s[o + TWIST] as number,
+        s[o + MARK] as number,
         s[o + RAMP] as number,
         s[o + MODE] as number,
         s[o + ROOF] as number,
@@ -832,7 +842,6 @@ export class CityScene {
         h * 1.01,
         (state[o + D] as number) * 1.01,
       );
-      this.hoverBuilding.rotation.y = state[o + TWIST] as number;
       this.hoverBuilding.visible = true;
     } else if (pick?.kind === "lot") {
       const p = this.parcels[pick.index];

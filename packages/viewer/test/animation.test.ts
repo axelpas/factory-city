@@ -8,11 +8,11 @@ import {
   G,
   H,
   localProgress,
+  MARK,
   MAX_DELAY,
   PRESENCE,
   R,
   STRIDE,
-  TWIST,
   W,
   X,
   Y,
@@ -49,7 +49,7 @@ function animator(options: { reduced?: boolean } = {}) {
   return { a, log, ...s };
 }
 
-const GEOMETRY = [X, Y, Z, W, H, D, TWIST, PRESENCE] as const;
+const GEOMETRY = [X, Y, Z, W, H, D, MARK, PRESENCE] as const;
 const COLOR = [R, G, B] as const;
 
 /** Largest change of each visible channel between two pictures. A building with no height shows nothing. */

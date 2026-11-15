@@ -40,7 +40,6 @@ export function voxelize(p: Placement, parcel: Rect, block: number, theme: Theme
     w,
     d,
     h: Math.max(1, Math.round(p.h / block)) * block,
-    twist: 0,
     ramp,
     color,
   };

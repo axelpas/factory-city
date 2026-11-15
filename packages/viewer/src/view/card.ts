@@ -78,14 +78,14 @@ export function fileCard(model: Model, index: number, mapping: Mapping, fmt: For
     ["Area", mapping.area],
     ["Height", mapping.height],
     ["Color", mapping.color],
-    ["Twist", mapping.twist],
+    ["Marker", mapping.marker?.metric ?? null],
   ];
   for (const [role, id] of roles) {
     if (!id || id.startsWith("@")) continue;
     const row = metricRow(model, id, file.values, fmt);
     if (row) channels.push({ ...row, label: `${role}: ${row.label}` });
   }
-  const mapped = new Set([mapping.area, mapping.height, mapping.color, mapping.twist]);
+  const mapped = new Set([mapping.area, mapping.height, mapping.color, mapping.marker?.metric]);
   const metrics = KEY_METRICS.filter((id) => !mapped.has(id))
     .map((id) => metricRow(model, id, file.values, fmt))
     .filter((r): r is CardRow => r !== undefined);
@@ -176,7 +176,7 @@ export function frameChangeRows(
   const before = previous ? previous.model.files[previous.modelIndex[union] as number] : undefined;
   if (now && previous && !before) rows.push({ label: "This frame", value: "added the file" });
   if (now && before) {
-    for (const id of new Set([mapping.area, mapping.height, mapping.color, mapping.twist])) {
+    for (const id of new Set([mapping.area, mapping.height, mapping.color, mapping.marker?.metric])) {
       if (!id) continue;
       const metric = current.model.metrics.get(id);
       const a = before.values[id];

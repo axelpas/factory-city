@@ -7,5 +7,5 @@
   "area": "rloc",
   "height": "mcc",
   "color": ["imports_out"],
-  "twist": "lack_of_cohesion"
+  "marker": "cohesion_groups"
 }

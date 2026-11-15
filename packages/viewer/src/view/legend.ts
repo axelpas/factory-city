@@ -1,8 +1,9 @@
 import type { Model } from "../data/model";
 import type { Mapping } from "../presets/index";
+import { markedCount } from "./marker";
 
 export interface LegendLine {
-  channel: "Area" | "Height" | "Color" | "Twist" | "District tint";
+  channel: "Area" | "Height" | "Color" | "Marker" | "District tint";
   metric: string;
   /** Plain language: "taller = more complex". */
   text: string;
@@ -15,7 +16,12 @@ function reading(model: Model, metricId: string, template: (higher: string) => s
 }
 
 /** `mode` is the theme's: on a dark background a higher value is drawn brighter, on a light one darker. */
-export function legendLines(model: Model, mapping: Mapping, mode: "light" | "dark" = "light"): LegendLine[] {
+export function legendLines(
+  model: Model,
+  mapping: Mapping,
+  mode: "light" | "dark" = "light",
+  formatNumber: (n: number) => string = String,
+): LegendLine[] {
   const stronger = mode === "dark" ? "brighter" : "darker";
   const label = (id: string) => model.metrics.get(id)?.label ?? id;
   const lines: LegendLine[] = [
@@ -44,11 +50,14 @@ export function legendLines(model: Model, mapping: Mapping, mode: "light" | "dar
         : reading(model, mapping.color, (h) => `${stronger} = ${h}`);
     lines.push({ channel: "Color", metric: label(mapping.color), text });
   }
-  if (mapping.twist) {
+  if (mapping.marker) {
+    const { metric, threshold, source } = mapping.marker;
+    const count = markedCount(model, mapping.marker);
+    const why = { risk: " (high risk)", top: " (the top tenth)", chosen: "" }[source];
     lines.push({
-      channel: "Twist",
-      metric: label(mapping.twist),
-      text: reading(model, mapping.twist, (h) => `more twisted = ${h}`),
+      channel: "Marker",
+      metric: label(metric),
+      text: `ring on the roof = above ${formatNumber(threshold)}${why} · ${formatNumber(count)} file${count === 1 ? "" : "s"}`,
     });
   }
   if (mapping.tint) {

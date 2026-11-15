@@ -190,9 +190,8 @@ export const METRICS: readonly MetricDefinition[] = [
     higherMeans: "less cohesive",
     label: "Lack of cohesion",
     definition: "How far the file is from being one cohesive unit, from 0 to 1.",
-    computation:
-      "(groups - 1) / (functions - 1); 0 for a single function. It reads like the LCOM5 that VERSO mapped to twist.",
-    why: "Drives the twist of a building: the more a building turns, the less its parts belong together.",
+    computation: "(groups - 1) / (functions - 1); 0 for a single function. It reads like the LCOM5 of VERSO.",
+    why: "Compares the cohesion of files of different sizes on one scale.",
     unit: "ratio",
     direction: "higher-is-worse",
     kind: "ratio",

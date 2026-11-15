@@ -21,6 +21,7 @@
     "panelBorder": "#d8d4c9",
     "accent": "#1f3a5f",
     "accentText": "#ffffff",
+    "marker": "#e0812a",
     "riskLow": "#cfe0ee",
     "riskModerate": "#f2d58a",
     "riskHigh": "#e3915a",

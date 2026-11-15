@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { D, H, PRESENCE, STRIDE, TWIST, W, X, Y, Z } from "../src/anim/transition";
+import { D, H, PRESENCE, STRIDE, W, X, Y, Z } from "../src/anim/transition";
 import { pickBuilding, rayBox } from "../src/view/picking";
 
 function box(
@@ -10,7 +10,6 @@ function box(
     w: number;
     h: number;
     d: number;
-    twist?: number;
     presence?: number;
   }[],
 ): Float32Array {
@@ -23,7 +22,6 @@ function box(
     state[o + W] = v.w;
     state[o + H] = v.h;
     state[o + D] = v.d;
-    state[o + TWIST] = v.twist ?? 0;
     state[o + PRESENCE] = v.presence ?? 1;
   });
   return state;
@@ -38,17 +36,6 @@ describe("picking", () => {
     expect(rayBox([11.9, 100, 10.9], down, state, 0)).toBeDefined();
     expect(rayBox([12.1, 100, 10], down, state, 0)).toBeUndefined();
     expect(rayBox([10, 100, 11.1], down, state, 0)).toBeUndefined();
-  });
-
-  it("uses the whole volume of a twisted building", () => {
-    const quarter = Math.PI / 4;
-    const state = box([{ x: 0, z: 0, w: 10, h: 5, d: 1, twist: quarter }]);
-    // the long side now lies on a diagonal: its ends are hit, the old ends are not
-    const reach = 4.5 * Math.SQRT1_2;
-    expect(rayBox([reach, 50, -reach], down, state, 0)).toBeDefined();
-    expect(rayBox([-reach, 50, reach], down, state, 0)).toBeDefined();
-    expect(rayBox([4.5, 50, 0], down, state, 0)).toBeUndefined();
-    expect(rayBox([reach, 50, reach], down, state, 0)).toBeUndefined();
   });
 
   it("hits the side of a building with a slanted ray, and respects the base height", () => {
@@ -84,7 +71,6 @@ describe("picking", () => {
         w: 3,
         h: 1 + (i % 7),
         d: 3,
-        twist: (i % 5) * 0.1,
       })),
     );
     // best of several passes: a busy machine slows a pass down, it never speeds one up

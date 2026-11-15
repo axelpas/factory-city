@@ -34,6 +34,20 @@ describe("the four themes", () => {
         expect(theme.colors[key], `${theme.id}.${key}`).toMatch(/^#[0-9a-f]{6}$/i);
   });
 
+  it("gives the marker a color of its own: not a stop of the ramp, the accent or a building", () => {
+    for (const theme of THEMES) {
+      const marker = theme.colors.marker;
+      expect(marker, theme.id).toBeDefined();
+      const taken = [
+        ...theme.ramps.sequential,
+        theme.colors.accent,
+        theme.colors.building,
+        theme.colors.unavailable,
+      ];
+      expect(taken, theme.id).not.toContain(marker);
+    }
+  });
+
   it("renders the same data with the same legend content", () => {
     const legends = THEMES.map((theme) => {
       const { legend } = computePlacements(model, layout, mapping, theme);
@@ -202,7 +216,7 @@ describe("Blocks", () => {
     h: 50,
     baseY: 1,
     color: [1, 1, 1] as [number, number, number],
-    twist: 0.3,
+    marked: false,
     roofMark: 0,
     heightUnavailable: false,
     colorUnavailable: false,
@@ -221,13 +235,12 @@ describe("Blocks", () => {
     expect(blocksHigh(50, block)).toBe(4);
   });
 
-  it("snaps footprints to whole cells on the grid, without twist", () => {
+  it("snaps footprints to whole cells on the grid", () => {
     const v = voxelize(base, parcel, block, theme);
     expect(v.w).toBe(36);
     expect(v.d).toBe(24);
     expect((v.x - v.w / 2) % block).toBeCloseTo(0, 6);
     expect((v.z - v.d / 2) % block).toBeCloseTo(0, 6);
-    expect(v.twist).toBe(0);
   });
 
   it("never lets a snapped building leave its parcel, and keeps a tiny parcel's footprint", () => {

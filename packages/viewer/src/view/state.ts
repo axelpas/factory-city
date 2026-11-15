@@ -4,6 +4,7 @@ import {
   D,
   G,
   H,
+  MARK,
   MAX_DELAY,
   MODE,
   PRESENCE,
@@ -12,7 +13,6 @@ import {
   ROOF,
   STRIDE,
   TOUCHED,
-  TWIST,
   W,
   X,
   Y,
@@ -57,7 +57,7 @@ export function buildState(
     out[o + W] = p.w;
     out[o + H] = p.h;
     out[o + D] = p.d;
-    out[o + TWIST] = p.twist;
+    out[o + MARK] = p.marked ? 1 : 0;
     out[o + ROOF] = p.colorUnavailable ? 0 : p.roofMark;
     out[o + PRESENCE] = 1;
     out[o + TOUCHED] = style.touched?.has(i) ? 1 : 0;

@@ -1,11 +1,14 @@
 import { computeLayout } from "@factory-city/layout";
 import { describe, expect, it } from "vitest";
+import { MARK, STRIDE } from "../src/anim/transition";
 import { createFormat } from "../src/lib/format";
 import { defaultMapping, PRESETS, presetStatus, presetStatuses } from "../src/presets/index";
 import { DEFAULT_THEME } from "../src/themes/index";
 import { fileCard, folderCard } from "../src/view/card";
 import { legendLines } from "../src/view/legend";
-import { computePlacements, computeTints, MAX_TWIST } from "../src/view/placements";
+import { isMarked, type Marker, markedCount, resolveMarker } from "../src/view/marker";
+import { computePlacements, computeTints, PARCEL_INSET } from "../src/view/placements";
+import { buildState } from "../src/view/state";
 import { type FileSpec, makeModel } from "./helpers";
 
 const fmt = createFormat(["en-US"]);
@@ -75,20 +78,29 @@ describe("design presets", () => {
     expect(available).toEqual(expect.arrayContaining(["structure", "cohesion", "three-cs", "shortcuts"]));
   });
 
-  it("maps Structure to coupling, Cohesion to lack of cohesion with a tint, Three Cs to coupling with twist", () => {
+  it("maps Structure to coupling, Cohesion to lack of cohesion with a tint, Three Cs to coupling with a marker", () => {
     const get = (id: string) => presetStatus(model, PRESETS.find((p) => p.id === id) as never).mapping;
     expect(get("structure")).toMatchObject({
       area: "rloc",
       height: "mcc",
       color: "imports_out",
-      twist: null,
+      marker: null,
     });
     expect(get("cohesion")).toMatchObject({
       color: "lack_of_cohesion",
       tint: "folder_cohesion",
-      twist: null,
+      marker: null,
     });
-    expect(get("three-cs")).toMatchObject({ color: "imports_out", twist: "lack_of_cohesion", tint: null });
+    expect(get("three-cs")).toMatchObject({
+      color: "imports_out",
+      marker: { metric: "cohesion_groups", source: "top" },
+      tint: null,
+    });
+    // with the report's risk dimensions, the threshold is the bound where "high" starts
+    const withRisk = presetStatus(model, PRESETS.find((p) => p.id === "three-cs") as never, [
+      { metric: "cohesion_groups", bounds: [1, 2, 4] },
+    ]).mapping;
+    expect(withRisk?.marker).toEqual({ metric: "cohesion_groups", threshold: 2, source: "risk" });
     expect(get("shortcuts")).toMatchObject({ color: "escape_hatch_density" });
   });
 
@@ -117,90 +129,72 @@ describe("design presets", () => {
   });
 });
 
-describe("twist", () => {
+describe("marker", () => {
   const { mapping } = defaultMapping(model);
-  const twisted = { ...mapping, color: "imports_out", twist: "lack_of_cohesion" };
+  const DIMENSIONS = [{ metric: "cohesion_groups", bounds: [1, 2, 4] }];
+  const cohesion = resolveMarker(model, "cohesion_groups", DIMENSIONS);
+  const marked = (m: typeof mapping) =>
+    computePlacements(model, layout, m, DEFAULT_THEME)
+      .placements.map((p, i) => (p?.marked ? model.files[i]?.path : undefined))
+      .filter((p) => p !== undefined);
 
-  it("turns buildings by up to a quarter turn, in proportion to their lack of cohesion", () => {
-    const { placements } = computePlacements(model, layout, twisted, DEFAULT_THEME);
-    const at = (p: string) => placements[model.filesByPath.get(p) as number];
-    expect(at("core/b.ts")?.twist).toBe(0);
-    expect(at("core/c.ts")?.twist).toBeCloseTo(MAX_TWIST / 2, 10);
-    expect(at("core/a.ts")?.twist).toBeCloseTo(MAX_TWIST, 10);
+  it("takes its threshold from the risk dimension of the metric: above the bound where high starts", () => {
+    expect(cohesion).toEqual({ metric: "cohesion_groups", threshold: 2, source: "risk" });
+    // 4 groups is above 2; 2 groups is moderate, not marked
+    expect(marked({ ...mapping, marker: cohesion ?? null })).toEqual(["core/a.ts"]);
   });
 
-  it("does not twist when the channel is off", () => {
-    const { placements } = computePlacements(model, layout, { ...mapping, twist: null }, DEFAULT_THEME);
-    expect(placements.every((p) => p?.twist === 0)).toBe(true);
+  it("falls back to the top tenth when the metric has no risk dimension", () => {
+    const top = resolveMarker(model, "imports_out");
+    expect(top).toMatchObject({ source: "top" });
+    expect(marked({ ...mapping, marker: top ?? null })).toEqual(["core/a.ts"]);
+    // with equal values nothing is above the threshold: nothing is marked
+    const flat = makeModel(FILES.map((f) => ({ ...f, values: { ...f.values, imports_out: 3 } })));
+    expect(markedCount(flat, resolveMarker(flat, "imports_out") as Marker)).toBe(0);
   });
 
-  it("keeps a fully twisted building inside its parcel, whatever the parcel shape", () => {
-    const shapes = [
-      { w: 100, h: 100 },
-      { w: 300, h: 20 },
-      { w: 20, h: 300 },
-      { w: 1, h: 1000 },
-    ];
-    for (const shape of shapes) {
-      const m = makeModel([{ path: "a.ts", values: { rloc: 1, mcc: 1, lack_of_cohesion: 1 } }]);
-      const l = {
-        width: 1000,
-        height: 1000,
-        folders: new Map(),
-        files: new Map([["a.ts", { x: 10, y: 20, w: shape.w, h: shape.h }]]),
-      };
-      const { placements } = computePlacements(
-        m,
-        l,
-        {
-          area: "rloc",
-          height: "mcc",
-          color: null,
-          twist: "lack_of_cohesion",
-          tint: null,
-          scale: "linear",
-          clampP99: false,
-        },
-        DEFAULT_THEME,
-      );
-      const p = placements[0];
-      expect(p).toBeDefined();
-      if (!p) continue;
-      const c = Math.cos(p.twist);
-      const s = Math.sin(p.twist);
-      const boxW = p.w * c + p.d * s;
-      const boxD = p.w * s + p.d * c;
-      expect(boxW, `${shape.w}x${shape.h}`).toBeLessThanOrEqual(shape.w + 1e-9);
-      expect(boxD, `${shape.w}x${shape.h}`).toBeLessThanOrEqual(shape.h + 1e-9);
-      expect(p.x - boxW / 2).toBeGreaterThanOrEqual(10 - 1e-9);
-    }
+  it("uses a chosen threshold as it is", () => {
+    const chosen = resolveMarker(model, "cohesion_groups", DIMENSIONS, 1);
+    expect(chosen).toEqual({ metric: "cohesion_groups", threshold: 1, source: "chosen" });
+    expect(marked({ ...mapping, marker: chosen ?? null })).toEqual(["core/a.ts", "core/c.ts"]);
   });
 
-  it("shrinks every footprint by the same factor when twist is on", () => {
-    const off = computePlacements(model, layout, { ...mapping, twist: null }, DEFAULT_THEME).placements;
-    const on = computePlacements(model, layout, twisted, DEFAULT_THEME).placements;
-    const b = model.filesByPath.get("core/b.ts") as number; // not twisted: pure shrink
-    expect((on[b]?.w ?? 0) / (off[b]?.w ?? 1)).toBeCloseTo(Math.SQRT1_2, 10);
+  it("marks nothing when the channel is off, and never a file without a value", () => {
+    expect(marked({ ...mapping, marker: null })).toEqual([]);
+    expect(isMarked(undefined, cohesion)).toBe(false);
+    const m = makeModel([
+      { path: "a.ts", values: { rloc: 10, mcc: 1 } },
+      { path: "b.ts", values: { rloc: 10, mcc: 1, cohesion_groups: 5 } },
+    ]);
+    expect(markedCount(m, cohesion as Marker)).toBe(1);
   });
 
-  it("shows no twist for a file whose cohesion is unavailable", () => {
-    const m = makeModel([{ path: "a.ts", values: { rloc: 10, mcc: 1 } }]);
-    const l = computeLayout([{ path: "a.ts", weight: 10 }]);
+  it("leaves footprints alone: a building uses its whole parcel but the inset", () => {
+    const off = computePlacements(model, layout, { ...mapping, marker: null }, DEFAULT_THEME).placements;
+    const on = computePlacements(
+      model,
+      layout,
+      { ...mapping, marker: cohesion ?? null },
+      DEFAULT_THEME,
+    ).placements;
+    expect(on.map((p) => [p?.w, p?.d])).toEqual(off.map((p) => [p?.w, p?.d]));
+    const rect = layout.files.get("core/a.ts");
+    const a = on[model.filesByPath.get("core/a.ts") as number];
+    expect(a?.w).toBeCloseTo((rect?.w ?? 0) * (1 - 2 * PARCEL_INSET), 10);
+  });
+
+  it("writes the mark into the state of the building", () => {
+    const paths = model.files.map((f) => f.path);
     const { placements } = computePlacements(
-      m,
-      l,
-      {
-        area: "rloc",
-        height: "mcc",
-        color: null,
-        twist: "lack_of_cohesion",
-        tint: null,
-        scale: "linear",
-        clampP99: false,
-      },
+      model,
+      layout,
+      { ...mapping, marker: cohesion ?? null },
       DEFAULT_THEME,
     );
-    expect(placements[0]?.twist).toBe(0);
+    const state = buildState(paths, layout, placements, { dimColor: [0, 0, 0] });
+    const at = (p: string) => state[(model.filesByPath.get(p) as number) * STRIDE + MARK];
+    expect(at("core/a.ts")).toBe(1);
+    expect(at("core/b.ts")).toBe(0);
   });
 });
 
@@ -221,11 +215,15 @@ describe("district tint", () => {
 
 describe("cards and legend for design metrics", () => {
   const { mapping } = defaultMapping(model);
-  const m = { ...mapping, color: "imports_out", twist: "lack_of_cohesion" };
+  const m = {
+    ...mapping,
+    color: "imports_out",
+    marker: { metric: "cohesion_groups", threshold: 2, source: "risk" as const },
+  };
 
-  it("shows the twist channel and the coupling on the file card", () => {
+  it("shows the marker channel and the coupling on the file card", () => {
     const card = fileCard(model, model.filesByPath.get("core/a.ts") as number, m, fmt);
-    expect(card.channels.map((c) => c.label)).toContain("Twist: Lack of cohesion");
+    expect(card.channels.map((c) => c.label)).toContain("Marker: Cohesion groups");
     const other = fileCard(model, model.filesByPath.get("core/a.ts") as number, mapping, fmt);
     expect(other.metrics.map((r) => r.label)).toEqual(
       expect.arrayContaining(["Imported by", "Cohesion groups"]),
@@ -240,9 +238,9 @@ describe("cards and legend for design metrics", () => {
     expect(folderCard(noValue, "ui", fmt).rows).toContainEqual(expect.objectContaining({ value: "n/a" }));
   });
 
-  it("explains twist and tint in plain language", () => {
+  it("explains the marker and the tint in plain language", () => {
     const text = legendLines(model, { ...m, tint: "folder_cohesion" }).map((l) => l.text);
-    expect(text).toContain("more twisted = less cohesive");
+    expect(text).toContain("ring on the roof = above 2 (high risk) · 1 file");
     expect(text).toContain("darker ground = more self-contained");
   });
 });

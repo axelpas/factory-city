@@ -66,7 +66,7 @@ describe("design tokens", () => {
     expect(token("--control-h")).toBeGreaterThanOrEqual(28);
     expect(token("--icon-size")).toBeGreaterThanOrEqual(24);
     expect(rules).toMatch(
-      /select,\s*input\[type="search"\],\s*button,\s*\.popover > summary \{\s*height: var\(--control-h\)/,
+      /select,\s*input\[type="search"\],\s*input\[type="number"\],\s*button,\s*\.popover > summary \{\s*height: var\(--control-h\)/,
     );
   });
 });

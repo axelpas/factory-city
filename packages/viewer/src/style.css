@@ -93,6 +93,7 @@ summary::-webkit-details-marker {
 
 select,
 input[type="search"],
+input[type="number"],
 button,
 .popover > summary {
   height: var(--control-h);
@@ -115,6 +116,7 @@ button,
 }
 select:hover,
 input[type="search"]:hover,
+input[type="number"]:hover,
 button:hover,
 .popover > summary:hover {
   border-color: var(--c-accent);
@@ -211,9 +213,6 @@ button.icon,
   box-shadow: var(--shadow-1);
 }
 .brand {
-  flex: none;
-}
-.brand {
   letter-spacing: 0.02em;
 }
 .spacer {
@@ -239,7 +238,10 @@ button.icon,
 }
 .bar > button,
 .bar > .menu,
-.bar > .menu-list {
+.bar > .brand {
+  flex: none;
+}
+.menu-list {
   position: absolute;
   right: 0;
   top: calc(100% + var(--s-4));
@@ -291,7 +293,8 @@ button.icon,
   flex: none;
   color: var(--c-text-muted);
 }
-.row select {
+.row select,
+.row input {
   flex: 1;
   min-width: 0;
 }

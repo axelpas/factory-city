@@ -14,3 +14,5 @@ Same input gives the same map, which a test proves. Large files that shrink late
 
 ## Addendum 2026-11-15: streets between districts
 Districts could not be told apart: plinths touched. Every folder but the root now keeps a street margin free around its plinth (0.9% of the map side at the top level, 0.7 times that at each level below, never more than 12% of the folder's smaller side). The margin is part of the same pure function (`street` option, 0 turns it off), so the map stays deterministic and parcels still never move. The slab under the city takes the theme's `street` color and each folder level is a step lighter. Parcels are slightly smaller for the same weights.
+
+> **2026-11-15.** The twist channel no longer exists: footprints are not shrunk for it anymore. See `2026-11-15-marker-replaces-twist.md`.

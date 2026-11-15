@@ -1,4 +1,5 @@
 import type { Model } from "../data/model";
+import { type Bounded, type Marker, resolveMarker } from "../view/marker";
 import agents from "./agents.json";
 import bugMagnets from "./bug-magnets.json";
 import change from "./change.json";
@@ -27,7 +28,8 @@ export interface Preset {
   /** Candidates in order: the first one available is used. */
   color: string[];
   /** Optional extra channels, off by default. */
-  twist?: string;
+  /** Metric of the marker: files above its threshold carry a mark on their roof. */
+  marker?: string;
   tint?: string;
   /** What to do when the preset is unavailable, added to the reason. */
   needs?: string;
@@ -57,8 +59,8 @@ export interface Mapping {
   area: string;
   height: string;
   color: string | null;
-  /** Optional channels, off by default: twist turns a building, tint colors the plinth of a district. */
-  twist: string | null;
+  /** Optional channels, off by default: the marker flags the files above a threshold, the tint colors the plinth of a district. */
+  marker: Marker | null;
   tint: string | null;
   scale: "linear" | "sqrt" | "log";
   clampP99: boolean;
@@ -77,17 +79,21 @@ function covered(model: Model, id: string): boolean {
 }
 
 /** A preset is offered only when its metrics exist for at least half of the code. */
-export function presetStatus(model: Model, preset: Preset): PresetStatus {
+export function presetStatus(
+  model: Model,
+  preset: Preset,
+  dimensions: readonly Bounded[] = [],
+): PresetStatus {
   for (const id of [preset.area, preset.height]) {
     if (!covered(model, id)) {
       return { preset, available: false, reason: `"${id}" is not available for at least half of the code.` };
     }
   }
-  if (preset.twist && !covered(model, preset.twist)) {
+  if (preset.marker && !covered(model, preset.marker)) {
     return {
       preset,
       available: false,
-      reason: `"${preset.twist}" is not available for at least half of the code.`,
+      reason: `"${preset.marker}" is not available for at least half of the code.`,
     };
   }
   const color = preset.color.find((id) => covered(model, id));
@@ -102,7 +108,7 @@ export function presetStatus(model: Model, preset: Preset): PresetStatus {
       area: preset.area,
       height: preset.height,
       color,
-      twist: preset.twist ?? null,
+      marker: preset.marker ? (resolveMarker(model, preset.marker, dimensions) ?? null) : null,
       // the tint is an extra: the preset stays available when too few folders have a value
       tint: preset.tint && covered(model, preset.tint) ? preset.tint : null,
       scale: "sqrt",
@@ -111,13 +117,16 @@ export function presetStatus(model: Model, preset: Preset): PresetStatus {
   };
 }
 
-export function presetStatuses(model: Model): PresetStatus[] {
-  return PRESETS.map((p) => presetStatus(model, p));
+export function presetStatuses(model: Model, dimensions: readonly Bounded[] = []): PresetStatus[] {
+  return PRESETS.map((p) => presetStatus(model, p, dimensions));
 }
 
 /** The first available preset: Structure, the default without git history. */
-export function defaultMapping(model: Model): { preset: Preset; mapping: Mapping } {
-  const statuses = presetStatuses(model);
+export function defaultMapping(
+  model: Model,
+  dimensions: readonly Bounded[] = [],
+): { preset: Preset; mapping: Mapping } {
+  const statuses = presetStatuses(model, dimensions);
   const first =
     DEFAULT_ORDER.map((id) => statuses.find((s) => s.preset.id === id && s.available)).find(
       (s) => s !== undefined,
@@ -132,7 +141,7 @@ export function defaultMapping(model: Model): { preset: Preset; mapping: Mapping
       area: fallback,
       height: fallback,
       color: null,
-      twist: null,
+      marker: null,
       tint: null,
       scale: "sqrt",
       clampP99: true,

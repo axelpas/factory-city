@@ -40,6 +40,7 @@ import { factoryView } from "../view/factory";
 import { healthView, trendPoints } from "../view/health";
 import { dataLevelLine, hiddenContentLine, legendLines } from "../view/legend";
 import { hiddenLensesLine } from "../view/lenses";
+import { resolveMarker } from "../view/marker";
 import { type ColorLegend, computePlacements, computeTints } from "../view/placements";
 import { SCALE_KINDS, type ScaleKind } from "../view/scales";
 import { buildDelays, buildState } from "../view/state";
@@ -54,7 +55,7 @@ function dirOf(path: string): string {
 
 type TestsMode = "show" | "dim" | "hide";
 
-type Role = "area" | "height" | "color" | "twist" | "tint";
+type Role = "area" | "height" | "color" | "marker" | "tint";
 
 interface State {
   data: TimelineData;
@@ -290,11 +291,13 @@ export class App {
     // a diff opens on the Change preset; `?preset=` chooses another one
     const wanted = params.get("preset") ?? (isDiff ? "change" : undefined);
     const chosen = wanted
-      ? presetStatuses(last.model).find((p) => p.preset.id === wanted && p.available)
+      ? presetStatuses(last.model, loaded.report?.dimensions).find(
+          (p) => p.preset.id === wanted && p.available,
+        )
       : undefined;
     const { preset, mapping } = chosen?.mapping
       ? { preset: chosen.preset, mapping: chosen.mapping }
-      : defaultMapping(last.model);
+      : defaultMapping(last.model, loaded.report?.dimensions);
     if (this.theme.scale && mapping.scale !== this.theme.scale) {
       this.scaleBeforeTheme = mapping.scale;
       mapping.scale = this.theme.scale;
@@ -490,8 +493,10 @@ export class App {
     this.panel.append(this.picker("height", "Height", "Metric that sets how tall a building is"));
     this.panel.append(this.picker("color", "Color", "Metric that colors a building"));
     this.panel.append(
-      this.picker("twist", "Twist", "Optional: turns a building by a metric (more twist = less cohesive)"),
+      this.picker("marker", "Marker", "Optional: marks the roof of the files above a threshold on a metric"),
     );
+    const threshold = this.markerThreshold();
+    if (threshold) this.panel.append(threshold);
     this.panel.append(
       this.picker("tint", "District tint", "Optional: tints the plinth of a district by a folder metric"),
     );
@@ -607,9 +612,9 @@ export class App {
     const s = this.state as State;
     const select = el("select", { title, attrs: { "aria-label": label } });
     if (role === "color") select.append(el("option", { text: "none (white)", attrs: { value: "" } }));
-    if (role === "twist" || role === "tint")
+    if (role === "marker" || role === "tint")
       select.append(el("option", { text: "none", attrs: { value: "" } }));
-    const current = s.mapping[role];
+    const current = role === "marker" ? (s.mapping.marker?.metric ?? null) : s.mapping[role];
     for (const id of this.usable(role)) {
       const m = s.model.metrics.get(id);
       const o = el("option", { text: m?.label ?? id, attrs: { value: id } });
@@ -617,7 +622,13 @@ export class App {
       select.append(o);
     }
     select.addEventListener("change", () => {
-      const optional = role === "color" || role === "twist" || role === "tint";
+      if (role === "marker") {
+        const marker = select.value ? resolveMarker(s.ref, select.value, this.report?.dimensions) : undefined;
+        this.setMapping({ marker: marker ?? null });
+        this.buildPanel();
+        return;
+      }
+      const optional = role === "color" || role === "tint";
       this.setMapping({ [role]: optional ? select.value || null : select.value });
     });
     const help = el(
@@ -638,6 +649,30 @@ export class App {
       { class: "picker" },
       el("div", { class: "row" }, el("label", { text: label }), select, help),
     );
+  }
+
+  /** The threshold of the marker: the automatic one is shown, and can be replaced by a value typed in. */
+  private markerThreshold(): HTMLElement | undefined {
+    const s = this.state;
+    const marker = s?.mapping.marker;
+    if (!s || !marker) return undefined;
+    const automatic = resolveMarker(s.ref, marker.metric, this.report?.dimensions);
+    const input = el("input", {
+      title: "Files above this value are marked. Leave empty for the automatic threshold.",
+      attrs: {
+        type: "number",
+        step: "any",
+        "aria-label": "Marker threshold",
+        placeholder: automatic ? format.number(automatic.threshold) : "",
+      },
+    });
+    if (marker.source === "chosen") input.value = String(marker.threshold);
+    input.addEventListener("change", () => {
+      const chosen = input.value.trim() === "" ? undefined : Number(input.value);
+      const next = resolveMarker(s.ref, marker.metric, this.report?.dimensions, chosen);
+      this.setMapping({ marker: next ?? null });
+    });
+    return el("div", { class: "row" }, el("label", { text: "above" }), input);
   }
 
   /** Definition, computation, why it matters, direction and limits: all from the registry. */
@@ -667,7 +702,7 @@ export class App {
   private choosePreset(id: string): void {
     const s = this.state;
     if (!s) return;
-    const status = presetStatuses(s.ref).find((p) => p.preset.id === id);
+    const status = presetStatuses(s.ref, this.report?.dimensions).find((p) => p.preset.id === id);
     if (!status?.available || !status.mapping) return;
     s.preset = status.preset;
     s.mapping = status.mapping;
@@ -704,7 +739,7 @@ export class App {
     clear(this.presetSelect);
     if (!s.preset)
       this.presetSelect.append(el("option", { text: "Custom", attrs: { value: "", selected: "" } }));
-    for (const status of presetStatuses(s.ref)) {
+    for (const status of presetStatuses(s.ref, this.report?.dimensions)) {
       const o = el("option", {
         text: `${status.preset.group} · ${status.preset.label}${status.preset.experimental ? " (experimental)" : ""}${status.available ? "" : " (unavailable)"}`,
         title: status.available ? status.preset.question : (status.reason ?? ""),
@@ -892,7 +927,7 @@ export class App {
     if (!s) return;
     clear(this.legendBox);
     this.legendBox.append(el("h2", { text: "Legend" }));
-    for (const line of legendLines(s.model, s.mapping, this.theme.mode)) {
+    for (const line of legendLines(s.model, s.mapping, this.theme.mode, format.number)) {
       this.legendBox.append(
         el(
           "p",
@@ -1446,7 +1481,7 @@ export class App {
   private nextPreset(): void {
     const s = this.state;
     if (!s) return;
-    const available = presetStatuses(s.ref).filter((p) => p.available);
+    const available = presetStatuses(s.ref, this.report?.dimensions).filter((p) => p.available);
     if (available.length === 0) return;
     const at = available.findIndex((p) => p.preset.id === s.preset?.id);
     const next = available[(at + 1) % available.length];
@@ -1981,7 +2016,7 @@ export class App {
           theme: this.theme,
           project: s.model.project,
           preset: s.preset?.label ?? "Custom",
-          lines: legendLines(s.model, s.mapping, this.theme.mode),
+          lines: legendLines(s.model, s.mapping, this.theme.mode, format.number),
           legend: s.legend,
           note: this.blockNote(),
           frame: this.frameText(),

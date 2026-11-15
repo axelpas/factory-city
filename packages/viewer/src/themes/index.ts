@@ -55,6 +55,7 @@ export const REQUIRED_COLORS = [
   "panelBorder",
   "accent",
   "accentText",
+  "marker",
   "riskLow",
   "riskModerate",
   "riskHigh",

@@ -9,7 +9,8 @@ export const Z = 2;
 export const W = 3;
 export const H = 4;
 export const D = 5;
-export const TWIST = 6;
+/** 1 when the building carries the marker (its value is above the marker's threshold), else 0. */
+export const MARK = 6;
 /** Position on the color ramp, 0..1 (used when MODE is 0). */
 export const RAMP = 7;
 /** 0: the color is read from the ramp at RAMP. 1: the color is R, G, B. */
@@ -36,8 +37,8 @@ export function localProgress(u: number, delay: number): number {
   return easeInOut(Math.min(Math.max(t, 0), 1));
 }
 
-const LINEAR = [X, Y, Z, W, H, D, TWIST, ROOF, TOUCHED, PRESENCE] as const;
-const BORROWED = [W, D, TWIST, RAMP, MODE, ROOF, R, G, B] as const;
+const LINEAR = [X, Y, Z, W, H, D, MARK, ROOF, TOUCHED, PRESENCE] as const;
+const BORROWED = [W, D, MARK, RAMP, MODE, ROOF, R, G, B] as const;
 
 /**
  * A move from one set of building states to another. The same arithmetic runs in the vertex shader;

@@ -1,13 +1,13 @@
 # Glossary
 
 - **District**: a folder, drawn as a low plinth; districts nest.
-- **Building**: a file. Area (the ground it stands on), height, color and optional twist come from metrics.
+- **Building**: a file. Area (the ground it stands on), height, color and an optional marker come from metrics.
 - **Parcel**: the fixed rectangle a file owns on the map for the whole timeline. It never moves; an absent file leaves an empty lot.
 - **Snapshot**: the analysis of one revision (or of the files on disk), stored as a CodeCharta cc.json.
 - **Frame**: one step of a timeline: a commit, an issue or a day. Each frame points to one snapshot.
 - **Image**: one rendered picture. A timelapse shows many images per frame.
 - **Preset**: a declarative set of channels (area, height, color, extra channel) that answers one question.
-- **Twist**: optional rotation of a building around its vertical axis, from 0 to 45 degrees; by default more twist means less cohesion.
+- **Marker**: optional ring on the roof of the files that are above a threshold on a chosen metric (by default the bound where the metric's risk dimension turns high). It replaced the twist of a building on 2026-11-15 (`decisions/2026-11-15-marker-replaces-twist.md`).
 - **Data level**: what a source unlocks: 0 files, 1 git history, 2 forge (`gh`), 3 facts.
 - **Collector**: an analyzer component that produces the metrics of one data level.
 - **Facts**: what neither the code nor the forge knows (agent, model, outcome, cost), provided as a file.

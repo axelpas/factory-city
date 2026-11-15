@@ -63,7 +63,7 @@ export const MAPPING: Mapping = {
   area: "rloc",
   height: "mcc",
   color: "max_nesting_level",
-  twist: null,
+  marker: null,
   tint: null,
   scale: "sqrt",
   clampP99: true,
