@@ -29,6 +29,7 @@
   --control-h: 28px;
   --control-pad: 10px;
   --icon-size: 24px;
+  --glyph-size: 16px;
   --check-size: 14px;
   /* room kept on the right of a select for its arrow: 10 px from the border, 10 px wide, 8 px to the text */
   --select-arrow-room: 28px;
@@ -303,8 +304,8 @@ button.lens-item:disabled .lens-item-name {
   color: var(--c-text-muted);
 }
 .icon-svg {
-  width: 16px;
-  height: 16px;
+  width: var(--glyph-size);
+  height: var(--glyph-size);
   flex: none;
   fill: none;
   stroke: currentColor;
@@ -455,7 +456,7 @@ button[aria-pressed="true"] {
   white-space: normal;
 }
 .legend-def {
-  margin: 0 0 var(--s-6) calc(16px + var(--s-6));
+  margin: 0 0 var(--s-6) calc(var(--glyph-size) + var(--s-6));
   color: var(--c-text-muted);
 }
 .legend-na {
