@@ -40,6 +40,7 @@
   --panel-w: 290px;
   --inspector-w: 340px;
   --card-w: 280px;
+  --legend-w: 300px;
   --dialog-w: 460px;
   /* elevation */
   --shadow-1: 0 2px 10px color-mix(in srgb, var(--c-text) 10%, transparent);
@@ -421,11 +422,52 @@ button[aria-pressed="true"] {
   margin: var(--s-4) 0;
 }
 
+/* the legend sits on the stage, at the bottom left of the area the panels leave free */
 .legend {
-  margin-top: var(--s-12);
+  position: absolute;
+  left: calc(var(--free-left, 0px) + var(--gutter));
+  bottom: calc(var(--free-bottom, 0px) + var(--gutter));
+  z-index: 20;
+  width: var(--legend-w);
+  padding: var(--s-8) var(--s-12);
+  font-size: var(--text-sm);
+  background: color-mix(in srgb, var(--c-panel) 92%, transparent);
+  border: var(--line);
+  border-radius: var(--radius-4);
 }
-.legend-line {
-  margin: var(--s-4) 0;
+.legend-line > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  padding: var(--s-2) 0;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.legend-line > summary > .icon-svg {
+  color: var(--c-text-muted);
+}
+.legend-reading {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--c-text-muted);
+}
+.legend-line[open] .legend-reading {
+  white-space: normal;
+}
+.legend-def {
+  margin: 0 0 var(--s-6) calc(16px + var(--s-6));
+  color: var(--c-text-muted);
+}
+.legend-na {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  margin-top: var(--s-6);
+  color: var(--c-text-muted);
+}
+.legend-note {
+  margin: var(--s-6) 0 0;
+  color: var(--c-text-muted);
 }
 .ramp {
   height: 12px;

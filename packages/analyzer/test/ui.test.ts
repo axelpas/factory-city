@@ -63,6 +63,43 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
     expect(r.disabled).toBeGreaterThan(0);
   });
 
+  it("shows a compact legend on the stage, in the free area, with definitions on demand", async () => {
+    const r = await inPage<Record<string, unknown>>(`
+      const legend = document.querySelector(".legend");
+      const panel = box(document.querySelector(".panel"));
+      const timeline = box(document.querySelector(".timeline"));
+      const lines = [...legend.querySelectorAll("details.legend-line")];
+      const first = lines[0];
+      const closedHeight = box(first).h;
+      first.querySelector("summary").click();
+      await wait(60);
+      return {
+        onStage: legend.parentElement === document.querySelector(".stage").parentElement && !legend.closest(".panel"),
+        visible: !legend.hidden && box(legend).w > 0,
+        rightOfPanel: box(legend).x >= panel.right,
+        aboveTimeline: box(legend).bottom <= timeline.y,
+        channels: lines.map((l) => l.getAttribute("data-channel")),
+        glyphs: lines.every((l) => l.querySelector("summary svg")),
+        oneLine: closedHeight < 30,
+        definition: first.open && first.querySelector(".legend-def").textContent.length > 20,
+        ramp: !!legend.querySelector(".ramp") && legend.querySelectorAll(".ramp-labels span").length === 2,
+        note: document.body.textContent.includes("Exact values"),
+      };
+    `);
+    expect(r).toEqual({
+      onStage: true,
+      visible: true,
+      rightOfPanel: true,
+      aboveTimeline: true,
+      channels: ["Area", "Height", "Color"],
+      glyphs: true,
+      oneLine: true,
+      definition: true,
+      ramp: true,
+      note: false,
+    });
+  });
+
   it("opens the help of a channel as a popover: the row keeps its layout", async () => {
     const r = await inPage<{
       before: number;

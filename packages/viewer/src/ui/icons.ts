@@ -17,6 +17,12 @@ const PATHS = {
   /** Into a tray. */
   export: ["M8 2.5v7.5", "M5 7.2l3 3 3-3", "M3 13h10"],
   chevron: ["M4.5 6.5l3.5 3.5 3.5-3.5"],
+  /** Channels of the legend: the ground a building takes, its height, its color, the ring on its roof, its district. */
+  area: ["M2.5 9.5h11v3h-11z"],
+  height: ["M6 13.5v-11h4v11z"],
+  color: ["M8 2.5c2.5 3 4 4.8 4 6.7a4 4 0 0 1-8 0c0-1.9 1.5-3.7 4-6.7z"],
+  marker: ["M3 3h10v10H3z", "M5.8 5.8h4.4v4.4H5.8z"],
+  tint: ["M2 11l6-2.5 6 2.5-6 2.5z", "M2 7.5l6-2.5 6 2.5"],
   close: ["M4 4l8 8", "M12 4l-8 8"],
 } as const;
 

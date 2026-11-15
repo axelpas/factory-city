@@ -35,10 +35,10 @@ import {
   metricRow,
 } from "../view/card";
 import { biggestChanges, CHANGE, changePlacements, type FileChange } from "../view/change";
-import { cssGradient, cssSteps, parseHex, toCss } from "../view/color";
+import { parseHex } from "../view/color";
 import { factoryView } from "../view/factory";
 import { healthView, trendPoints } from "../view/health";
-import { dataLevelLine, hiddenContentLine, legendLines } from "../view/legend";
+import { dataLevelLine, hiddenContentLine, type LegendModel, legendModel } from "../view/legend";
 import { hiddenLensesLine } from "../view/lenses";
 import { resolveMarker } from "../view/marker";
 import { type ColorLegend, computePlacements, computeTints } from "../view/placements";
@@ -46,6 +46,7 @@ import { SCALE_KINDS, type ScaleKind } from "../view/scales";
 import { buildDelays, buildState } from "../view/state";
 import { blockLegend, blockSize, voxelize } from "../view/voxel";
 import { type IconName, icon } from "./icons";
+import { renderLegendBox } from "./legend-box";
 import { lensGroups, renderLensButton, renderLensList } from "./lens";
 import { drawOverlay } from "./overlay";
 import { closePopovers, watchPopovers } from "./popovers";
@@ -115,7 +116,10 @@ export class App {
   });
   private readonly dropZone = el("div", { class: "drop" });
   private readonly panel = el("aside", { class: "panel", attrs: { "aria-label": "View settings" } });
-  private readonly legendBox = el("section", { class: "legend" });
+  private readonly legendBox = el("section", {
+    class: "legend",
+    attrs: { "aria-label": "Legend", hidden: "" },
+  });
   private readonly changesBox = el("section", { class: "changes", attrs: { hidden: "" } });
   private readonly healthPanel = el("aside", {
     class: "details health",
@@ -215,6 +219,7 @@ export class App {
       this.header,
       this.panel,
       this.bar.element,
+      this.legendBox,
       this.status,
       this.card,
       this.details,
@@ -657,7 +662,7 @@ export class App {
       this.refresh();
     });
     this.panel.append(search, tests);
-    this.panel.append(this.legendBox, this.changesBox);
+    this.panel.append(this.changesBox);
   }
 
   private usable(role: Role): string[] {
@@ -984,62 +989,17 @@ export class App {
     }
   }
 
+  private legend(): LegendModel | undefined {
+    const s = this.state;
+    if (!s) return undefined;
+    return legendModel(s.model, s.mapping, s.legend, this.theme.mode, format.number, this.blockNote());
+  }
+
   private renderLegend(): void {
     const s = this.state;
-    if (!s) return;
-    clear(this.legendBox);
-    this.legendBox.append(el("h2", { text: "Legend" }));
-    for (const line of legendLines(s.model, s.mapping, this.theme.mode, format.number)) {
-      this.legendBox.append(
-        el(
-          "p",
-          { class: "legend-line" },
-          el("b", { text: `${line.channel}: ` }),
-          `${line.metric} — ${line.text}`,
-        ),
-      );
-    }
-    const l = s.legend;
-    if (l.kind === "sequential" && l.min !== undefined && l.max !== undefined) {
-      const stops = this.theme.ramps.sequential.map(parseHex);
-      this.legendBox.append(
-        el("div", {
-          class: "ramp",
-          style: {
-            background: this.theme.effects?.colorSteps
-              ? cssSteps(stops, this.theme.effects.colorSteps)
-              : cssGradient(stops),
-          },
-          attrs: { role: "img", "aria-label": "Color scale from low to high" },
-        }),
-        el(
-          "div",
-          { class: "ramp-labels" },
-          el("span", { text: format.number(l.min) }),
-          el("span", { text: `${l.clamped ? "≥ " : ""}${format.number(l.max)}` }),
-        ),
-      );
-    } else if (l.kind === "categorical" && l.categories) {
-      const list = el("ul", { class: "swatches" });
-      for (const c of l.categories) {
-        const roof = el("i", { class: "roof", style: { width: `${25 + 55 * c.roofMark}%` } });
-        list.append(
-          el(
-            "li",
-            {},
-            el("span", { class: "swatch", style: { background: toCss(c.color) } }, roof),
-            ` ${c.label} (${format.integer(c.count)})`,
-          ),
-        );
-      }
-      this.legendBox.append(list);
-    }
-    const note = this.blockNote();
-    if (note) this.legendBox.append(el("p", { class: "legend-line", text: note }));
-    if (s.model.metrics.has("is_test"))
-      this.legendBox.append(
-        el("p", { class: "muted", text: "Exact values are in the card and the details panel." }),
-      );
+    const legend = this.legend();
+    this.legendBox.hidden = !s || !legend;
+    if (s && legend) renderLegendBox(this.legendBox, legend, s.model, this.theme);
   }
 
   private renderStatus(): void {
@@ -1881,12 +1841,16 @@ export class App {
       .filter((r) => r !== undefined);
     this.healthButton.setAttribute("aria-pressed", String(!this.healthPanel.hidden));
     this.factoryButton.setAttribute("aria-pressed", String(!this.factoryPanel.hidden));
-    this.scene.setFreeArea({
+    const insets = {
       top: header ? header.bottom - stage.top : 0,
       left: left ? left.right - stage.left : 0,
       right: right.length ? stage.right - Math.min(...right.map((r) => r.left)) : 0,
       bottom: bottom ? stage.bottom - bottom.top : 0,
-    });
+    };
+    // what sits on the stage (the legend) places itself in the free area through these
+    for (const [side, value] of Object.entries(insets))
+      this.stage.parentElement?.style.setProperty(`--free-${side}`, `${Math.round(value)}px`);
+    this.scene.setFreeArea(insets);
   }
 
   /** Lets every running move finish at once, so that a picture shows the settled city. */
@@ -2076,14 +2040,13 @@ export class App {
     if (saved) this.scene.setCameraState(saved);
     if (withOverlay) {
       const ctx = canvas.getContext("2d");
-      if (ctx)
+      const legend = this.legend();
+      if (ctx && legend)
         drawOverlay(ctx, width, height, {
           theme: this.theme,
           project: s.model.project,
           preset: s.preset?.label ?? "Custom",
-          lines: legendLines(s.model, s.mapping, this.theme.mode, format.number),
-          legend: s.legend,
-          note: this.blockNote(),
+          legend,
           frame: this.frameText(),
         });
     }

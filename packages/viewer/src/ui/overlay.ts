@@ -1,17 +1,14 @@
 import { format } from "../lib/format";
 import type { Theme } from "../themes/index";
 import { parseHex, rampColor, toCss } from "../view/color";
-import type { LegendLine } from "../view/legend";
-import type { ColorLegend } from "../view/placements";
+import type { LegendModel } from "../view/legend";
 
 export interface OverlayInput {
   theme: Theme;
   project: string;
   preset: string;
-  lines: LegendLine[];
-  legend: ColorLegend;
-  /** An extra legend line, such as what one block is worth. */
-  note?: string;
+  /** The same legend as on the stage: channels, color scale, files without a value, extra note. */
+  legend: LegendModel;
   /** Label of the frame shown, for a timeline. */
   frame?: string;
 }
@@ -43,11 +40,12 @@ export function drawOverlay(
   }
   const lineHeight = 22 * k;
   const texts = [
-    ...input.lines.map((l) => `${l.channel}: ${l.metric} — ${l.text}`),
-    ...(input.note ? [input.note] : []),
+    ...input.legend.lines.map((l) => `${l.channel}: ${l.metric} — ${l.text}`),
+    ...(input.legend.note ? [input.legend.note] : []),
   ];
-  let y = height - pad - lineHeight * texts.length;
-  const legend = input.legend;
+  const unavailable = input.legend.unavailable;
+  let y = height - pad - lineHeight * (texts.length + (unavailable > 0 ? 1 : 0));
+  const legend = input.legend.color;
   if (legend.kind === "sequential") y -= 44 * k;
   if (legend.kind === "categorical") y -= lineHeight * Math.min(legend.categories?.length ?? 0, 9) + 8 * k;
   ctx.font = `${15 * k}px ${theme.font}`;
@@ -84,5 +82,16 @@ export function drawOverlay(
       ctx.fillText(`${c.label} (${format.integer(c.count)})`, pad + 24 * k, y);
       y += lineHeight;
     }
+  }
+  if (unavailable > 0) {
+    y = height - pad - lineHeight;
+    ctx.fillStyle = theme.colors.unavailable ?? "";
+    ctx.fillRect(pad, y + 2 * k, 16 * k, 16 * k);
+    ctx.fillStyle = text;
+    ctx.fillText(
+      `no value (${format.integer(unavailable)} file${unavailable === 1 ? "" : "s"})`,
+      pad + 24 * k,
+      y,
+    );
   }
 }
