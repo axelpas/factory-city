@@ -53,6 +53,7 @@ import { SCALE_KINDS, type ScaleKind } from "../view/scales";
 import { buildDelays, buildState } from "../view/state";
 import { blockLegend, blockSize, voxelize } from "../view/voxel";
 import { type IconName, icon } from "./icons";
+import { Inspector, type InspectorTab } from "./inspector";
 import { renderLegendBox } from "./legend-box";
 import { lensGroups, renderLensButton, renderLensList } from "./lens";
 import { drawOverlay } from "./overlay";
@@ -88,6 +89,7 @@ type MotionSetting = "auto" | "full" | "reduced";
 const HELP_KEY = "fc.help.seen";
 const THEME_KEY = "fc.theme";
 const PANEL_KEY = "fc.panel";
+const INSPECTOR_KEY = "fc.inspector";
 
 /** The theme to start with: `?theme=` in the address, else the last one chosen, else the default. */
 function initialTheme(): Theme {
@@ -114,10 +116,7 @@ export class App {
   private exportCamera: CameraState | undefined;
   private readonly scene: CityScene;
   private readonly card = el("div", { class: "card", attrs: { role: "tooltip" } });
-  private readonly details = el("aside", {
-    class: "details",
-    attrs: { "aria-label": "File details", hidden: "" },
-  });
+  private readonly details = el("section", { attrs: { "aria-label": "File details", hidden: "" } });
   private readonly helpDialog = el("div", {
     class: "help",
     attrs: { role: "dialog", "aria-label": "How to read this city", hidden: "" },
@@ -135,14 +134,25 @@ export class App {
     attrs: { "aria-label": "Legend", hidden: "" },
   });
   private readonly changesBox = el("section", { class: "changes", attrs: { hidden: "" } });
-  private readonly healthPanel = el("aside", {
-    class: "details health",
+  private readonly healthPanel = el("section", {
+    class: "health",
     attrs: { "aria-label": "Code health", hidden: "" },
   });
   private report: Report | undefined;
-  private readonly factoryPanel = el("aside", {
-    class: "details health",
+  private readonly factoryPanel = el("section", {
+    class: "factory",
     attrs: { "aria-label": "Factory", hidden: "" },
+  });
+  /** The one panel on the right: the file, the health and the factory are its tabs. */
+  private readonly inspector = new Inspector({
+    panes: { file: this.details, health: this.healthPanel, factory: this.factoryPanel },
+    onTab: (tab) => this.openTab(tab),
+    onChange: (tab) => {
+      this.healthButton.setAttribute("aria-pressed", String(tab === "health"));
+      this.factoryButton.setAttribute("aria-pressed", String(tab === "factory"));
+    },
+    width: Number(safeStorage(() => localStorage.getItem(INSPECTOR_KEY))) || undefined,
+    onResize: (width) => safeStorage(() => localStorage.setItem(INSPECTOR_KEY, String(Math.round(width)))),
   });
   private factory: Factory | undefined;
   private factoryPeriod: "last30" | "all" = "last30";
@@ -236,9 +246,7 @@ export class App {
       this.legendBox,
       this.status,
       this.card,
-      this.details,
-      this.healthPanel,
-      this.factoryPanel,
+      this.inspector.element,
       this.helpDialog,
       this.dropZone,
     );
@@ -1347,13 +1355,6 @@ export class App {
     const file = s.model.files[this.modelIndex(union)];
     if (!file) return;
     clear(this.details);
-    const close = el("button", {
-      text: "Close",
-      title: "Close (Escape)",
-      class: "quiet",
-      attrs: { type: "button" },
-    });
-    close.addEventListener("click", () => this.closeDetails());
     const rows = el("div", { class: "kvs" });
     for (const m of s.model.metrics.values()) {
       if (m.scope !== "file") continue;
@@ -1395,7 +1396,7 @@ export class App {
       );
     }
     this.details.append(
-      el("div", { class: "details-head" }, el("h2", { text: file.name }), close),
+      el("h2", { class: "pane-title", text: file.name }),
       el("div", { class: "muted", text: file.path }),
       rows,
       el("h3", { text: "Risk flags" }),
@@ -1415,6 +1416,21 @@ export class App {
 
   private closeDetails(): void {
     this.details.hidden = true;
+  }
+
+  /** A tab asked for from the inspector's header. */
+  private openTab(tab: InspectorTab): void {
+    if (tab === "health") {
+      if (this.healthPanel.hidden) this.toggleHealth();
+    } else if (tab === "factory") {
+      if (this.factoryPanel.hidden) this.toggleFactory();
+    } else {
+      if (!this.details.hasChildNodes())
+        this.details.append(
+          el("p", { class: "muted", text: "Click a building to see all the metrics of its file." }),
+        );
+      this.details.hidden = false;
+    }
   }
 
   // ------------------------------------------------------------ help, drop
@@ -1613,16 +1629,6 @@ export class App {
     const view = factoryView(this.factory, this.factoryPeriod, format);
     const panel = this.factoryPanel;
     clear(panel);
-    const close = el("button", {
-      text: "Close",
-      title: "Close (Escape)",
-      class: "quiet",
-      attrs: { type: "button" },
-    });
-    close.addEventListener("click", () => {
-      panel.hidden = true;
-    });
-    panel.append(el("div", { class: "details-head" }, el("h2", { text: "Factory" }), close));
     if (!view.available) {
       panel.append(el("p", { class: "muted", text: view.reason ?? "" }));
       return;
@@ -1743,16 +1749,6 @@ export class App {
     const view = healthView(s.data, this.animator?.frame ?? 0, this.report, format);
     const panel = this.healthPanel;
     clear(panel);
-    const close = el("button", {
-      text: "Close",
-      title: "Close (Escape)",
-      class: "quiet",
-      attrs: { type: "button" },
-    });
-    close.addEventListener("click", () => {
-      panel.hidden = true;
-    });
-    panel.append(el("div", { class: "details-head" }, el("h2", { text: "Code health" }), close));
     if (!view.available) {
       panel.append(el("p", { class: "muted", text: view.reason ?? "" }));
       return;
@@ -1908,7 +1904,7 @@ export class App {
   }
 
   private rightPanels(): HTMLElement[] {
-    return [this.details, this.healthPanel, this.factoryPanel];
+    return [this.inspector.element];
   }
 
   /** Measures what covers the stage on each side and tells the scene. */
@@ -1924,8 +1920,6 @@ export class App {
     const right = this.rightPanels()
       .map(shown)
       .filter((r) => r !== undefined);
-    this.healthButton.setAttribute("aria-pressed", String(!this.healthPanel.hidden));
-    this.factoryButton.setAttribute("aria-pressed", String(!this.factoryPanel.hidden));
     const insets = {
       top: header ? header.bottom - stage.top : 0,
       left: left ? left.right - stage.left : 0,

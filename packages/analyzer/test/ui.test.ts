@@ -161,6 +161,50 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
     expect(r.after).toEqual({ hidden: true, lens: before.lens });
   });
 
+  it("shows the file, the health and the factory in one inspector that fits the free stage", async () => {
+    const r = await inPage<Record<string, unknown>>(`
+      const inspector = document.querySelector(".inspector");
+      const shown = () => [...inspector.querySelectorAll(".pane")].filter((p) => !p.hidden).map((p) => p.getAttribute("aria-label"));
+      const selected = () => [...inspector.querySelectorAll('[role="tab"]')].filter((t) => t.getAttribute("aria-selected") === "true").map((t) => t.textContent);
+      const closed = inspector.hidden;
+      key("h");
+      await wait(80);
+      const health = { panes: shown(), tab: selected(), pressed: document.querySelector('.bar button[aria-pressed="true"]')?.textContent };
+      const timeline = box(document.querySelector(".timeline"));
+      const fits = box(inspector).bottom <= timeline.y && box(inspector).y >= box(document.querySelector(".bar")).bottom;
+      const body = inspector.querySelector(".inspector-body");
+      const head = box(inspector.querySelector(".inspector-head"));
+      body.scrollTop = 400;
+      await wait(40);
+      const headStays = box(inspector.querySelector(".inspector-head")).y === head.y;
+      const scrolls = body.scrollHeight > body.clientHeight ? body.scrollTop > 0 : true;
+      key("f");
+      await wait(80);
+      const factory = { panes: shown(), tab: selected() };
+      inspector.querySelector('[data-tab="file"]').click();
+      await wait(80);
+      const file = { panes: shown(), tab: selected(), text: inspector.querySelector(".pane:not([hidden])").textContent };
+      key("Escape");
+      await wait(40);
+      return { closed, health, fits, headStays, scrolls, factory, file, closedAgain: inspector.hidden, closeButtons: inspector.querySelectorAll('[aria-label="Close the inspector"]').length };
+    `);
+    expect(r).toEqual({
+      closed: true,
+      health: { panes: ["Code health"], tab: ["Health"], pressed: "Health" },
+      fits: true,
+      headStays: true,
+      scrolls: true,
+      factory: { panes: ["Factory"], tab: ["Factory"] },
+      file: {
+        panes: ["File details"],
+        tab: ["File"],
+        text: "Click a building to see all the metrics of its file.",
+      },
+      closedAgain: true,
+      closeButtons: 1,
+    });
+  });
+
   it("opens the help of a channel as a popover: the row keeps its layout", async () => {
     const r = await inPage<{
       before: number;

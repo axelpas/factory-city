@@ -37,7 +37,6 @@
   --gutter: 12px;
   --below-bar: 72px;
   --above-status: 44px;
-  --above-timeline: 176px;
   --panel-w: 290px;
   --inspector-w: 340px;
   --card-w: 280px;
@@ -421,7 +420,7 @@ button[aria-pressed="true"] {
   border-radius: 0 var(--radius-3) var(--radius-3) 0;
 }
 .panel h2,
-.details h2,
+.inspector h2,
 .help h2,
 .drop-box h2 {
   margin: var(--s-6) 0;
@@ -670,26 +669,68 @@ button[aria-pressed="true"] {
 
 /* ---------------------------------------------------------------- right panels */
 
-.details {
+/* the one panel on the right: tabs, one header, one scrolling body; as tall as the free stage */
+.inspector {
   position: absolute;
   top: var(--below-bar);
   right: var(--gutter);
-  bottom: var(--above-timeline);
+  bottom: calc(var(--free-bottom, 0px) + var(--gutter));
   width: var(--inspector-w);
-  overflow: auto;
   z-index: 25;
-  padding: var(--s-12);
+  display: flex;
+  flex-direction: column;
   background: var(--c-panel);
   border: var(--line);
   border-radius: var(--radius-4);
 }
-.details-head {
+.inspector-head {
+  flex: none;
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: var(--s-8);
+  padding: var(--s-6) var(--s-8) 0 var(--s-12);
+  border-bottom: var(--line);
 }
-.details h3,
+.tabs {
+  flex: 1;
+  display: flex;
+  gap: var(--s-4);
+}
+.tabs [role="tab"] {
+  color: var(--c-text-muted);
+  background-color: transparent;
+  border-color: transparent;
+  border-bottom-width: 2px;
+  border-radius: var(--radius-3) var(--radius-3) 0 0;
+}
+.tabs [role="tab"]:hover {
+  color: var(--c-text);
+  border-color: transparent;
+}
+.tabs [role="tab"][aria-selected="true"] {
+  font-weight: 600;
+  color: var(--c-text);
+  border-bottom-color: var(--c-accent);
+}
+.inspector-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--s-12);
+}
+.inspector-grip {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.pane-title {
+  overflow-wrap: anywhere;
+}
+.inspector h3,
 .help h3 {
   margin: var(--s-12) 0 var(--s-4);
   font-size: var(--text-sm);
@@ -714,9 +755,6 @@ button[aria-pressed="true"] {
   white-space: nowrap;
 }
 
-.health {
-  z-index: 26;
-}
 .score b {
   font-size: var(--text-display);
 }
@@ -1088,7 +1126,7 @@ button[aria-pressed="true"] {
     max-height: 40vh;
     top: 120px;
   }
-  .details {
+  .inspector {
     width: calc(100vw - 2 * var(--gutter));
     top: auto;
     max-height: 50vh;
