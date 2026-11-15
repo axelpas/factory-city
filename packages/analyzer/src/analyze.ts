@@ -22,7 +22,7 @@ import type { RepoInfo } from "./source/git.js";
 import { findRepo, GitSource, revParse } from "./source/git.js";
 import type { Source } from "./source/types.js";
 
-export const ANALYZER_VERSION = "0.3.0";
+export const ANALYZER_VERSION = "0.4.0";
 
 /** Shown with every score. */
 export const SCORE_NOTICE =

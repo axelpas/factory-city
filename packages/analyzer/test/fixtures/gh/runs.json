@@ -1,0 +1,9 @@
+[
+  { "headBranch": "feat/2-parser", "headSha": "aaa1", "conclusion": "failure", "createdAt": "2026-01-02T10:00:00Z" },
+  { "headBranch": "feat/2-parser", "headSha": "aaa1", "conclusion": "success", "createdAt": "2026-01-02T10:01:00Z" },
+  { "headBranch": "feat/2-parser", "headSha": "aaa2", "conclusion": "success", "createdAt": "2026-01-02T11:00:00Z" },
+  { "headBranch": "feat/2-parser", "headSha": "aaa3", "conclusion": "success", "createdAt": "2026-01-02T12:00:00Z" },
+  { "headBranch": "csv", "headSha": "bbb1", "conclusion": "success", "createdAt": "2026-01-03T13:00:00Z" },
+  { "headBranch": "csv", "headSha": "bbb2", "conclusion": null, "createdAt": "2026-01-03T14:00:00Z" },
+  { "headBranch": "main", "headSha": "ccc1", "conclusion": "success", "createdAt": "2026-01-04T10:00:00Z" }
+]

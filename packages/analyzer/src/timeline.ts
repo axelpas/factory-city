@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import type {
   CoverageReport,
+  Facts,
   Frame,
   FrameHealth,
   FrameIssue,
@@ -10,8 +11,11 @@ import type {
   TimelineManifest,
   TimelineMode,
 } from "@factory-city/schema";
+import { bodyChecksum, nodeId } from "@factory-city/schema";
 import type { AnalyzeShared, CachedFile } from "./analyze.js";
 import { ANALYZER_VERSION, analyze } from "./analyze.js";
+import { addCostShares, enrichFrames } from "./collectors/enrich.js";
+import { autoMapping, importFacts } from "./collectors/facts.js";
 import { type GhRunner, loadForge, systemGh } from "./collectors/forge.js";
 import { computeHistory, loadHistoryLog, reachableCommits } from "./collectors/history.js";
 import {
@@ -23,7 +27,8 @@ import {
   linkStep,
 } from "./collectors/issues.js";
 import { buildLineage, type Lineage } from "./collectors/lineage.js";
-import { loadConfig } from "./config.js";
+import { type Config, loadConfig } from "./config.js";
+import { computeFactory } from "./factory/kpis.js";
 import { resolveDimensions } from "./health/dimensions.js";
 import { frameHealth } from "./health/health.js";
 import { findRepo } from "./source/git.js";
@@ -37,6 +42,8 @@ export interface TimelineOptions {
   offline?: boolean;
   /** How `gh` is run; tests replay recorded output. */
   gh?: GhRunner;
+  /** Facts file (agent, model, outcome, cost per issue); the mapping comes from the configuration. */
+  facts?: string;
   branch?: string;
   /** Every commit instead of the first-parent history. */
   allCommits?: boolean;
@@ -138,6 +145,31 @@ async function listRevs(topLevel: string, opts: TimelineOptions, branch: string)
   if (opts.until) args.push(`--until=${opts.until}`);
   args.push(opts.range ?? branch);
   return parseRevs(await git(topLevel, args));
+}
+
+/** Reads and imports the facts file given on the command line, or named in the configuration. */
+async function loadFacts(
+  folder: string,
+  given: string | undefined,
+  config: Config,
+): Promise<Facts | undefined> {
+  const path = given ? resolve(given) : config.facts?.file ? resolve(folder, config.facts.file) : undefined;
+  if (!path) return undefined;
+  let text: string;
+  try {
+    text = await readFile(path, "utf8");
+  } catch {
+    throw new Error(
+      `The facts file ${path} could not be read. Check the path given to --facts or in factory-city.config.json.`,
+    );
+  }
+  const mapping = config.facts ?? autoMapping(text);
+  if (!mapping) {
+    throw new Error(
+      'The facts file needs a mapping: add "facts": { "columns": { "issue": "<column>", ... } } to factory-city.config.json, or name its columns after the known fields (issue, agent, model, outcome, minutes, cost...).',
+    );
+  }
+  return importFacts(text, mapping);
 }
 
 function parseMessages(raw: string): Array<CommitMessage & { parents: string[]; time: number }> {
@@ -339,6 +371,8 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
   let previousReachable = new Set<string>();
   let last: Awaited<ReturnType<typeof analyze>> | undefined;
   let lookups = 0;
+  const facts = await loadFacts(folder, opts.facts, config);
+  const costByFile = new Map<string, number>();
   const dimensions = resolveDimensions(config.thresholds);
   let previousHealth: FrameHealth | undefined;
   let previousShortcuts = 0;
@@ -413,6 +447,31 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
     const short = rev.hash.slice(0, 8);
     const id = `${String(index + 1).padStart(4, "0")}-${short}`;
     const date = new Date(rev.time * 1000).toISOString();
+    if (facts) {
+      // experimental: the cost of the issues that touched each file, split by the lines each one changed there
+      const number = rev.meta?.issue?.number;
+      const fact = facts.facts.find(
+        (f) =>
+          (number !== undefined && f.issue === number) ||
+          (f.commit !== undefined && rev.hash.startsWith(f.commit)),
+      );
+      addCostShares(costByFile, lines, fact?.cost);
+      if (costByFile.size > 0) {
+        const lens = result.snapshot.lenses.metrics;
+        for (const [path, cost] of costByFile) {
+          const values = lens.attributes[nodeId(`/root/${path}`)];
+          if (values) values.cost_share = Math.round(cost * 100) / 100;
+        }
+        lens.attributeDescriptors.cost_share = {
+          title: "Cost share",
+          description: "Cost of the issues that touched the file",
+          analyzers: ["factory-city"],
+        };
+        lens.attributeTypes.cost_share = "absolute";
+        result.snapshot.meta.checksum = bodyChecksum(result.snapshot.files, result.snapshot.lenses);
+        metrics.add("cost_share");
+      }
+    }
     await writeAtomic(join(framesDir, `${id}.cc.json`), JSON.stringify(result.snapshot));
     frames.push({
       id,
@@ -446,6 +505,7 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
   }
 
   if (!last) throw new Error("No frame was produced.");
+  if (facts) await writeAtomic(join(dataDir, "facts.json"), `${JSON.stringify(facts, null, 2)}\n`);
   if (lineage) {
     // retrospective metrics: what later happened to the lines each frame added
     let previous = -1;
@@ -458,10 +518,14 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
       previous = Math.max(previous, at);
       const retro = lineage.provenance.retrospective(indices, rev.time);
       frame.metrics.caused_fixes = retro.caused_fixes;
+      frame.metrics.lines_written = retro.lines_added;
+      if (retro.alive_30 !== undefined) frame.metrics.alive_30 = retro.alive_30;
+      if (retro.alive_90 !== undefined) frame.metrics.alive_90 = retro.alive_90;
       if (retro.rework_after !== undefined) frame.metrics.rework_after = retro.rework_after;
       else if (retro.lines_added > 0) frame.metrics.rework_after_pending = true;
     }
   }
+  enrichFrames(frames, { forge, facts, estimatePatterns: config.estimatePatterns });
   const manifest: TimelineManifest = {
     kind: "timeline",
     schemaVersion: 1,
@@ -474,7 +538,7 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
       firstParent: !opts.allCommits && !opts.revs?.length,
       ...(total !== revs.length ? { sampledFrom: total } : {}),
     },
-    dataLevel: coverage?.forge ? 2 : last.manifest.dataLevel,
+    dataLevel: facts ? 3 : forge ? 2 : last.manifest.dataLevel,
     git: last.manifest.git,
     metrics: [...metrics].sort(),
     categories: last.manifest.categories,
@@ -484,6 +548,15 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
     frames,
   };
   await writeAtomic(join(dataDir, `timeline.${mode}.json`), `${JSON.stringify(manifest)}\n`);
+  if (mode === "issue") {
+    const factory = computeFactory({
+      project: manifest.project,
+      analyzerVersion: ANALYZER_VERSION,
+      dataLevel: manifest.dataLevel,
+      frames,
+    });
+    await writeAtomic(join(dataDir, "factory.json"), `${JSON.stringify(factory, null, 2)}\n`);
+  }
   await writeAtomic(join(dataDir, `report.${mode}.json`), `${JSON.stringify(last.report, null, 2)}\n`);
   await writeAtomic(cachePath, JSON.stringify({ version: ANALYZER_VERSION, entries: [...fileCache] }));
   return {

@@ -1,9 +1,12 @@
 export type { AnalysisResult, AnalyzeOptions } from "./analyze.js";
 export { ANALYZER_VERSION, analyze, slugFor, summaryLine } from "./analyze.js";
+export { importFacts } from "./collectors/facts.js";
 export type { DiffOptions, DiffResult } from "./diff.js";
 export { buildDiff, defaultBranch, diffText, summarize } from "./diff.js";
 export type { DoctorReport } from "./doctor.js";
 export { doctor } from "./doctor.js";
+export { computeFactory, computeKpis, KPI_DEFINITIONS } from "./factory/kpis.js";
+export { factoryMarkdown } from "./factory/markdown.js";
 export { DIMENSIONS, levelOf, rate, resolveDimensions } from "./health/dimensions.js";
 export { computeHealth, findHiddenLinks, findHotspots, frameHealth } from "./health/health.js";
 export { reportMarkdown } from "./health/markdown.js";

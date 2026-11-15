@@ -12,7 +12,67 @@ export interface Config {
   authorLabels: Array<{ pattern: string; label: string }>;
   /** Risk thresholds by dimension id: the upper bounds of low, moderate and high. */
   thresholds: Record<string, [number, number, number]>;
+  /** Regular expressions read on issue labels; group 1 is the size (S, M, L, XL). */
+  estimatePatterns: string[];
+  /** How to read the facts file. */
+  facts?: FactsMapping;
 }
+
+/** A column of the facts file: its header name, or its position starting at 1. */
+export type ColumnRef = string | number;
+
+/** Mapping of a facts file (delimited text or JSON) to the known fields. Configuration alone handles any shape. */
+export interface FactsMapping {
+  /** Path of the facts file, relative to the analyzed folder; `--facts` overrides it. */
+  file?: string;
+  /** `,`, `;` or `\\t`. Guessed from the first line when absent. */
+  delimiter?: string;
+  /** Whether the first line is a header. Guessed when absent. */
+  header?: boolean;
+  /** Names of the columns when the file has no header line, in order. */
+  names?: string[];
+  /** Known field to column. */
+  columns: Partial<Record<FactField, ColumnRef>>;
+  /** Keep only the rows where a column has one of these values. */
+  filter?: { column: ColumnRef; values: string[] };
+  /** Raw values to known ones, per field. */
+  values?: Partial<Record<FactField, Record<string, string>>>;
+  /** Tells attempt rows from other rows (reviews). */
+  attempts?: { column: ColumnRef; only?: string[]; not?: string[] };
+}
+
+export type FactField =
+  | "issue"
+  | "commit"
+  | "date"
+  | "agent"
+  | "model"
+  | "outcome"
+  | "estimate"
+  | "review_blockers"
+  | "review_majors"
+  | "rework_rounds"
+  | "minutes"
+  | "cost"
+  | "currency"
+  | "human_interventions";
+
+export const FACT_FIELDS: readonly FactField[] = [
+  "issue",
+  "commit",
+  "date",
+  "agent",
+  "model",
+  "outcome",
+  "estimate",
+  "review_blockers",
+  "review_majors",
+  "rework_rounds",
+  "minutes",
+  "cost",
+  "currency",
+  "human_interventions",
+];
 
 export const DEFAULT_CONFIG: Config = {
   windows: { recentDays: 30, reworkDays: 14 },
@@ -20,6 +80,7 @@ export const DEFAULT_CONFIG: Config = {
   issuePatterns: [],
   authorLabels: [],
   thresholds: {},
+  estimatePatterns: [],
 };
 
 export async function loadConfig(folder: string): Promise<Config> {
@@ -83,7 +144,7 @@ export async function loadConfig(folder: string): Promise<Config> {
     }
     return list as Config["authorLabels"];
   };
-  const patterns = (key: "fixPatterns" | "issuePatterns"): string[] => {
+  const patterns = (key: "fixPatterns" | "issuePatterns" | "estimatePatterns"): string[] => {
     const list = json[key] ?? [];
     if (!Array.isArray(list) || list.some((p) => typeof p !== "string")) {
       throw new Error(`${path}: ${key} must be a list of regular expressions written as strings.`);
@@ -106,5 +167,35 @@ export async function loadConfig(folder: string): Promise<Config> {
     issuePatterns: patterns("issuePatterns"),
     authorLabels: authorLabels(),
     thresholds: thresholds(),
+    estimatePatterns: patterns("estimatePatterns"),
+    ...(json.facts === undefined ? {} : { facts: factsMapping(json.facts, path) }),
   };
+}
+
+/** Checks a facts mapping and returns it. The message says what to fix. */
+export function factsMapping(raw: unknown, where: string): FactsMapping {
+  const m = raw as FactsMapping | null;
+  if (!m || typeof m !== "object" || typeof m.columns !== "object" || m.columns === null) {
+    throw new Error(
+      `${where}: facts must be an object with "columns", for example { "columns": { "issue": "issue", "agent": "agent" } }.`,
+    );
+  }
+  for (const [field, ref] of Object.entries(m.columns)) {
+    if (!FACT_FIELDS.includes(field as FactField)) {
+      throw new Error(
+        `${where}: facts.columns has an unknown field "${field}". Known fields: ${FACT_FIELDS.join(", ")}.`,
+      );
+    }
+    if (typeof ref !== "string" && !(typeof ref === "number" && Number.isInteger(ref) && ref >= 1)) {
+      throw new Error(
+        `${where}: facts.columns.${field} must be a header name or a column position starting at 1.`,
+      );
+    }
+  }
+  if (m.columns.issue === undefined && m.columns.commit === undefined) {
+    throw new Error(
+      `${where}: facts.columns must map "issue" or "commit": each row is keyed by one of them.`,
+    );
+  }
+  return m;
 }

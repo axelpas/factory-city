@@ -25,6 +25,9 @@ interface StepTally {
   reworked: number;
   /** Indices of later fix steps that touched lines this step introduced. */
   fixes: number[];
+  /** Lines this step added that died within 30 and within 90 days. */
+  dead30: number;
+  dead90: number;
 }
 
 export interface ProvenanceOptions {
@@ -116,17 +119,20 @@ export class Provenance {
         if (born === step) continue;
         const bornTally = this.tallies[born];
         if (!bornTally) continue;
-        if (now - (this.steps[born] as Step).time < horizon) {
+        const age = now - (this.steps[born] as Step).time;
+        if (age < horizon) {
           event.young++;
           bornTally.reworked++;
         }
+        if (age < 30 * DAY) bornTally.dead30++;
+        if (age < 90 * DAY) bornTally.dead90++;
         if (isFix && bornTally.fixes[bornTally.fixes.length - 1] !== step) bornTally.fixes.push(step);
       }
     }
   }
 
   beginStep(step: number): void {
-    this.tallies[step] = { added: 0, reworked: 0, fixes: [] };
+    this.tallies[step] = { added: 0, reworked: 0, fixes: [], dead30: 0, dead90: 0 };
     this.applied = step + 1;
   }
 
@@ -184,22 +190,35 @@ export class Provenance {
   retrospective(
     stepIndices: readonly number[],
     frameTime: number,
-  ): { rework_after?: number; caused_fixes: number; lines_added: number } {
+  ): {
+    rework_after?: number;
+    caused_fixes: number;
+    lines_added: number;
+    alive_30?: number;
+    alive_90?: number;
+  } {
     const last = this.applied - 1;
     const tipTime = last >= 0 ? (this.steps[last] as Step).time : frameTime;
     let added = 0;
     let reworked = 0;
+    let dead30 = 0;
+    let dead90 = 0;
     const fixes = new Set<number>();
     for (const i of stepIndices) {
       const t = this.tallies[i];
       if (!t) continue;
       added += t.added;
       reworked += t.reworked;
+      dead30 += t.dead30;
+      dead90 += t.dead90;
       for (const f of t.fixes) if (!stepIndices.includes(f)) fixes.add(f);
     }
     const settled = tipTime - frameTime >= this.options.reworkDays * DAY;
     return {
       ...(settled && added > 0 ? { rework_after: reworked / added } : {}),
+      // shelf life: known only once 30 and 90 days of later history exist
+      ...(added > 0 && tipTime - frameTime >= 30 * DAY ? { alive_30: 1 - dead30 / added } : {}),
+      ...(added > 0 && tipTime - frameTime >= 90 * DAY ? { alive_90: 1 - dead90 / added } : {}),
       caused_fixes: fixes.size,
       lines_added: added,
     };

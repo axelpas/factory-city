@@ -1,4 +1,4 @@
 [
-  { "number": 5, "title": "Parser", "body": "Adds the parser.", "headRefName": "feat/2-parser", "url": "https://github.com/acme/demo/pull/5", "closingIssuesReferences": [{ "number": 2 }] },
-  { "number": 7, "title": "CSV export", "body": "Implements the export. Closes #3", "headRefName": "csv", "url": "https://github.com/acme/demo/pull/7", "closingIssuesReferences": [] }
+  { "number": 5, "title": "Parser", "body": "Adds the parser.", "headRefName": "feat/2-parser", "url": "https://github.com/acme/demo/pull/5", "createdAt": "2026-01-02T09:00:00Z", "mergedAt": "2026-01-03T10:00:00Z", "closingIssuesReferences": [{ "number": 2 }] },
+  { "number": 7, "title": "CSV export", "body": "Implements the export. Closes #3", "headRefName": "csv", "url": "https://github.com/acme/demo/pull/7", "createdAt": "2026-01-03T12:00:00Z", "mergedAt": "2026-01-04T10:00:00Z", "closingIssuesReferences": [] }
 ]

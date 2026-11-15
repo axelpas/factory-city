@@ -2,12 +2,13 @@
 import { existsSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { METRICS, type Report } from "@factory-city/schema";
+import { type Factory, METRICS, type Report } from "@factory-city/schema";
 import { Command } from "commander";
 import { ANALYZER_VERSION, analyze, slugFor, summaryLine } from "../analyze.js";
 import { coverageLine } from "../collectors/issues.js";
 import { buildDiff, diffText } from "../diff.js";
 import { doctor } from "../doctor.js";
+import { factoryMarkdown } from "../factory/markdown.js";
 import { reportMarkdown } from "../health/markdown.js";
 import { LANGUAGES } from "../languages/index.js";
 import { outputRoot, readIndex, updateIndex, writeAnalysis } from "../output.js";
@@ -184,6 +185,10 @@ program
   .argument("[repo]", "repository to analyze", ".")
   .option("--by <mode>", "one frame per commit, per issue or per day", "commit")
   .option("--offline", "no network: do not ask GitHub for issue titles")
+  .option(
+    "--facts <file>",
+    "facts file: agent, model, outcome, cost per issue (mapping in factory-city.config.json)",
+  )
   .option("--branch <branch>", "branch to follow (default: the current one)")
   .option("--all-commits", "every commit instead of the first-parent history")
   .option("--since <date>", "only commits after this date")
@@ -228,6 +233,7 @@ program
             : undefined,
         maxFrames,
         offline: opts.offline as boolean | undefined,
+        facts: opts.facts as string | undefined,
         path: opts.path as string | undefined,
         all: opts.all as boolean | undefined,
         include: opts.include as string[],
@@ -328,24 +334,53 @@ program
   .option("--format <format>", "md or json", "md")
   .option("--top <n>", "number of hotspots", "5")
   .option("--json", "same as --format json")
-  .action(async (path: string, opts: { format: string; top: string; json?: boolean }) => {
-    const dir = resolve(path);
-    const format = opts.json ? "json" : opts.format;
-    if (format !== "md" && format !== "json")
-      throw new Error(`Unknown --format "${format}". Use md or json.`);
-    const top = Number(opts.top);
-    if (!Number.isInteger(top) || top < 1) throw new Error("--top must be a whole number of at least 1.");
-    // a data folder holds a report already; any other folder is analyzed first
-    const stored = ["report.json", "report.issue.json", "report.commit.json", "report.day.json"]
-      .map((f) => join(dir, f))
-      .find((f) => existsSync(f) && !existsSync(join(dir, "package.json")) && !existsSync(join(dir, ".git")));
-    const report: Report = stored
-      ? (JSON.parse(await readFile(stored, "utf8")) as Report)
-      : (await analyzeAndWrite(path, {}, true)).result.report;
-    if (format === "json")
-      console.log(JSON.stringify({ ...report, hotspots: report.hotspots.slice(0, top) }, null, 2));
-    else process.stdout.write(reportMarkdown(report, top));
-  });
+  .option("--period <period>", "period of the factory KPIs: 30d or all", "30d")
+  .option("--by <group>", "group the factory KPIs by agent, model, kind or estimate")
+  .action(
+    async (
+      path: string,
+      opts: { format: string; top: string; json?: boolean; period: string; by?: string },
+    ) => {
+      const dir = resolve(path);
+      const format = opts.json ? "json" : opts.format;
+      if (format !== "md" && format !== "json")
+        throw new Error(`Unknown --format "${format}". Use md or json.`);
+      const top = Number(opts.top);
+      if (!Number.isInteger(top) || top < 1) throw new Error("--top must be a whole number of at least 1.");
+      // a data folder holds a report already; any other folder is analyzed first
+      if (opts.period !== "30d" && opts.period !== "all") {
+        throw new Error(`Unknown --period "${opts.period}". Use 30d or all.`);
+      }
+      const stored = ["report.issue.json", "report.commit.json", "report.day.json", "report.json"]
+        .map((f) => join(dir, f))
+        .find(
+          (f) => existsSync(f) && !existsSync(join(dir, "package.json")) && !existsSync(join(dir, ".git")),
+        );
+      const report: Report = stored
+        ? (JSON.parse(await readFile(stored, "utf8")) as Report)
+        : (await analyzeAndWrite(path, {}, true)).result.report;
+      // the factory KPIs come with a per-issue timeline
+      const factoryPath = join(dir, "factory.json");
+      const factory =
+        stored && existsSync(factoryPath)
+          ? (JSON.parse(await readFile(factoryPath, "utf8")) as Factory)
+          : undefined;
+      if (format === "json") {
+        const body = { ...report, hotspots: report.hotspots.slice(0, top), ...(factory ? { factory } : {}) };
+        console.log(JSON.stringify(body, null, 2));
+        return;
+      }
+      process.stdout.write(reportMarkdown(report, top));
+      if (factory) {
+        const period = opts.period === "all" ? "all" : "last30";
+        process.stdout.write(`\n${factoryMarkdown(factory, { period, by: opts.by })}`);
+      } else if (opts.by) {
+        console.error(
+          "Factory KPIs need a per-issue timeline: run `factory-city timeline --by issue`, then `factory-city report <data folder>`.",
+        );
+      }
+    },
+  );
 
 program
   .command("doctor")

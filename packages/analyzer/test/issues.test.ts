@@ -26,6 +26,7 @@ function replay(calls: string[][] = []): GhRunner {
     calls.push(args);
     if (args[0] === "issue") return recorded("issues.json");
     if (args[0] === "pr") return recorded("pulls.json");
+    if (args[0] === "run") return recorded("runs.json");
     throw new Error(`unexpected gh call: ${args.join(" ")}`);
   };
 }
@@ -231,7 +232,7 @@ describe("timeline per issue", () => {
       number: 2,
       title: "Add the parser",
       state: "closed",
-      labels: ["enhancement"],
+      labels: ["enhancement", "M"],
       url: "https://github.com/acme/demo/issues/2",
       pullRequest: 5,
     });
@@ -247,8 +248,8 @@ describe("timeline per issue", () => {
     });
     expect(manifest.dataLevel).toBe(2);
     expect(manifest.source.mode).toBe("issue");
-    // two batched calls, whatever the number of issues
-    expect(calls.map((c) => c.slice(0, 2).join(" "))).toEqual(["issue list", "pr list"]);
+    // three batched calls, whatever the number of issues
+    expect(calls.map((c) => c.slice(0, 2).join(" "))).toEqual(["issue list", "pr list", "run list"]);
   });
 
   it("shows an issue at the last commit linked to it, ordered by that commit", async () => {
@@ -347,10 +348,11 @@ describe("forge data", () => {
       labels: ["bug"],
     });
     expect(first.pulls.get(5)).toMatchObject({ branch: "feat/2-parser", closes: [2] });
+    expect(first.runs).toHaveLength(7);
     await loadForge(replay(calls), cache, Date.parse("2026-01-10T10:05:00Z"));
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(3);
     await loadForge(replay(calls), cache, Date.parse("2026-01-10T11:00:00Z"));
-    expect(calls).toHaveLength(4);
+    expect(calls).toHaveLength(6);
   });
 });
 

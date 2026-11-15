@@ -1,7 +1,7 @@
 [
-  { "number": 1, "title": "Set up the project", "state": "CLOSED", "labels": [{ "name": "type:chore" }], "url": "https://github.com/acme/demo/issues/1" },
-  { "number": 2, "title": "Add the parser", "state": "CLOSED", "labels": [{ "name": "enhancement" }], "url": "https://github.com/acme/demo/issues/2" },
-  { "number": 3, "title": "Export as CSV", "state": "CLOSED", "labels": [], "url": "https://github.com/acme/demo/issues/3" },
-  { "number": 4, "title": "Crash on empty input", "state": "OPEN", "labels": [{ "name": "bug" }], "url": "https://github.com/acme/demo/issues/4" },
-  { "number": 6, "title": "Wrong total", "state": "CLOSED", "labels": [{ "name": "bug" }], "url": "https://github.com/acme/demo/issues/6" }
+  { "number": 1, "title": "Set up the project", "state": "CLOSED", "labels": [{ "name": "type:chore" }, { "name": "size:S" }], "url": "https://github.com/acme/demo/issues/1", "createdAt": "2026-01-01T08:00:00Z", "closedAt": "2026-01-01T10:00:00Z" },
+  { "number": 2, "title": "Add the parser", "state": "CLOSED", "labels": [{ "name": "enhancement" }, { "name": "M" }], "url": "https://github.com/acme/demo/issues/2", "createdAt": "2026-01-01T10:00:00Z", "closedAt": "2026-01-03T10:00:00Z" },
+  { "number": 3, "title": "Export as CSV", "state": "CLOSED", "labels": [], "url": "https://github.com/acme/demo/issues/3", "createdAt": "2026-01-03T10:00:00Z", "closedAt": "2026-01-04T10:00:00Z" },
+  { "number": 4, "title": "Crash on empty input", "state": "OPEN", "labels": [{ "name": "bug" }], "url": "https://github.com/acme/demo/issues/4", "createdAt": "2026-01-05T10:00:00Z", "closedAt": null },
+  { "number": 6, "title": "Wrong total", "state": "CLOSED", "labels": [{ "name": "bug" }, { "name": "est: L" }], "url": "https://github.com/acme/demo/issues/6", "createdAt": "2026-01-06T10:00:00Z", "closedAt": "2026-01-08T16:00:00Z" }
 ]

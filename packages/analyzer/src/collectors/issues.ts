@@ -1,4 +1,5 @@
 import type { CoverageReport, FrameIssue, FrameKind, LinkStrategy } from "@factory-city/schema";
+import type { CiRun } from "./delivery.js";
 
 /** A commit as the resolver sees it. */
 export interface CommitMessage {
@@ -13,6 +14,8 @@ export interface ForgeIssue {
   state: string;
   labels: string[];
   url: string;
+  createdAt?: string;
+  closedAt?: string;
 }
 
 export interface ForgePull {
@@ -23,12 +26,16 @@ export interface ForgePull {
   url: string;
   /** Issues the pull request closes, as the forge reports them. */
   closes: number[];
+  createdAt?: string;
+  mergedAt?: string;
 }
 
 /** What the forge knows, when `gh` is available: issues and pull requests by number. */
 export interface ForgeData {
   issues: Map<number, ForgeIssue>;
   pulls: Map<number, ForgePull>;
+  /** CI runs; absent when the repository has none. */
+  runs?: CiRun[];
 }
 
 export interface Link {
