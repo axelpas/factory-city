@@ -28,6 +28,11 @@ export interface LayoutOptions {
   size?: number;
   /** Gap between parcels and around folders, as a share of the map side. Default 0.0015. */
   padding?: number;
+  /**
+   * Half the width of the street between two top-level folders, as a share of the map side. Default 0.009.
+   * Each folder keeps this margin free around its plinth; the margin shrinks at each level below.
+   */
+  street?: number;
 }
 
 interface TreeNode {
@@ -38,6 +43,10 @@ interface TreeNode {
 }
 
 const MIN_WEIGHT = 1;
+/** The street margin of a folder is this share of its parent's. */
+const STREET_FALLOFF = 0.7;
+/** A margin never takes more than this share of a folder's smaller side. */
+const MAX_MARGIN_SHARE = 0.12;
 
 function compare(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -76,11 +85,14 @@ function buildTree(files: readonly LayoutFile[]): TreeNode {
 export function computeLayout(files: readonly LayoutFile[], options: LayoutOptions = {}): Layout {
   const size = options.size ?? 1000;
   const padding = size * (options.padding ?? 0.0015);
+  const street = size * (options.street ?? 0.009);
   const layout: Layout = { width: size, height: size, files: new Map(), folders: new Map() };
   if (files.length === 0) {
     layout.folders.set("", { x: 0, y: 0, w: size, h: size });
     return layout;
   }
+  const margin = (depth: number, w: number, h: number): number =>
+    depth === 0 ? 0 : Math.min(street * STREET_FALLOFF ** (depth - 1), Math.min(w, h) * MAX_MARGIN_SHARE);
   const root = hierarchy(buildTree(files))
     .sum((d) => (d.children ? 0 : d.weight))
     .sort((a, b) => (b.value ?? 0) - (a.value ?? 0) || compare(a.data.path, b.data.path));
@@ -88,10 +100,17 @@ export function computeLayout(files: readonly LayoutFile[], options: LayoutOptio
     .size([size, size])
     .tile(treemapSquarify.ratio(1))
     .paddingInner(padding / 2)
-    .paddingOuter(padding)
+    // streets: every folder but the root keeps a margin free around its plinth, wider near the top of the tree
+    .paddingOuter((node) => padding + margin(node.depth, node.x1 - node.x0, node.y1 - node.y0))
     .round(false)(root);
   for (const node of placed.descendants()) {
-    const rect: Rect = { x: node.x0, y: node.y0, w: node.x1 - node.x0, h: node.y1 - node.y0 };
+    const m = node.children ? margin(node.depth, node.x1 - node.x0, node.y1 - node.y0) : 0;
+    const rect: Rect = {
+      x: node.x0 + m,
+      y: node.y0 + m,
+      w: node.x1 - node.x0 - 2 * m,
+      h: node.y1 - node.y0 - 2 * m,
+    };
     (node.children ? layout.folders : layout.files).set(node.data.path, rect);
   }
   return layout;

@@ -42,6 +42,7 @@ export const REQUIRED_COLORS = [
   "ground",
   "plinth",
   "plinthEdge",
+  "street",
   "building",
   "buildingEdge",
   "unavailable",

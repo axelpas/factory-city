@@ -49,6 +49,43 @@ describe("computeLayout", () => {
     }
   });
 
+  it("leaves a street between sibling folders, wider at the top of the tree", () => {
+    const layout = computeLayout([
+      { path: "a/x.ts", weight: 50 },
+      { path: "a/deep/y.ts", weight: 50 },
+      { path: "a/deeper/z.ts", weight: 50 },
+      { path: "b/w.ts", weight: 150 },
+    ]);
+    const gap = (p: string, q: string) => {
+      const a = layout.folders.get(p) as Rect;
+      const b = layout.folders.get(q) as Rect;
+      return Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w), b.y - (a.y + a.h), a.y - (b.y + b.h));
+    };
+    const top = gap("a", "b");
+    const nested = gap("a/deep", "a/deeper");
+    // default street: 0.9% of the map on each side, so 18 units between two top-level folders
+    expect(top).toBeGreaterThanOrEqual(18);
+    expect(nested).toBeGreaterThan(0);
+    expect(nested).toBeLessThan(top);
+    for (const p of ["a", "b", "a/deep", "a/deeper"]) {
+      const parent = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
+      expect(inside(layout.folders.get(p) as Rect, layout.folders.get(parent) as Rect), p).toBe(true);
+    }
+    // no street when asked for none: folders touch but for the parcel padding
+    const tight = computeLayout(
+      [
+        { path: "a/x.ts", weight: 50 },
+        { path: "b/w.ts", weight: 150 },
+      ],
+      { street: 0 },
+    );
+    const a = tight.folders.get("a") as Rect;
+    const b = tight.folders.get("b") as Rect;
+    expect(Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w), b.y - (a.y + a.h), a.y - (b.y + b.h))).toBeLessThan(
+      2,
+    );
+  });
+
   it("gives heavier files larger parcels", () => {
     const layout = computeLayout(FILES);
     const area = (p: string) => {

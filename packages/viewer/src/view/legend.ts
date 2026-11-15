@@ -2,7 +2,7 @@ import type { Model } from "../data/model";
 import type { Mapping } from "../presets/index";
 
 export interface LegendLine {
-  channel: "Ground area" | "Height" | "Color" | "Twist" | "District tint";
+  channel: "Area" | "Height" | "Color" | "Twist" | "District tint";
   metric: string;
   /** Plain language: "taller = more complex". */
   text: string;
@@ -20,7 +20,7 @@ export function legendLines(model: Model, mapping: Mapping, mode: "light" | "dar
   const label = (id: string) => model.metrics.get(id)?.label ?? id;
   const lines: LegendLine[] = [
     {
-      channel: "Ground area",
+      channel: "Area",
       metric: label(mapping.area),
       text: reading(model, mapping.area, (h) => `bigger ground = ${h}`),
     },

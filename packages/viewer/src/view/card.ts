@@ -75,7 +75,7 @@ export function fileCard(model: Model, index: number, mapping: Mapping, fmt: For
   if (!file) throw new Error(`No file at index ${index}`);
   const channels: CardRow[] = [];
   const roles: Array<[string, string | null]> = [
-    ["Ground area", mapping.area],
+    ["Area", mapping.area],
     ["Height", mapping.height],
     ["Color", mapping.color],
     ["Twist", mapping.twist],

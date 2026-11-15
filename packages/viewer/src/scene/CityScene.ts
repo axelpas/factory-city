@@ -24,6 +24,7 @@ import type { Theme } from "../themes/index";
 import { parseHex, type Rgb } from "../view/color";
 import { pickBuilding } from "../view/picking";
 import { folderDepth, PLINTH_THICKNESS, plinthTop } from "../view/placements";
+import { edgeWidth, REST_DELAY_MS, restRatio } from "../view/resolution";
 
 export type Pick =
   | { kind: "file"; index: number }
@@ -121,6 +122,8 @@ vec3 fcPosition(vec3 p) {
 const FRAGMENT_COMMON = /* glsl */ `
 uniform vec3 uEdgeColor;
 uniform vec3 uTouchColor;
+// thickness of the building edges, in rendered pixels
+uniform float uEdgeWidth;
 // 0 solid, 1 blocks, 2 wireframe
 uniform float uMode;
 uniform float uBlock;
@@ -183,6 +186,7 @@ export class CityScene {
     uRamp: { value: Array.from({ length: MAX_RAMP }, () => new THREE.Vector3()) },
     uRampCount: { value: 2 },
     uEdgeColor: { value: new THREE.Vector3() },
+    uEdgeWidth: { value: 1 },
     uTouchColor: { value: new THREE.Vector3() },
     uLotColor: { value: new THREE.Vector3() },
     uMode: { value: 0 },
@@ -194,6 +198,7 @@ export class CityScene {
   private lots: THREE.LineSegments | undefined;
   private plinths: THREE.InstancedMesh | undefined;
   private plinthPaths: string[] = [];
+  private maxFolderDepth = 0;
   private parcels: Array<{ x: number; y: number; w: number; h: number } | undefined> = [];
   private count = 0;
   private size = 1000;
@@ -206,8 +211,13 @@ export class CityScene {
   onTick: ((dtMs: number) => boolean) | undefined;
   /** Reads the buildings as currently drawn (from the animator), for picking and outlines. */
   readState: (() => Float32Array) | undefined;
-  /** Current render scale: lowered when images take too long, raised back when there is room. */
+  /** Current render scale: `motionRatio` while something moves, as sharp as the screen allows at rest. */
   private pixelRatio = 1;
+  /** Render scale while something moves: lowered when images take too long, raised back when there is room. */
+  private motionRatio = 1;
+  /** Smoothed time of one image while something moves, in milliseconds. */
+  private motionMs = 0;
+  private lastMotion = 0;
   private slow = 0;
   private fast = 0;
   /** Images drawn during the last second, for performance checks. */
@@ -221,8 +231,10 @@ export class CityScene {
   ) {
     this.theme = theme;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: false });
-    this.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    this.pixelRatio = this.maxRatio();
+    this.motionRatio = this.pixelRatio;
     this.renderer.setPixelRatio(this.pixelRatio);
+    this.uniforms.uEdgeWidth.value = edgeWidth(this.pixelRatio);
     this.renderer.shadowMap.enabled = theme.light.shadows;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     // shadows depend on the buildings, not on the camera: redraw them only when buildings move
@@ -270,11 +282,20 @@ export class CityScene {
       this.lastTime = time;
       const animating = this.onTick?.(dt) ?? false;
       const moved = this.controls.update();
-      if (this.dirty || moved || animating) {
+      const moving = moved || animating;
+      if (moving) {
+        this.lastMotion = time;
+        if (this.pixelRatio !== this.motionRatio) this.setPixelRatio(this.motionRatio);
+      } else if (time - this.lastMotion > REST_DELAY_MS) {
+        // at rest: draw the still picture once more, as sharp as the screen allows
+        const rest = restRatio(this.motionRatio, this.motionMs, this.maxRatio());
+        if (rest > this.pixelRatio + 0.01) this.setPixelRatio(rest);
+      }
+      if (this.dirty || moving) {
         this.dirty = false;
         this.renderer.render(this.scene, this.camera);
         this.fpsFrames++;
-        if (animating || moved) this.adaptResolution(dt);
+        if (moving) this.adaptResolution(dt);
       }
       if (time - this.fpsSince >= 1000) {
         this.fps = (this.fpsFrames * 1000) / (time - this.fpsSince);
@@ -290,27 +311,35 @@ export class CityScene {
    * lower resolution, and the resolution comes back when images are fast again.
    */
   private adaptResolution(dtMs: number): void {
-    const max = Math.min(window.devicePixelRatio || 1, 2);
+    const max = this.maxRatio();
+    if (dtMs > 0) this.motionMs = this.motionMs > 0 ? this.motionMs * 0.8 + dtMs * 0.2 : dtMs;
     if (dtMs > 25) {
       this.fast = 0;
-      if (++this.slow >= 3 && this.pixelRatio > 0.75) {
+      if (++this.slow >= 3 && this.motionRatio > 0.75) {
         this.slow = 0;
-        this.setPixelRatio(Math.max(0.75, this.pixelRatio * 0.8));
+        this.motionRatio = Math.max(0.75, this.motionRatio * 0.8);
+        this.setPixelRatio(this.motionRatio);
       }
     } else if (dtMs > 0 && dtMs < 14) {
       this.slow = 0;
-      if (++this.fast >= 90 && this.pixelRatio < max) {
+      if (++this.fast >= 90 && this.motionRatio < max) {
         this.fast = 0;
-        this.setPixelRatio(Math.min(max, this.pixelRatio * 1.15));
+        this.motionRatio = Math.min(max, this.motionRatio * 1.15);
+        this.setPixelRatio(this.motionRatio);
       }
     } else {
       this.slow = 0;
     }
   }
 
+  private maxRatio(): number {
+    return Math.min(window.devicePixelRatio || 1, 2);
+  }
+
   private setPixelRatio(ratio: number): void {
     this.pixelRatio = ratio;
     this.renderer.setPixelRatio(ratio);
+    this.uniforms.uEdgeWidth.value = edgeWidth(ratio);
     this.resize();
   }
 
@@ -391,9 +420,9 @@ export class CityScene {
     }
 
     // plinths: one low box per folder
-    const plinthColor = c("plinth");
     const folders = [...layout.folders.entries()].sort((a, b) => folderDepth(a[0]) - folderDepth(b[0]));
     this.plinthPaths = folders.map(([path]) => path);
+    this.maxFolderDepth = folders.reduce((max, [path]) => Math.max(max, folderDepth(path)), 0);
     this.plinths = new THREE.InstancedMesh(
       this.unitBox,
       new THREE.MeshLambertMaterial(),
@@ -408,7 +437,7 @@ export class CityScene {
         new THREE.Vector3(Math.max(r.w, 0.01), top, Math.max(r.h, 0.01)),
       );
       this.plinths?.setMatrixAt(i, m4);
-      this.plinths?.setColorAt(i, plinthColor);
+      this.plinths?.setColorAt(i, this.plinthColor(path));
     });
     this.plinths.count = folders.length;
     this.plinths.receiveShadow = true;
@@ -470,10 +499,10 @@ export class CityScene {
             float lo = min(dist.x, min(dist.y, dist.z));
             float hi = max(dist.x, max(dist.y, dist.z));
             float mid = dist.x + dist.y + dist.z - lo - hi;
-            float width = fwidth(mid) * 1.4;
+            float width = fwidth(mid) * uEdgeWidth;
             float edge = 1.0 - smoothstep(width * 0.5, width, mid);
             float touched = vFx.x;
-            float touchWidth = fwidth(mid) * 2.2;
+            float touchWidth = fwidth(mid) * (uEdgeWidth + 0.8);
             float touchEdge = (1.0 - smoothstep(touchWidth * 0.6, touchWidth, mid)) * touched;
             // roof mark: a darker patch on the roof whose size repeats the category
             float roof = mix(vMiscA.w, vMiscB.w, vEase);
@@ -681,15 +710,27 @@ export class CityScene {
     this.requestRender();
   }
 
+  /**
+   * The slab under the whole city shows between the districts: it takes the street color. Each level of
+   * folders is a step lighter, up to the plain plinth color, so a district stands out against its parent.
+   */
+  private plinthColor(path: string): THREE.Color {
+    const colors = this.theme.colors;
+    const plinth = new THREE.Color(colors.plinth ?? "");
+    const street = new THREE.Color(colors.street ?? colors.plinth ?? "");
+    const depth = folderDepth(path);
+    if (path === "" || depth === 0) return street;
+    return street.lerp(plinth, 0.4 + 0.6 * (depth / Math.max(this.maxFolderDepth, 1)));
+  }
+
   /** Colors the plinths: districts with a tint get it, the others keep the plain plinth color. */
   setPlinthTints(tints: ReadonlyMap<string, Rgb>): void {
     if (!this.plinths) return;
-    const base = new THREE.Color(this.theme.colors.plinth ?? "");
     const col = new THREE.Color();
     this.plinthPaths.forEach((path, i) => {
       const t = tints.get(path);
       if (t) col.setRGB(t[0], t[1], t[2], THREE.SRGBColorSpace);
-      else col.copy(base);
+      else col.copy(this.plinthColor(path));
       this.plinths?.setColorAt(i, col);
     });
     if (this.plinths.instanceColor) this.plinths.instanceColor.needsUpdate = true;
@@ -868,6 +909,7 @@ export class CityScene {
     const prevRatio = this.renderer.getPixelRatio();
     const prevSize = this.renderer.getSize(new THREE.Vector2());
     this.renderer.setPixelRatio(1);
+    this.uniforms.uEdgeWidth.value = edgeWidth(1);
     this.renderer.setSize(width, height, false);
     this.setAspect(width / height);
     this.renderer.shadowMap.needsUpdate = true;
@@ -877,6 +919,7 @@ export class CityScene {
     out.height = height;
     out.getContext("2d")?.drawImage(this.renderer.domElement, 0, 0);
     this.renderer.setPixelRatio(prevRatio);
+    this.uniforms.uEdgeWidth.value = edgeWidth(prevRatio);
     this.renderer.setSize(prevSize.x, prevSize.y, false);
     this.setAspect(prevSize.x / Math.max(prevSize.y, 1));
     this.requestRender();

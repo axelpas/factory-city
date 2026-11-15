@@ -470,7 +470,7 @@ export class App {
     if (!s) return;
     clear(this.panel);
     this.panel.append(el("h2", { text: "View" }));
-    this.panel.append(this.picker("area", "Ground area", "Metric that sets how much ground a file gets"));
+    this.panel.append(this.picker("area", "Area", "Metric that sets how much ground a file gets"));
     this.panel.append(this.picker("height", "Height", "Metric that sets how tall a building is"));
     this.panel.append(this.picker("color", "Color", "Metric that colors a building"));
     this.panel.append(
@@ -1297,7 +1297,7 @@ export class App {
     this.helpDialog.append(
       el("h2", { text: "How to read this city" }),
       el("p", {
-        text: "Each building is a file, each plinth a folder. Ground area, height and color show metrics you can change.",
+        text: "Each building is a file, each plinth a folder. Area, height and color show metrics you can change.",
       }),
       el("p", {
         text: "Point at a building for its card, click it for all its metrics. Drag to orbit, scroll to zoom, right-drag to pan.",

@@ -8,6 +8,7 @@
     "ground": "#e9e6df",
     "plinth": "#dcd8cd",
     "plinthEdge": "#c6c1b3",
+    "street": "#b3aea1",
     "building": "#ffffff",
     "buildingEdge": "#b4afa0",
     "unavailable": "#d4d0c6",

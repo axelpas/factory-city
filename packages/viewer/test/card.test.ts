@@ -24,7 +24,7 @@ describe("file card", () => {
 
   it("shows each mapped channel with its value, unit and place in the city", () => {
     const labels = card.channels.map((c) => c.label);
-    expect(labels).toEqual(["Ground area: Real lines", "Height: Complexity", "Color: Deepest nesting"]);
+    expect(labels).toEqual(["Area: Real lines", "Height: Complexity", "Color: Deepest nesting"]);
     expect(card.channels[0]).toMatchObject({ value: "100 lines" });
     expect(card.channels[0]?.marker).toBeGreaterThan(0.5);
   });
