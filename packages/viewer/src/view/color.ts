@@ -32,6 +32,16 @@ export function rampColor(stops: readonly Rgb[], t: number): Rgb {
   return mix(stops[i] as Rgb, stops[i + 1] as Rgb, pos - i);
 }
 
+/** A ramp shown in a few flat steps, for themes that draw the color metric in discrete steps. */
+export function cssSteps(stops: readonly Rgb[], steps: number): string {
+  const parts: string[] = [];
+  for (let i = 0; i < steps; i++) {
+    const color = toCss(rampColor(stops, steps === 1 ? 0 : i / (steps - 1)));
+    parts.push(`${color} ${(i / steps) * 100}%`, `${color} ${((i + 1) / steps) * 100}%`);
+  }
+  return `linear-gradient(to right, ${parts.join(", ")})`;
+}
+
 export function cssGradient(stops: readonly Rgb[]): string {
   return `linear-gradient(to right, ${stops.map(toCss).join(", ")})`;
 }

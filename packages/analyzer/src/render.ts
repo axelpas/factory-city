@@ -7,6 +7,7 @@ export interface RenderImageOptions {
   /** `snapshot`, `commit`, `day`, `issue`, `revs` or `diff`. */
   source?: string;
   preset?: string;
+  theme?: string;
   width: number;
   height: number;
   overlay?: boolean;
@@ -69,6 +70,7 @@ export async function renderImage(options: RenderImageOptions): Promise<void> {
     const query = new URLSearchParams({ project: options.entry.slug });
     if (options.source) query.set("source", options.source);
     if (options.preset) query.set("preset", options.preset);
+    if (options.theme) query.set("theme", options.theme);
     await page.goto(`${server.url}?${query.toString()}`);
     await page.waitForFunction("window.factoryCity && window.factoryCity.ready === true", undefined, {
       timeout: 120_000,

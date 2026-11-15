@@ -786,3 +786,17 @@ summary::-webkit-details-marker {
 .details {
   bottom: 176px;
 }
+
+.status {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.status > span {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.status > .level {
+  flex: 0 0 auto;
+}

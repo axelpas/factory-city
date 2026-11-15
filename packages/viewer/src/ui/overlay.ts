@@ -1,6 +1,6 @@
 import { format } from "../lib/format";
 import type { Theme } from "../themes/index";
-import { parseHex, toCss } from "../view/color";
+import { parseHex, rampColor, toCss } from "../view/color";
 import type { LegendLine } from "../view/legend";
 import type { ColorLegend } from "../view/placements";
 
@@ -10,6 +10,8 @@ export interface OverlayInput {
   preset: string;
   lines: LegendLine[];
   legend: ColorLegend;
+  /** An extra legend line, such as what one block is worth. */
+  note?: string;
 }
 
 /** Draws the title and the legend on top of an exported picture. Sizes scale with the picture. */
@@ -33,22 +35,35 @@ export function drawOverlay(
   ctx.fillText(input.preset, pad, pad + 36 * k);
 
   const lineHeight = 22 * k;
-  let y = height - pad - lineHeight * input.lines.length;
+  const texts = [
+    ...input.lines.map((l) => `${l.channel}: ${l.metric} — ${l.text}`),
+    ...(input.note ? [input.note] : []),
+  ];
+  let y = height - pad - lineHeight * texts.length;
   const legend = input.legend;
   if (legend.kind === "sequential") y -= 44 * k;
   if (legend.kind === "categorical") y -= lineHeight * Math.min(legend.categories?.length ?? 0, 9) + 8 * k;
   ctx.font = `${15 * k}px ${theme.font}`;
-  for (const line of input.lines) {
+  for (const line of texts) {
     ctx.fillStyle = text;
-    ctx.fillText(`${line.channel}: ${line.metric} — ${line.text}`, pad, y);
+    ctx.fillText(line, pad, y);
     y += lineHeight;
   }
   if (legend.kind === "sequential" && legend.min !== undefined && legend.max !== undefined) {
     const stops = theme.ramps.sequential.map(parseHex);
-    const gradient = ctx.createLinearGradient(pad, 0, pad + 260 * k, 0);
-    for (const [i, c] of stops.entries()) gradient.addColorStop(i / (stops.length - 1), toCss(c));
-    ctx.fillStyle = gradient;
-    ctx.fillRect(pad, y + 6 * k, 260 * k, 12 * k);
+    const steps = theme.effects?.colorSteps;
+    if (steps && steps > 1) {
+      // a theme that shows the color metric in discrete steps gets a stepped scale
+      for (let i = 0; i < steps; i++) {
+        ctx.fillStyle = toCss(rampColor(stops, i / (steps - 1)));
+        ctx.fillRect(pad + (260 * k * i) / steps, y + 6 * k, (260 * k) / steps + 1, 12 * k);
+      }
+    } else {
+      const gradient = ctx.createLinearGradient(pad, 0, pad + 260 * k, 0);
+      for (const [i, c] of stops.entries()) gradient.addColorStop(i / (stops.length - 1), toCss(c));
+      ctx.fillStyle = gradient;
+      ctx.fillRect(pad, y + 6 * k, 260 * k, 12 * k);
+    }
     ctx.fillStyle = muted;
     ctx.fillText(format.number(legend.min), pad, y + 22 * k);
     ctx.textAlign = "right";

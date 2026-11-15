@@ -14,7 +14,9 @@ function reading(model: Model, metricId: string, template: (higher: string) => s
   return template(higher);
 }
 
-export function legendLines(model: Model, mapping: Mapping): LegendLine[] {
+/** `mode` is the theme's: on a dark background a higher value is drawn brighter, on a light one darker. */
+export function legendLines(model: Model, mapping: Mapping, mode: "light" | "dark" = "light"): LegendLine[] {
+  const stronger = mode === "dark" ? "brighter" : "darker";
   const label = (id: string) => model.metrics.get(id)?.label ?? id;
   const lines: LegendLine[] = [
     {
@@ -39,7 +41,7 @@ export function legendLines(model: Model, mapping: Mapping): LegendLine[] {
     const text =
       metric?.kind === "category"
         ? "each color is one value; the roof mark repeats it"
-        : reading(model, mapping.color, (h) => `darker = ${h}`);
+        : reading(model, mapping.color, (h) => `${stronger} = ${h}`);
     lines.push({ channel: "Color", metric: label(mapping.color), text });
   }
   if (mapping.twist) {
@@ -53,7 +55,7 @@ export function legendLines(model: Model, mapping: Mapping): LegendLine[] {
     lines.push({
       channel: "District tint",
       metric: label(mapping.tint),
-      text: reading(model, mapping.tint, (h) => `darker ground = ${h}`),
+      text: reading(model, mapping.tint, (h) => `${stronger} ground = ${h}`),
     });
   }
   return lines;

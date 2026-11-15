@@ -24,7 +24,7 @@ Twist rotates a building by `lack_of_cohesion` times 45 degrees. All footprints 
 - With reduced motion (system setting, or the Motion picker), movement is replaced by a short cross-fade.
 - `?synthetic=5000&frames=6&fps` opens a made-up city and shows images per second; `factoryCityBenchmark()` in the console returns milliseconds per image.
 
-Known limits: one theme; plinths are rebuilt at once when the ground-area metric changes (buildings glide, plinths do not); loading a long timeline fetches every snapshot up front.
+Known limits: plinths are rebuilt at once when the ground-area metric changes (buildings glide, plinths do not); loading a long timeline fetches every snapshot up front.
 
 ## Compare
 `view/change.ts`: the Change preset colors each building by what the frame did since the previous one, on the theme's diverging ramp (added and removed at the ends, grown and shrunk in between). A removed file is still drawn at the size it had. The panel lists the biggest changes; a click flies to the building. A diff opens on this preset. URL parameters: `project`, `source`, `preset`. `window.factoryCity` (`ready`, `capture`) is the hook used by headless rendering.
@@ -34,3 +34,11 @@ Known limits: one theme; plinths are rebuilt at once when the ground-area metric
 
 ## Lenses and Factory panel
 `view/lenses.ts` puts the frame metrics on the timeline bar: ticks colored by the kind of the step, markers (failed first CI run, scope gap, lower score), a trend strip that follows the playhead with a choice of series (files, real lines, complexity, score, rework afterwards, fix share, CI attempts, cost) and a card for the frame under the pointer. A series with under two values is not offered, and the help says what would show it. `view/factory.ts` builds the Factory panel (key F) from `factory.json`: KPIs with their sample size and the previous period, groups side by side from 10 issues each, and the issues to look at; a click jumps to the frame. The Cost preset is experimental and needs a facts file with a cost.
+
+## Themes and renderers
+A theme is one token file in `themes/` (palette, ramps, lighting, camera, typography, renderer, effects), checked by `validateTheme`. Four ship: Architect's Model (`solid`, perspective, soft shadows), Isometric Plan (`solid`, orthographic camera, flat fills, no shadows), Blocks (`voxel`) and Hologram (`wireframe`, dark). They are switched at runtime (picker, key T, `?theme=`), with the same data mapping and the same legend content.
+- The three renderers share one instanced box, the same instance data, animation and picking; the fragment shader draws the difference (a uniform selects the mode). `voxel` draws the seams between cubes and a small shade per cube, both procedural: no texture file. `wireframe` draws luminous edges and faint faces with additive blending, so the picture does not depend on drawing order; its glow is capped at 0.6 by the scene and can be switched off.
+- Blocks: `view/voxel.ts` rounds heights to whole blocks (at least one), snaps footprints to whole cells without leaving the parcel, removes twist and shows the color metric in the theme's number of steps. The legend says what one block is worth. Exact values stay in the card and the details panel. The theme prefers a linear scale; leaving it restores the scale chosen before.
+- The legend words the color scale for the background: darker on light themes, brighter on the dark one.
+- `lib/contrast.ts` holds the checks the tests run on every theme: WCAG contrast of text on its panel, a sequential ramp whose luminance is monotonic, diverging ends that stay apart for red-green color vision deficiencies, risk colors that read in gray.
+- Adding a theme with an existing renderer is adding a token file and listing it in `themes/index.ts`: no scene code.

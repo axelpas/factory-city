@@ -20,7 +20,7 @@ import { format } from "../lib/format";
 import { makePathFilter } from "../lib/glob";
 import { defaultMapping, type Mapping, MIN_COVERAGE, type Preset, presetStatuses } from "../presets/index";
 import { CityScene, type Pick } from "../scene/CityScene";
-import { applyTheme, DEFAULT_THEME, type Theme } from "../themes/index";
+import { applyTheme, DEFAULT_THEME, THEMES, type Theme, themeById } from "../themes/index";
 import {
   type CardRow,
   type FileCard,
@@ -33,7 +33,7 @@ import {
   metricRow,
 } from "../view/card";
 import { biggestChanges, CHANGE, changePlacements, type FileChange } from "../view/change";
-import { cssGradient, parseHex, toCss } from "../view/color";
+import { cssGradient, cssSteps, parseHex, toCss } from "../view/color";
 import { factoryView } from "../view/factory";
 import { healthView, trendPoints } from "../view/health";
 import { dataLevelLine, hiddenContentLine, legendLines } from "../view/legend";
@@ -41,6 +41,7 @@ import { hiddenLensesLine } from "../view/lenses";
 import { type ColorLegend, computePlacements, computeTints } from "../view/placements";
 import { SCALE_KINDS, type ScaleKind } from "../view/scales";
 import { buildDelays, buildState } from "../view/state";
+import { blockLegend, blockSize, voxelize } from "../view/voxel";
 import { drawOverlay } from "./overlay";
 import { TimelineBar } from "./timeline-bar";
 
@@ -71,6 +72,14 @@ interface State {
 type MotionSetting = "auto" | "full" | "reduced";
 
 const HELP_KEY = "fc.help.seen";
+const THEME_KEY = "fc.theme";
+
+/** The theme to start with: `?theme=` in the address, else the last one chosen, else the default. */
+function initialTheme(): Theme {
+  const asked = new URLSearchParams(location.search).get("theme");
+  const stored = safeStorage(() => localStorage.getItem(THEME_KEY));
+  return themeById(asked) ?? themeById(stored) ?? DEFAULT_THEME;
+}
 const MOTION_KEY = "fc.motion";
 
 function safeStorage<T>(fn: () => T): T | undefined {
@@ -83,7 +92,7 @@ function safeStorage<T>(fn: () => T): T | undefined {
 
 /** The whole viewer: panels, pickers, legend, hover card, details, timeline and export, around one CityScene. */
 export class App {
-  private readonly theme: Theme = DEFAULT_THEME;
+  private theme: Theme = initialTheme();
   private readonly stage: HTMLElement;
   private readonly scene: CityScene;
   private readonly card = el("div", { class: "card", attrs: { role: "tooltip" } });
@@ -124,6 +133,12 @@ export class App {
     attrs: { "aria-label": "Preset" },
   });
   private readonly presetQuestion = el("span", { class: "question" });
+  private readonly themeSelect = el("select", {
+    title: "Theme: the look changes, the data and the legend stay the same (T)",
+    attrs: { "aria-label": "Theme" },
+  });
+  private glow = true;
+  private scaleBeforeTheme: ScaleKind | undefined;
   private readonly bar: TimelineBar;
   private state: State | undefined;
   private animator: Animator | undefined;
@@ -253,6 +268,10 @@ export class App {
     const { preset, mapping } = chosen?.mapping
       ? { preset: chosen.preset, mapping: chosen.mapping }
       : defaultMapping(last.model);
+    if (this.theme.scale && mapping.scale !== this.theme.scale) {
+      this.scaleBeforeTheme = mapping.scale;
+      mapping.scale = this.theme.scale;
+    }
     this.dropZone.hidden = true;
     const app = this;
     this.state = {
@@ -319,6 +338,14 @@ export class App {
       return b;
     };
     this.presetSelect.addEventListener("change", () => this.choosePreset(this.presetSelect.value));
+    for (const t of THEMES) {
+      const o = el("option", { text: t.label, attrs: { value: t.id } });
+      if (t.id === this.theme.id) o.selected = true;
+      this.themeSelect.append(o);
+    }
+    this.themeSelect.addEventListener("change", () =>
+      this.setTheme(themeById(this.themeSelect.value) ?? DEFAULT_THEME),
+    );
     this.sourceSelect.addEventListener("change", () => {
       void this.openSource(this.sourceSelect.value as SourceKey);
     });
@@ -356,6 +383,7 @@ export class App {
       this.projectSelect,
       this.sourceSelect,
       this.presetSelect,
+      this.themeSelect,
       this.presetQuestion,
       el("span", { class: "spacer" }),
       button("Health", "Score, risk profile and hotspots (H)", () => this.toggleHealth()),
@@ -492,7 +520,24 @@ export class App {
       safeStorage(() => localStorage.setItem(MOTION_KEY, this.motion));
       this.applyMotion();
     });
-    this.panel.append(search, tests, motion, this.legendBox, this.changesBox);
+    this.panel.append(search, tests, motion);
+    if (this.theme.effects?.glow) {
+      const glow = el("input", { attrs: { type: "checkbox", checked: "" } });
+      glow.checked = this.glow;
+      glow.addEventListener("change", () => {
+        this.glow = glow.checked;
+        this.scene.setGlow(this.glow);
+      });
+      this.panel.append(
+        el(
+          "label",
+          { class: "check", title: "A soft glow around the edges; it carries no data" },
+          glow,
+          " edge glow",
+        ),
+      );
+    }
+    this.panel.append(this.legendBox, this.changesBox);
   }
 
   private usable(role: Role): string[] {
@@ -637,6 +682,7 @@ export class App {
     const own = union ? [] : computePlacements(frame.model, s.layout, s.mapping, this.theme).placements;
     const previous = frameIndex > 0 ? s.data.frames[frameIndex - 1] : undefined;
     const match = makePathFilter(s.search);
+    const block = blockSize(this.theme, s.layout.width);
     const dimmed = new Set<number>();
     const hidden = new Set<number>();
     const aligned = s.data.paths.map((path, u) => {
@@ -647,7 +693,9 @@ export class App {
       if (match && !match(path)) dimmed.add(u);
       if (file?.isTest && s.tests === "dim") dimmed.add(u);
       if (file?.isTest && s.tests === "hide") hidden.add(u);
-      return placement;
+      // a theme made of blocks draws whole cubes: heights and footprints snap, exact values stay in the card
+      const rect = block === undefined ? undefined : s.layout.files.get(path);
+      return rect && block !== undefined ? voxelize(placement, rect, block, this.theme) : placement;
     });
     const touched = new Set<number>();
     if (frame.info && frameIndex > 0) {
@@ -792,7 +840,7 @@ export class App {
     if (!s) return;
     clear(this.legendBox);
     this.legendBox.append(el("h2", { text: "Legend" }));
-    for (const line of legendLines(s.model, s.mapping)) {
+    for (const line of legendLines(s.model, s.mapping, this.theme.mode)) {
       this.legendBox.append(
         el(
           "p",
@@ -808,7 +856,11 @@ export class App {
       this.legendBox.append(
         el("div", {
           class: "ramp",
-          style: { background: cssGradient(stops) },
+          style: {
+            background: this.theme.effects?.colorSteps
+              ? cssSteps(stops, this.theme.effects.colorSteps)
+              : cssGradient(stops),
+          },
           attrs: { role: "img", "aria-label": "Color scale from low to high" },
         }),
         el(
@@ -833,6 +885,8 @@ export class App {
       }
       this.legendBox.append(list);
     }
+    const note = this.blockNote();
+    if (note) this.legendBox.append(el("p", { class: "legend-line", text: note }));
     if (s.model.metrics.has("is_test"))
       this.legendBox.append(
         el("p", { class: "muted", text: "Exact values are in the card and the details panel." }),
@@ -1197,6 +1251,7 @@ export class App {
       ["R", "reset the camera"],
       ["V", "top view"],
       ["P", "next preset"],
+      ["T", "next theme"],
       ["H", "code health: score, risk profile, hotspots"],
       ["F", "factory: KPIs and the issues to look at"],
       ["E", "export a PNG"],
@@ -1270,6 +1325,10 @@ export class App {
       case "V":
         this.scene.topView();
         break;
+      case "t":
+      case "T":
+        this.setTheme(THEMES[(THEMES.indexOf(this.theme) + 1) % THEMES.length] ?? DEFAULT_THEME);
+        break;
       case "p":
       case "P":
         this.nextPreset();
@@ -1297,6 +1356,31 @@ export class App {
         break;
       default:
     }
+  }
+
+  /** Switches theme at runtime: same data, same mapping, another look. Buildings move from the current view. */
+  setTheme(theme: Theme): void {
+    const s = this.state;
+    const cameraChanged = theme.camera.type !== this.theme.camera.type;
+    this.theme = theme;
+    safeStorage(() => localStorage.setItem(THEME_KEY, theme.id));
+    applyTheme(theme, document.documentElement);
+    this.scene.applyTheme(theme);
+    this.scene.setGlow(this.glow);
+    this.themeSelect.value = theme.id;
+    if (!s) return;
+    // a theme may prefer a scale (Blocks counts whole blocks); leaving it gives the previous scale back
+    if (this.scaleBeforeTheme && !theme.scale) {
+      s.mapping = { ...s.mapping, scale: this.scaleBeforeTheme };
+      this.scaleBeforeTheme = undefined;
+    }
+    if (theme.scale && s.mapping.scale !== theme.scale) {
+      this.scaleBeforeTheme ??= s.mapping.scale;
+      s.mapping = { ...s.mapping, scale: theme.scale };
+    }
+    this.buildCity(!cameraChanged);
+    this.buildPanel();
+    this.refresh();
   }
 
   private nextPreset(): void {
@@ -1642,6 +1726,22 @@ export class App {
     }, "image/png");
   }
 
+  /** For a theme made of blocks: what one block is worth. */
+  private blockNote(): string | undefined {
+    const s = this.state;
+    const block = s ? blockSize(this.theme, s.layout.width) : undefined;
+    if (!s || block === undefined) return undefined;
+    return blockLegend(
+      s.model.metrics.get(s.mapping.height)?.label ?? s.mapping.height,
+      s.model.stats.get(s.mapping.height),
+      s.mapping.scale,
+      s.mapping.clampP99,
+      this.theme.heightScale * s.layout.width,
+      block,
+      (n) => format.number(n, 1),
+    );
+  }
+
   private picture(width: number, height: number, withOverlay: boolean): HTMLCanvasElement | undefined {
     const s = this.state;
     if (!s) return undefined;
@@ -1653,8 +1753,9 @@ export class App {
           theme: this.theme,
           project: s.model.project,
           preset: s.preset?.label ?? "Custom",
-          lines: legendLines(s.model, s.mapping),
+          lines: legendLines(s.model, s.mapping, this.theme.mode),
           legend: s.legend,
+          note: this.blockNote(),
         });
     }
     return canvas;

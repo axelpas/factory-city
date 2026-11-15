@@ -1,0 +1,55 @@
+{
+  "id": "isometric",
+  "label": "Isometric Plan",
+  "renderer": "solid",
+  "mode": "light",
+  "colors": {
+    "background": "#fbfaf6",
+    "ground": "#f4f2ec",
+    "plinth": "#e7e4db",
+    "plinthEdge": "#bdb8aa",
+    "building": "#ffffff",
+    "buildingEdge": "#6e6a5e",
+    "unavailable": "#d9d5ca",
+    "hover": "#1f3a5f",
+    "folderHover": "#6a86a8",
+    "dim": "#ebe8e0",
+    "text": "#26282b",
+    "textMuted": "#5d6066",
+    "panel": "#fbfaf8",
+    "panelBorder": "#d8d4c9",
+    "accent": "#1f3a5f",
+    "accentText": "#ffffff",
+    "riskLow": "#cfe0ee",
+    "riskModerate": "#f2d58a",
+    "riskHigh": "#e3915a",
+    "riskVeryHigh": "#9c3a3f",
+    "kindFeature": "#3f7ba8",
+    "kindFix": "#c0504d",
+    "kindRefactor": "#7a6aa8",
+    "kindChore": "#8a8a82",
+    "kindDocs": "#4f9a7a",
+    "kindTest": "#c79a3a",
+    "kindUnknown": "#b4afa0"
+  },
+  "ramps": {
+    "sequential": ["#eef5f3", "#c3e0da", "#86c2b8", "#479d92", "#1f6f66"],
+    "diverging": ["#b2182b", "#ef8a62", "#f7f7f7", "#67a9cf", "#2166ac"],
+    "categorical": ["#e69f00", "#56b4e9", "#009e73", "#f0e442", "#0072b2", "#d55e00", "#cc79a7", "#4d4d4d"],
+    "other": "#9b9b94",
+    "tint": ["#e6e2d6", "#d9dfd2", "#c6dacd", "#aed3c9", "#92c8c4"]
+  },
+  "light": {
+    "ambient": 1,
+    "sun": 0,
+    "sunPosition": [-0.45, 1, 0.65],
+    "shadows": false
+  },
+  "camera": {
+    "type": "orthographic",
+    "fov": 38,
+    "direction": [1, 0.82, 1]
+  },
+  "font": "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+  "heightScale": 0.1
+}

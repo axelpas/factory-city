@@ -121,6 +121,12 @@ vec3 fcPosition(vec3 p) {
 const FRAGMENT_COMMON = /* glsl */ `
 uniform vec3 uEdgeColor;
 uniform vec3 uTouchColor;
+// 0 solid, 1 blocks, 2 wireframe
+uniform float uMode;
+uniform float uBlock;
+uniform float uGlow;
+uniform float uFaceAlpha;
+vec4 fcWire;
 varying vec3 vBox;
 varying vec3 vSize;
 varying vec4 vMiscA;
@@ -158,7 +164,12 @@ function patchVertex(shader: { vertexShader: string }): void {
 export class CityScene {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
-  private readonly camera: THREE.PerspectiveCamera;
+  private camera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
+  private readonly perspective: THREE.PerspectiveCamera;
+  private readonly orthographic = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 20000);
+  private readonly ambient = new THREE.AmbientLight();
+  private grid: THREE.GridHelper | undefined;
+  private glowOn = true;
   private readonly controls: OrbitControls;
   private readonly raycaster = new THREE.Raycaster();
   private readonly unitBox = new THREE.BoxGeometry(1, 1, 1);
@@ -174,6 +185,10 @@ export class CityScene {
     uEdgeColor: { value: new THREE.Vector3() },
     uTouchColor: { value: new THREE.Vector3() },
     uLotColor: { value: new THREE.Vector3() },
+    uMode: { value: 0 },
+    uBlock: { value: 8 },
+    uGlow: { value: 0 },
+    uFaceAlpha: { value: 0.12 },
   };
   private buildings: THREE.Mesh | undefined;
   private lots: THREE.LineSegments | undefined;
@@ -214,7 +229,8 @@ export class CityScene {
     this.renderer.shadowMap.autoUpdate = false;
     container.appendChild(this.renderer.domElement);
 
-    this.camera = new THREE.PerspectiveCamera(theme.camera.fov, 1, 1, 20000);
+    this.perspective = new THREE.PerspectiveCamera(theme.camera.fov, 1, 1, 20000);
+    this.camera = this.perspective;
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.12;
@@ -222,9 +238,8 @@ export class CityScene {
     this.controls.autoRotateSpeed = 0.6;
     this.controls.addEventListener("change", () => this.requestRender());
 
-    this.scene.add(new THREE.AmbientLight(undefined, theme.light.ambient * Math.PI));
-    this.sun = new THREE.DirectionalLight(undefined, theme.light.sun * Math.PI);
-    this.scene.add(this.sun, this.sun.target);
+    this.sun = new THREE.DirectionalLight();
+    this.scene.add(this.ambient, this.sun, this.sun.target);
 
     this.ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshLambertMaterial());
     this.ground.rotation.x = -Math.PI / 2;
@@ -323,8 +338,35 @@ export class CityScene {
     this.uniforms.uEdgeColor.value = v("buildingEdge");
     this.uniforms.uTouchColor.value = v("accent");
     this.uniforms.uLotColor.value = v("plinthEdge");
+    this.uniforms.uMode.value = theme.renderer === "voxel" ? 1 : theme.renderer === "wireframe" ? 2 : 0;
+    this.uniforms.uFaceAlpha.value = theme.effects?.faceAlpha ?? 0.12;
+    this.applyGlow();
+    this.ambient.intensity = theme.light.ambient * Math.PI;
+    this.sun.intensity = theme.light.sun * Math.PI;
+    this.renderer.shadowMap.enabled = theme.light.shadows;
+    this.sun.castShadow = theme.light.shadows;
+    // the camera is a token too: perspective for a model, orthographic for a plan
+    const next = theme.camera.type === "orthographic" ? this.orthographic : this.perspective;
+    if (next !== this.camera) {
+      this.camera = next;
+      this.controls.object = next;
+    }
+    this.perspective.fov = theme.camera.fov;
     this.setRamp(theme.ramps.sequential.map(parseHex));
+    this.resize();
     this.requestRender();
+  }
+
+  /** The glow around wireframe edges: capped by the theme, and can be switched off. */
+  setGlow(on: boolean): void {
+    this.glowOn = on;
+    this.applyGlow();
+    this.requestRender();
+  }
+
+  private applyGlow(): void {
+    const cap = Math.min(this.theme.effects?.glow ?? 0, 0.6);
+    this.uniforms.uGlow.value = this.glowOn ? cap : 0;
   }
 
   setRamp(stops: readonly Rgb[]): void {
@@ -403,6 +445,12 @@ export class CityScene {
 
     const uniforms = this.uniforms;
     const material = new THREE.MeshLambertMaterial();
+    if (theme.renderer === "wireframe") {
+      // light adds up, so the picture does not depend on the order buildings are drawn in
+      material.transparent = true;
+      material.blending = THREE.AdditiveBlending;
+      material.depthWrite = false;
+    }
     material.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, uniforms);
       patchVertex(shader);
@@ -433,10 +481,35 @@ export class CityScene {
             float onRoof = step(0.999, vBox.y) * step(0.001, roof);
             float half_ = 0.125 + 0.275 * roof;
             float mark = onRoof * step(top.x, half_) * step(top.y, half_);
+            if (uMode > 0.5 && uMode < 1.5) {
+              // blocks: seams between the cubes of the stack, and a small shade per cube, both procedural
+              vec3 p = (vBox + vec3(0.5, 0.0, 0.5)) * max(vSize, vec3(0.0001)) / uBlock;
+              vec3 onFace = vec3(step(dist.x, lo + 0.0001), step(dist.y, lo + 0.0001), step(dist.z, lo + 0.0001));
+              vec3 seam = min(fract(p), 1.0 - fract(p)) + onFace;
+              float s = min(seam.x, min(seam.y, seam.z));
+              float sw = fwidth(s) * 1.2 + 0.015;
+              float seamLine = 1.0 - smoothstep(sw * 0.5, sw, s);
+              vec3 cube = floor(p + 0.0001) * (1.0 - onFace);
+              float shade = fract(sin(dot(cube, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+              col *= 0.93 + 0.1 * shade;
+              col = mix(col, uEdgeColor, seamLine * 0.5);
+            }
+            if (uMode > 1.5) {
+              // wireframe: luminous edges, faint faces, an optional capped glow around the edges
+              float halo = (1.0 - smoothstep(0.0, fwidth(mid) * 10.0, mid)) * uGlow;
+              float alpha = max(max(edge, touchEdge), max(halo * 0.55, uFaceAlpha));
+              vec3 wire = mix(col, uTouchColor, touchEdge);
+              fcWire = vec4(wire, alpha);
+            }
             col = mix(col, uEdgeColor, max(edge * 0.85, mark * 0.7));
             col = mix(col, uTouchColor, touchEdge * 0.75);
             diffuseColor.rgb = fcToLinear(col);
           }`,
+        )
+        .replace(
+          "#include <opaque_fragment>",
+          /* glsl */ `#include <opaque_fragment>
+          if (uMode > 1.5) gl_FragColor = vec4(fcToLinear(fcWire.rgb), fcWire.a);`,
         );
     };
     const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
@@ -508,6 +581,19 @@ export class CityScene {
     this.lots.frustumCulled = false;
     this.lots.raycast = () => {};
     this.scene.add(this.plinths, this.buildings, this.lots);
+    this.uniforms.uBlock.value = this.size * (theme.effects?.blockSize ?? 0.008);
+    if (this.grid) {
+      this.scene.remove(this.grid);
+      this.grid.geometry.dispose();
+      this.grid = undefined;
+    }
+    if (theme.effects?.grid) {
+      const line = c("gridLine");
+      this.grid = new THREE.GridHelper(this.size * 3, 150, line, line);
+      this.grid.position.set(this.size / 2, 0.01, this.size / 2);
+      this.grid.raycast = () => {};
+      this.scene.add(this.grid);
+    }
 
     this.ground.scale.set(this.size * 6, this.size * 6, 1);
     this.ground.position.set(this.size / 2, -0.02, this.size / 2);
@@ -529,8 +615,8 @@ export class CityScene {
     this.sun.shadow.normalBias = 0.6;
     this.controls.minDistance = s * 0.03;
     this.controls.maxDistance = s * 3;
-    this.camera.far = s * 12;
-    this.camera.updateProjectionMatrix();
+    this.perspective.far = s * 12;
+    this.perspective.updateProjectionMatrix();
     this.hoverBuilding.visible = false;
     this.hoverFolder.visible = false;
     if (!keepCamera) this.resetCamera();
@@ -736,6 +822,8 @@ export class CityScene {
     const dir = new THREE.Vector3(...(this.theme.camera.direction as [number, number, number])).normalize();
     this.controls.target.set(s / 2, 0, s / 2);
     this.camera.position.copy(this.controls.target).addScaledVector(dir, s * 1.9);
+    this.orthographic.zoom = 1;
+    this.resize();
     this.controls.update();
     this.requestRender();
   }
@@ -751,12 +839,11 @@ export class CityScene {
   /** Renders the current view at an exact size and returns it as a canvas. */
   renderToCanvas(width: number, height: number): HTMLCanvasElement {
     const prevRatio = this.renderer.getPixelRatio();
-    const prevAspect = this.camera.aspect;
     const prevSize = this.renderer.getSize(new THREE.Vector2());
     this.renderer.setPixelRatio(1);
     this.renderer.setSize(width, height, false);
-    this.camera.aspect = width / height;
-    this.camera.updateProjectionMatrix();
+    this.setAspect(width / height);
+    this.renderer.shadowMap.needsUpdate = true;
     this.renderer.render(this.scene, this.camera);
     const out = document.createElement("canvas");
     out.width = width;
@@ -764,10 +851,22 @@ export class CityScene {
     out.getContext("2d")?.drawImage(this.renderer.domElement, 0, 0);
     this.renderer.setPixelRatio(prevRatio);
     this.renderer.setSize(prevSize.x, prevSize.y, false);
-    this.camera.aspect = prevAspect;
-    this.camera.updateProjectionMatrix();
+    this.setAspect(prevSize.x / Math.max(prevSize.y, 1));
     this.requestRender();
     return out;
+  }
+
+  /** Fits both cameras to a picture shape: the perspective one by its aspect, the orthographic one by its frame. */
+  private setAspect(aspect: number): void {
+    this.perspective.aspect = aspect;
+    this.perspective.updateProjectionMatrix();
+    const half = this.size * 0.64;
+    this.orthographic.left = -half * aspect;
+    this.orthographic.right = half * aspect;
+    this.orthographic.top = half;
+    this.orthographic.bottom = -half;
+    this.orthographic.far = this.size * 12;
+    this.orthographic.updateProjectionMatrix();
   }
 
   private resize(): void {
@@ -776,8 +875,7 @@ export class CityScene {
     this.renderer.setSize(w, h, false);
     this.renderer.domElement.style.width = "100%";
     this.renderer.domElement.style.height = "100%";
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
+    this.setAspect(w / h);
     this.requestRender();
   }
 

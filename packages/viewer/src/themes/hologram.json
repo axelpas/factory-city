@@ -1,0 +1,61 @@
+{
+  "id": "hologram",
+  "label": "Hologram",
+  "renderer": "wireframe",
+  "mode": "dark",
+  "colors": {
+    "background": "#081125",
+    "ground": "#0a1730",
+    "plinth": "#101f3d",
+    "plinthEdge": "#3a5f96",
+    "building": "#62d2c7",
+    "buildingEdge": "#a5ece4",
+    "unavailable": "#51607d",
+    "hover": "#ffffff",
+    "folderHover": "#7fb0ff",
+    "dim": "#16243f",
+    "text": "#dce8ff",
+    "textMuted": "#9db0d6",
+    "panel": "#0e1b35",
+    "panelBorder": "#2b3e68",
+    "accent": "#ffb454",
+    "accentText": "#081125",
+    "riskLow": "#2a5f75",
+    "riskModerate": "#a8842a",
+    "riskHigh": "#ee8a4a",
+    "riskVeryHigh": "#ffb3a6",
+    "kindFeature": "#5fb4e6",
+    "kindFix": "#ff6b6b",
+    "kindRefactor": "#b39bff",
+    "kindChore": "#9aa7bd",
+    "kindDocs": "#4fd6a3",
+    "kindTest": "#f0c05a",
+    "kindUnknown": "#6f7d99",
+    "gridLine": "#15284b"
+  },
+  "ramps": {
+    "sequential": ["#1d6b73", "#2fa39a", "#e0a93b", "#ff9d8a", "#ffd9cf"],
+    "diverging": ["#ff8a5c", "#f2b58c", "#8fa3c7", "#6aa8ff", "#3f7dff"],
+    "categorical": ["#ffb000", "#56b4e9", "#2fd6a3", "#f0e442", "#7aa8ff", "#ff7a45", "#ee99cc", "#c8c8c8"],
+    "other": "#7d8aa5",
+    "tint": ["#101f3d", "#15305a", "#1a3f74", "#1f4f8c", "#2560a6"]
+  },
+  "light": {
+    "ambient": 1,
+    "sun": 0,
+    "sunPosition": [-0.45, 1, 0.65],
+    "shadows": false
+  },
+  "camera": {
+    "type": "perspective",
+    "fov": 38,
+    "direction": [0.75, 0.95, 1.1]
+  },
+  "font": "ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
+  "heightScale": 0.11,
+  "effects": {
+    "grid": true,
+    "glow": 0.5,
+    "faceAlpha": 0.1
+  }
+}
