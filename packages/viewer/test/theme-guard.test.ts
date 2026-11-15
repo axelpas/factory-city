@@ -36,6 +36,41 @@ describe("theme tokens", () => {
   });
 });
 
+describe("design tokens", () => {
+  const css = readFileSync(join(SRC, "style.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  // everything after the first rule: the token block itself is where raw values live
+  const rules = css.slice(css.indexOf("}") + 1);
+  // built from parts so that this file never matches its own scan
+  const SIZED = ["font-size", "padding", "margin", "gap", "border-radius"];
+  const RAW = new RegExp(`\\d(${"px"}|${"rem"}|${"em"})\\b`);
+
+  it("starts with the token block", () => {
+    expect(css.trimStart().startsWith(":root {")).toBe(true);
+    for (const token of ["--s-8", "--text-md", "--radius-3", "--control-h"])
+      expect(css.slice(0, css.indexOf("}"))).toContain(`${token}:`);
+  });
+
+  it("takes every spacing, font size and radius from a token", () => {
+    const offenders: string[] = [];
+    for (const declaration of rules.split(/[;{}]/)) {
+      const [property, value] = declaration.split(":").map((part) => part.trim());
+      if (!property || value === undefined) continue;
+      const sized = SIZED.some((name) => property === name || property.startsWith(`${name}-`));
+      if (sized && RAW.test(value)) offenders.push(`${property}: ${value}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("gives selects, inputs and buttons one height, and icon buttons a 24 px target at least", () => {
+    const token = (name: string) => Number(new RegExp(`${name}:\\s*(\\d+)`).exec(css)?.[1]);
+    expect(token("--control-h")).toBeGreaterThanOrEqual(28);
+    expect(token("--icon-size")).toBeGreaterThanOrEqual(24);
+    expect(rules).toMatch(
+      /select,\s*input\[type="search"\],\s*button,\s*\.popover > summary \{\s*height: var\(--control-h\)/,
+    );
+  });
+});
+
 describe("browser build", () => {
   it("imports only types from the schema package root, which holds Node-only code", () => {
     const offenders: string[] = [];

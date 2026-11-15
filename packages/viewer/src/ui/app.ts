@@ -359,8 +359,8 @@ export class App {
   // ---------------------------------------------------------------- header
 
   private buildHeader(): HTMLElement {
-    const button = (label: string, title: string, onClick: () => void) => {
-      const b = el("button", { text: label, title, attrs: { type: "button" } });
+    const button = (label: string, title: string, onClick: () => void, level?: string) => {
+      const b = el("button", { text: label, title, class: level, attrs: { type: "button" } });
       b.addEventListener("click", onClick);
       return b;
     };
@@ -443,7 +443,7 @@ export class App {
       button("Top view", "Look straight down (V)", () => this.scene.topView()),
       button("Reset", "Back to the default view (R)", () => this.scene.resetCamera()),
       exportMenu,
-      button("?", "How to read this city, and keyboard shortcuts (?)", () => this.toggleHelp()),
+      button("?", "How to read this city, and keyboard shortcuts (?)", () => this.toggleHelp(), "icon"),
     );
   }
 
@@ -1205,7 +1205,12 @@ export class App {
     const file = s.model.files[this.modelIndex(union)];
     if (!file) return;
     clear(this.details);
-    const close = el("button", { text: "Close", title: "Close (Escape)", attrs: { type: "button" } });
+    const close = el("button", {
+      text: "Close",
+      title: "Close (Escape)",
+      class: "quiet",
+      attrs: { type: "button" },
+    });
     close.addEventListener("click", () => this.closeDetails());
     const rows = el("div", { class: "kvs" });
     for (const m of s.model.metrics.values()) {
@@ -1274,7 +1279,7 @@ export class App {
 
   private showHelp(): void {
     clear(this.helpDialog);
-    const close = el("button", { text: "Got it", attrs: { type: "button" } });
+    const close = el("button", { text: "Got it", class: "primary", attrs: { type: "button" } });
     close.addEventListener("click", () => this.hideHelp());
     const sample = el(
       "div",
@@ -1465,7 +1470,12 @@ export class App {
     const view = factoryView(this.factory, this.factoryPeriod, format);
     const panel = this.factoryPanel;
     clear(panel);
-    const close = el("button", { text: "Close", title: "Close (Escape)", attrs: { type: "button" } });
+    const close = el("button", {
+      text: "Close",
+      title: "Close (Escape)",
+      class: "quiet",
+      attrs: { type: "button" },
+    });
     close.addEventListener("click", () => {
       panel.hidden = true;
     });
@@ -1590,7 +1600,12 @@ export class App {
     const view = healthView(s.data, this.animator?.frame ?? 0, this.report, format);
     const panel = this.healthPanel;
     clear(panel);
-    const close = el("button", { text: "Close", title: "Close (Escape)", attrs: { type: "button" } });
+    const close = el("button", {
+      text: "Close",
+      title: "Close (Escape)",
+      class: "quiet",
+      attrs: { type: "button" },
+    });
     close.addEventListener("click", () => {
       panel.hidden = true;
     });

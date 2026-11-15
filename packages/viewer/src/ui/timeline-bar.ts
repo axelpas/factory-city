@@ -40,6 +40,7 @@ export class TimelineBar {
   private readonly play = el("button", {
     text: "Play",
     title: "Play or pause (space)",
+    class: "primary",
     attrs: { type: "button" },
   });
   private readonly strip = el("div", { class: "strip" });
