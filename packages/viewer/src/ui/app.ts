@@ -21,7 +21,7 @@ import { clear, el } from "../lib/dom";
 import { format } from "../lib/format";
 import { makePathFilter } from "../lib/glob";
 import { defaultMapping, type Mapping, MIN_COVERAGE, type Preset, presetStatuses } from "../presets/index";
-import { CityScene, type Pick } from "../scene/CityScene";
+import { type CameraState, CityScene, type Pick } from "../scene/CityScene";
 import { applyTheme, DEFAULT_THEME, THEMES, type Theme, themeById } from "../themes/index";
 import {
   type CardRow,
@@ -97,6 +97,9 @@ function safeStorage<T>(fn: () => T): T | undefined {
 export class App {
   private theme: Theme = initialTheme();
   private readonly stage: HTMLElement;
+  private readonly header: HTMLElement;
+  /** The camera view of a running export sequence (a video): pictures use it as it is. */
+  private exportCamera: CameraState | undefined;
   private readonly scene: CityScene;
   private readonly card = el("div", { class: "card", attrs: { role: "tooltip" } });
   private readonly details = el("aside", {
@@ -184,9 +187,10 @@ export class App {
       },
       onOrbit: (orbit) => this.scene.setOrbit(orbit),
     });
+    this.header = this.buildHeader();
     root.append(
       this.stage,
-      this.buildHeader(),
+      this.header,
       this.panel,
       this.bar.element,
       this.status,
@@ -198,6 +202,17 @@ export class App {
       this.dropZone,
     );
     this.scene = new CityScene(this.stage, this.theme);
+    // the city is framed in what the bar, the panels and the timeline leave free
+    const covering = new ResizeObserver(() => this.updateFreeArea());
+    for (const node of [
+      this.stage,
+      this.header,
+      this.panel,
+      this.bar.element,
+      this.status,
+      ...this.rightPanels(),
+    ])
+      covering.observe(node);
     this.scene.onTick = (dt) => this.tick(dt);
     this.scene.readState = () => this.onScreen();
     this.reducedQuery.addEventListener("change", () => this.applyMotion());
@@ -1734,6 +1749,31 @@ export class App {
     }
   }
 
+  private rightPanels(): HTMLElement[] {
+    return [this.details, this.healthPanel, this.factoryPanel];
+  }
+
+  /** Measures what covers the stage on each side and tells the scene. */
+  private updateFreeArea(): void {
+    const stage = this.stage.getBoundingClientRect();
+    const shown = (node: HTMLElement) => {
+      const r = node.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 ? r : undefined;
+    };
+    const header = shown(this.header);
+    const left = shown(this.panel);
+    const bottom = shown(this.bar.element) ?? shown(this.status);
+    const right = this.rightPanels()
+      .map(shown)
+      .filter((r) => r !== undefined);
+    this.scene.setFreeArea({
+      top: header ? header.bottom - stage.top : 0,
+      left: left ? left.right - stage.left : 0,
+      right: right.length ? stage.right - Math.min(...right.map((r) => r.left)) : 0,
+      bottom: bottom ? stage.bottom - bottom.top : 0,
+    });
+  }
+
   /** Lets every running move finish at once, so that a picture shows the settled city. */
   settle(): void {
     const a = this.animator;
@@ -1819,6 +1859,9 @@ export class App {
     if (!s || !a) return undefined;
     this.settle();
     const before = { position: a.position, camera: this.scene.cameraState(), reduced: a.reducedMotion };
+    // one view for the whole film, framed for its size
+    const view = this.scene.exportView(options.width, options.height);
+    this.exportCamera = view;
     // a film is made of in-between images: movement is never replaced by cuts here
     a.reducedMotion = false;
     const canvas = document.createElement("canvas");
@@ -1833,13 +1876,14 @@ export class App {
         canvas,
         plan,
         (i) => {
-          this.scene.setCameraState(before.camera, plan.angleAt(i));
+          this.scene.setCameraState(view, plan.angleAt(i));
           this.paintAt(ctx, plan.positionAt(i), options.width, options.height, options.overlay);
         },
         onProgress,
       );
     } finally {
       a.reducedMotion = before.reduced;
+      this.exportCamera = undefined;
       this.scene.setCameraState(before.camera);
       a.reset(s.data.frames.length, (f) => this.stateOf(f), before.position);
       this.updateFrameViews(true);
@@ -1910,7 +1954,11 @@ export class App {
   private picture(width: number, height: number, withOverlay: boolean): HTMLCanvasElement | undefined {
     const s = this.state;
     if (!s) return undefined;
+    // a single picture is framed for its own size; a film sets its view once for all its images
+    const saved = this.exportCamera ? undefined : this.scene.cameraState();
+    if (saved) this.scene.setCameraState(this.scene.exportView(width, height));
     const canvas = this.scene.renderToCanvas(width, height);
+    if (saved) this.scene.setCameraState(saved);
     if (withOverlay) {
       const ctx = canvas.getContext("2d");
       if (ctx)

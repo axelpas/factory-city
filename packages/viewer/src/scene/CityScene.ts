@@ -22,9 +22,33 @@ import {
 } from "../anim/transition";
 import type { Theme } from "../themes/index";
 import { parseHex, type Rgb } from "../view/color";
+import {
+  cityCorners,
+  frameOrthographic,
+  framePerspective,
+  freeRect,
+  type Insets,
+  NO_INSETS,
+  type Vec3,
+} from "../view/framing";
 import { pickBuilding } from "../view/picking";
 import { folderDepth, PLINTH_THICKNESS, plinthTop } from "../view/placements";
 import { edgeWidth, REST_DELAY_MS, restRatio } from "../view/resolution";
+
+/** A camera view that can be saved and restored. */
+export interface CameraState {
+  position: THREE.Vector3;
+  target: THREE.Vector3;
+  zoom: number;
+  /** Where the target lands on the picture, in pixels from its center. */
+  shift: { x: number; y: number };
+  /** The automatic framing in force, if any. */
+  framed: "default" | "top" | null;
+  orthographic: boolean;
+}
+
+/** Frame height of the orthographic camera at zoom 1, as a share of the map side. */
+const ORTHO_HEIGHT = 1.28;
 
 export type Pick =
   | { kind: "file"; index: number }
@@ -199,6 +223,12 @@ export class CityScene {
   private plinths: THREE.InstancedMesh | undefined;
   private plinthPaths: string[] = [];
   private maxFolderDepth = 0;
+  /** What the bar, the panels and the timeline cover: the city is framed in what is left. */
+  private insets: Insets = NO_INSETS;
+  /** The automatic framing in force; null once the camera was moved by hand. */
+  private framed: "default" | "top" | null = "default";
+  private shift = { x: 0, y: 0 };
+  private lastSize = { w: 0, h: 0 };
   private parcels: Array<{ x: number; y: number; w: number; h: number } | undefined> = [];
   private count = 0;
   private size = 1000;
@@ -249,6 +279,18 @@ export class CityScene {
     this.controls.maxPolarAngle = Math.PI * 0.495;
     this.controls.autoRotateSpeed = 0.6;
     this.controls.addEventListener("change", () => this.requestRender());
+    // a camera moved by hand is left alone: no automatic framing until Reset or Top view
+    // (a plain click starts and ends an interaction without changing the view: it does not count)
+    let byHand = false;
+    this.controls.addEventListener("start", () => {
+      byHand = true;
+    });
+    this.controls.addEventListener("end", () => {
+      byHand = false;
+    });
+    this.controls.addEventListener("change", () => {
+      if (byHand) this.framed = null;
+    });
 
     this.sun = new THREE.DirectionalLight();
     this.scene.add(this.ambient, this.sun, this.sun.target);
@@ -375,11 +417,8 @@ export class CityScene {
     this.renderer.shadowMap.enabled = theme.light.shadows;
     this.sun.castShadow = theme.light.shadows;
     // the camera is a token too: perspective for a model, orthographic for a plan
-    const next = theme.camera.type === "orthographic" ? this.orthographic : this.perspective;
-    if (next !== this.camera) {
-      this.camera = next;
-      this.controls.object = next;
-    }
+    // (the top view is always orthographic: it keeps its camera until Reset)
+    if (this.framed !== "top") this.useCamera(theme.camera.type === "orthographic");
     this.perspective.fov = theme.camera.fov;
     this.setRamp(theme.ramps.sequential.map(parseHex));
     this.resize();
@@ -858,50 +897,135 @@ export class CityScene {
   }
 
   /** Where the camera is, to come back to it after an export that moved it. */
-  cameraState(): { position: THREE.Vector3; target: THREE.Vector3; zoom: number } {
+  cameraState(): CameraState {
     return {
       position: this.camera.position.clone(),
       target: this.controls.target.clone(),
       zoom: this.camera.zoom,
+      shift: { ...this.shift },
+      framed: this.framed,
+      orthographic: this.camera === this.orthographic,
     };
+  }
+
+  /**
+   * The view to use for a picture of an exact size: when the city is framed automatically it is framed again
+   * for that picture, with no panel around; a view set by hand is kept, centered on its target.
+   */
+  exportView(width: number, height: number): CameraState {
+    const saved = this.cameraState();
+    if (this.framed) this.applyFrame(width, height, NO_INSETS);
+    else this.shift = { x: 0, y: 0 };
+    const view = { ...this.cameraState(), framed: null };
+    this.setCameraState(saved);
+    return view;
   }
 
   /**
    * Places the camera at a saved view turned by an angle around the vertical axis through its target.
    * The result depends on the arguments only, so that two exports give the same images.
    */
-  setCameraState(state: { position: THREE.Vector3; target: THREE.Vector3; zoom: number }, angle = 0): void {
+  setCameraState(state: CameraState, angle = 0): void {
     const offset = state.position
       .clone()
       .sub(state.target)
       .applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+    this.useCamera(state.orthographic);
     this.controls.target.copy(state.target);
     this.camera.position.copy(state.target).add(offset);
     this.camera.zoom = state.zoom;
     this.camera.lookAt(state.target);
-    this.camera.updateProjectionMatrix();
+    this.shift = { ...state.shift };
+    // a turned view is no longer the framed one
+    this.framed = angle === 0 ? state.framed : null;
+    const size = this.renderer.getSize(new THREE.Vector2());
+    this.applyShift(size.x, size.y);
     this.camera.updateMatrixWorld();
     this.requestRender();
+  }
+
+  /** Tells the scene what the bar, the panels and the timeline cover; a framed city is framed again. */
+  setFreeArea(insets: Insets): void {
+    const same = (Object.keys(insets) as Array<keyof Insets>).every((k) => insets[k] === this.insets[k]);
+    if (same) return;
+    this.insets = { ...insets };
+    if (this.framed) this.frameCity();
+  }
+
+  private useCamera(orthographic: boolean): void {
+    const next = orthographic ? this.orthographic : this.perspective;
+    if (next === this.camera) return;
+    next.position.copy(this.camera.position);
+    this.camera = next;
+    this.controls.object = next;
+  }
+
+  /** Height of the tallest thing the city can show: the highest plinth and a building at full scale. */
+  private cityHeight(): number {
+    return plinthTop(this.maxFolderDepth) + this.theme.heightScale * this.size + 2;
+  }
+
+  private frameCity(): void {
+    const w = Math.max(this.container.clientWidth, 1);
+    const h = Math.max(this.container.clientHeight, 1);
+    this.applyFrame(w, h, this.insets);
+    this.requestRender();
+  }
+
+  /** Places the camera, along its current direction, so that the city fills the free part of a picture. */
+  private applyFrame(w: number, h: number, insets: Insets): void {
+    const target = this.controls.target;
+    const offset = this.camera.position.clone().sub(target);
+    const input = {
+      corners: cityCorners(this.size, this.cityHeight()),
+      direction: [offset.x, offset.y, offset.z] as Vec3,
+      viewport: { w, h },
+      free: freeRect({ w, h }, insets),
+    };
+    let center: { x: number; y: number };
+    if (this.camera === this.perspective) {
+      const fit = framePerspective({ ...input, fovDeg: this.perspective.fov });
+      this.camera.position.copy(target).add(offset.setLength(fit.distance));
+      center = fit.center;
+    } else {
+      const fit = frameOrthographic({ ...input, unitsHigh: this.size * ORTHO_HEIGHT });
+      this.orthographic.zoom = fit.zoom;
+      center = fit.center;
+    }
+    this.camera.lookAt(target);
+    this.shift = { x: center.x - w / 2, y: center.y - h / 2 };
+    this.applyShift(w, h);
+    this.camera.updateMatrixWorld();
+  }
+
+  /** Shifts the picture so that the camera target lands off the center of a picture of this size. */
+  private applyShift(w: number, h: number): void {
+    for (const camera of [this.perspective, this.orthographic]) {
+      if (this.shift.x === 0 && this.shift.y === 0) camera.clearViewOffset();
+      else camera.setViewOffset(w, h, -this.shift.x, -this.shift.y, w, h);
+    }
   }
 
   /** The camera as a three-quarter view of the whole city. */
   resetCamera(): void {
     const s = this.size;
     const dir = new THREE.Vector3(...(this.theme.camera.direction as [number, number, number])).normalize();
+    this.useCamera(this.theme.camera.type === "orthographic");
     this.controls.target.set(s / 2, 0, s / 2);
     this.camera.position.copy(this.controls.target).addScaledVector(dir, s * 1.9);
     this.orthographic.zoom = 1;
-    this.resize();
-    this.controls.update();
-    this.requestRender();
+    this.framed = "default";
+    this.frameCity();
   }
 
+  /** Straight from above, without perspective: a plan of the city, framed in the free area. */
   topView(): void {
     const s = this.size;
+    this.useCamera(true);
     this.controls.target.set(s / 2, 0, s / 2);
-    this.camera.position.set(s / 2, s * 1.4, s / 2 + 0.001);
-    this.controls.update();
-    this.requestRender();
+    this.camera.position.set(s / 2, s * 3, s / 2 + 0.001);
+    this.framed = "top";
+    this.frameCity();
   }
 
   /** Renders the current view at an exact size and returns it as a canvas. */
@@ -912,6 +1036,7 @@ export class CityScene {
     this.uniforms.uEdgeWidth.value = edgeWidth(1);
     this.renderer.setSize(width, height, false);
     this.setAspect(width / height);
+    this.applyShift(width, height);
     this.renderer.shadowMap.needsUpdate = true;
     this.renderer.render(this.scene, this.camera);
     const out = document.createElement("canvas");
@@ -922,6 +1047,7 @@ export class CityScene {
     this.uniforms.uEdgeWidth.value = edgeWidth(prevRatio);
     this.renderer.setSize(prevSize.x, prevSize.y, false);
     this.setAspect(prevSize.x / Math.max(prevSize.y, 1));
+    this.applyShift(prevSize.x, prevSize.y);
     this.requestRender();
     return out;
   }
@@ -930,7 +1056,7 @@ export class CityScene {
   private setAspect(aspect: number): void {
     this.perspective.aspect = aspect;
     this.perspective.updateProjectionMatrix();
-    const half = this.size * 0.64;
+    const half = (this.size * ORTHO_HEIGHT) / 2;
     this.orthographic.left = -half * aspect;
     this.orthographic.right = half * aspect;
     this.orthographic.top = half;
@@ -946,6 +1072,11 @@ export class CityScene {
     this.renderer.domElement.style.width = "100%";
     this.renderer.domElement.style.height = "100%";
     this.setAspect(w / h);
+    // a framed city follows the stage when its size changes; a view set by hand only keeps its shift
+    const resized = w !== this.lastSize.w || h !== this.lastSize.h;
+    this.lastSize = { w, h };
+    if (resized && this.framed) this.applyFrame(w, h, this.insets);
+    else this.applyShift(w, h);
     this.requestRender();
   }
 
