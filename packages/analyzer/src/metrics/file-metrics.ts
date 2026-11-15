@@ -82,7 +82,7 @@ class Walker {
         if (callee !== undefined && re?.test(callee)) this.count(rule.kind);
       } else if (rule.type === "emptyBlock" && rule.nodeType === type) {
         const body = node.childForFieldName(rule.bodyField ?? "body");
-        if (body?.namedChildren.every((c) => !c || c.type === "comment")) this.count(rule.kind);
+        if (body?.namedChildren.every((c) => !c || this.cm.has(c.type))) this.count(rule.kind);
       }
     }
     const imp = this.lang.imports;
@@ -199,9 +199,10 @@ export function computeMetrics(
       metrics.max_function_complexity = walker.maxFunctionComplexity;
     if (lang.shortcuts.length > 0) {
       let total = 0;
-      for (const rule of lang.shortcuts) {
-        const n = walker.shortcuts.get(rule.kind) ?? 0;
-        metrics[`escape_${rule.kind}`] = n;
+      // several rules may feed one kind: each kind is counted once
+      for (const kind of new Set(lang.shortcuts.map((rule) => rule.kind))) {
+        const n = walker.shortcuts.get(kind) ?? 0;
+        metrics[`escape_${kind}`] = n;
         total += n;
       }
       metrics.escape_hatches = total;

@@ -1,0 +1,38 @@
+{
+  "id": "c",
+  "label": "C",
+  "tier": 2,
+  "grammar": "c",
+  "extensions": [".c"],
+  "comment": ["comment"],
+  "functions": ["function_definition"],
+  "branches": [
+    "if_statement",
+    "for_statement",
+    "while_statement",
+    "do_statement",
+    "case_statement",
+    "conditional_expression"
+  ],
+  "logical": {
+    "nodeTypes": ["binary_expression"],
+    "operators": ["&&", "||"]
+  },
+  "nesting": ["if_statement", "for_statement", "while_statement", "do_statement", "switch_statement"],
+  "nestingExceptParent": {
+    "if_statement": ["else_clause"]
+  },
+  "shortcuts": [
+    {
+      "kind": "lint_disable",
+      "type": "comment",
+      "pattern": "NOLINT|cppcheck-suppress"
+    },
+    {
+      "kind": "lint_disable",
+      "type": "node",
+      "nodeType": "preproc_call",
+      "pattern": "^#\\s*pragma\\s+((GCC|clang)\\s+diagnostic\\s+ignored|warning\\s*\\(\\s*disable)"
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "id": "rust",
+  "label": "Rust",
+  "tier": 2,
+  "grammar": "rust",
+  "extensions": [".rs"],
+  "comment": ["line_comment", "block_comment"],
+  "functions": ["function_item", "closure_expression"],
+  "branches": ["if_expression", "for_expression", "while_expression", "loop_expression", "match_arm"],
+  "logical": {
+    "nodeTypes": ["binary_expression"],
+    "operators": ["&&", "||"]
+  },
+  "nesting": [
+    "if_expression",
+    "for_expression",
+    "while_expression",
+    "loop_expression",
+    "match_expression",
+    "closure_expression"
+  ],
+  "nestingExceptParent": {
+    "if_expression": ["else_clause"]
+  },
+  "shortcuts": [
+    {
+      "kind": "lint_disable",
+      "type": "node",
+      "nodeType": "attribute_item",
+      "pattern": "^#\\[allow\\("
+    },
+    {
+      "kind": "lint_disable",
+      "type": "node",
+      "nodeType": "inner_attribute_item",
+      "pattern": "^#!\\[allow\\("
+    },
+    {
+      "kind": "skipped_test",
+      "type": "node",
+      "nodeType": "attribute_item",
+      "pattern": "^#\\[ignore"
+    }
+  ]
+}

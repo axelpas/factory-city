@@ -33,8 +33,21 @@ interface AnalyzeFlags {
   all?: boolean;
   include?: string[];
   exclude?: string[];
+  with?: string[];
   out?: string;
   json?: boolean;
+}
+
+/** Optional collectors, asked for with `--with`. */
+const FEATURES = ["duplication"];
+
+function features(opts: AnalyzeFlags): Set<string> {
+  const asked = new Set(opts.with ?? []);
+  for (const feature of asked) {
+    if (!FEATURES.includes(feature))
+      throw new Error(`Unknown --with value "${feature}". Available: ${FEATURES.join(", ")}.`);
+  }
+  return asked;
 }
 
 /** Analyzes a folder, writes the snapshot, and returns where it went. */
@@ -48,6 +61,7 @@ async function analyzeAndWrite(path: string, opts: AnalyzeFlags, quiet = false) 
     all: opts.all,
     include: opts.include,
     exclude: opts.exclude,
+    duplication: features(opts).has("duplication"),
   });
   const slug = slugFor(folder);
   const dataDir = opts.out ? resolve(opts.out) : join(outputRoot(), slug);
@@ -70,6 +84,7 @@ function withAnalyzeOptions(cmd: Command): Command {
     .option("--all", "include every text file, with no default exclusion")
     .option("--include <glob>", "include files matching the glob (repeatable)", collect, [])
     .option("--exclude <glob>", "exclude files matching the glob (repeatable)", collect, [])
+    .option("--with <feature>", "add an optional collector: duplication (repeatable)", collect, [])
     .option("-o, --out <dir>", "output folder (default: ~/.factory-city/<project>)")
     .option("--json", "print machine-readable output");
 }
@@ -179,7 +194,10 @@ program
       );
       return;
     }
-    for (const l of LANGUAGES) console.log(`${l.label.padEnd(12)} tier ${l.tier}  ${l.extensions.join(" ")}`);
+    for (const l of LANGUAGES) console.log(`${l.label.padEnd(14)} tier ${l.tier}  ${l.extensions.join(" ")}`);
+    console.log(
+      `${"Other text".padEnd(14)} tier 3  any other text file, with --all: line and git metrics only`,
+    );
   });
 
 program

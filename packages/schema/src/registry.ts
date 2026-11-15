@@ -225,7 +225,8 @@ export const METRICS: readonly MetricDefinition[] = [
     unit: "places",
     direction: "higher-is-worse",
     level: 0,
-    limits: "Rule sets exist for TypeScript and JavaScript. A deliberate, justified use counts as well.",
+    limits:
+      "Complete rule sets exist for TypeScript and JavaScript; other languages have a few rules. A deliberate, justified use counts as well.",
   }),
   metric({
     id: "escape_hatch_density",
@@ -286,13 +287,14 @@ export const METRICS: readonly MetricDefinition[] = [
   metric({
     id: "escape_lint_disable",
     label: "Lint-disable comments",
-    definition: "An eslint-disable, tslint:disable or biome-ignore comment.",
+    definition:
+      "A comment, annotation or directive that switches a linter or a compiler warning off (eslint-disable, noqa, @SuppressWarnings, #pragma warning disable...).",
     computation: "Counted by the language's declarative rule set.",
     why: "Hides lint findings.",
     unit: "places",
     direction: "higher-is-worse",
     level: 0,
-    limits: "TypeScript and JavaScript only.",
+    limits: "Only for languages whose configuration has the rule.",
   }),
   metric({
     id: "escape_skipped_test",
@@ -303,7 +305,7 @@ export const METRICS: readonly MetricDefinition[] = [
     unit: "places",
     direction: "higher-is-worse",
     level: 0,
-    limits: "TypeScript and JavaScript only.",
+    limits: "Only for languages whose configuration has the rule.",
   }),
   metric({
     id: "escape_focused_test",
@@ -325,7 +327,34 @@ export const METRICS: readonly MetricDefinition[] = [
     unit: "places",
     direction: "higher-is-worse",
     level: 0,
-    limits: "TypeScript and JavaScript only.",
+    limits: "Only for languages whose configuration has the rule.",
+  }),
+  metric({
+    id: "duplicated_lines",
+    higherMeans: "more copied lines",
+    label: "Copied lines",
+    definition: "Lines of the file that also exist, as a block, somewhere else in the analyzed files.",
+    computation:
+      "Optional (--with duplication). Token-based detection of blocks of at least 5 lines and 50 tokens, within one language; the lines of every copy are counted once per file.",
+    why: "Copied code has to be fixed in several places.",
+    unit: "lines",
+    direction: "higher-is-worse",
+    level: 0,
+    limits:
+      "Computed only when asked. Unavailable for formats the detector does not know. Both the original and the copy are counted.",
+  }),
+  metric({
+    id: "duplication_ratio",
+    higherMeans: "more copied code",
+    label: "Copied share",
+    definition: "Share of the file's lines that are copied lines.",
+    computation: "Copied lines divided by the lines of the file.",
+    why: "Compares files of different sizes fairly.",
+    unit: "share",
+    kind: "ratio",
+    direction: "higher-is-worse",
+    level: 0,
+    limits: "Same as copied lines.",
   }),
   metric({
     id: "number_of_commits",

@@ -1,0 +1,37 @@
+{
+  "id": "ruby",
+  "label": "Ruby",
+  "tier": 2,
+  "grammar": "ruby",
+  "extensions": [".rb", ".rake"],
+  "comment": ["comment"],
+  "functions": ["method", "singleton_method", "lambda"],
+  "branches": [
+    "if",
+    "elsif",
+    "unless",
+    "while",
+    "until",
+    "for",
+    "when",
+    "rescue",
+    "conditional",
+    "if_modifier",
+    "unless_modifier",
+    "while_modifier",
+    "until_modifier"
+  ],
+  "logical": {
+    "nodeTypes": ["binary"],
+    "operators": ["&&", "||", "and", "or"]
+  },
+  "nesting": ["if", "unless", "while", "until", "for", "case", "begin", "block", "do_block", "lambda"],
+  "nestingExceptParent": {},
+  "shortcuts": [
+    {
+      "kind": "lint_disable",
+      "type": "comment",
+      "pattern": "rubocop:disable|:nocov:"
+    }
+  ]
+}

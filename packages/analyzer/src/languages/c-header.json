@@ -1,0 +1,8 @@
+{
+  "id": "c-header",
+  "label": "C/C++ header",
+  "tier": 2,
+  "extends": "cpp",
+  "grammar": "cpp",
+  "extensions": [".h"]
+}

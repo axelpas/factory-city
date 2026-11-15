@@ -91,7 +91,10 @@ export function isTestPath(path: string): boolean {
     )
   )
     return true;
-  return /\.(test|spec)\.[a-z]+$/.test(file) || /(^|_)tests?\.[a-z]+$/.test(file) || /^test_/.test(file);
+  if (/\.(test|spec)\.[a-z]+$/.test(file) || /(^|_)(tests?|spec)\.[a-z]+$/.test(file) || /^test_/.test(file))
+    return true;
+  // OrderServiceTest.java, InvoiceTests.cs, OrderSpec.kt: the suffix starts a new word
+  return /[a-z0-9](Tests?|Spec)\.[a-z]+$/.test(path.split("/").pop() ?? "");
 }
 
 export function isGeneratedName(path: string): boolean {

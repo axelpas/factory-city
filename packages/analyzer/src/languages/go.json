@@ -1,0 +1,38 @@
+{
+  "id": "go",
+  "label": "Go",
+  "tier": 2,
+  "grammar": "go",
+  "extensions": [".go"],
+  "comment": ["comment"],
+  "functions": ["function_declaration", "method_declaration", "func_literal"],
+  "branches": ["if_statement", "for_statement", "expression_case", "type_case", "communication_case"],
+  "logical": {
+    "nodeTypes": ["binary_expression"],
+    "operators": ["&&", "||"]
+  },
+  "nesting": [
+    "if_statement",
+    "for_statement",
+    "expression_switch_statement",
+    "type_switch_statement",
+    "select_statement",
+    "func_literal"
+  ],
+  "nestingExceptParent": {
+    "if_statement": ["if_statement"]
+  },
+  "shortcuts": [
+    {
+      "kind": "lint_disable",
+      "type": "comment",
+      "pattern": "//\\s*nolint|#nosec"
+    },
+    {
+      "kind": "skipped_test",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^\\w+\\.Skip(f|Now)?$"
+    }
+  ]
+}

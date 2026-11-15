@@ -1,0 +1,46 @@
+{
+  "id": "swift",
+  "label": "Swift",
+  "tier": 2,
+  "grammar": "swift",
+  "extensions": [".swift"],
+  "comment": ["comment", "multiline_comment"],
+  "functions": ["function_declaration", "init_declaration", "deinit_declaration", "lambda_literal"],
+  "branches": [
+    "if_statement",
+    "guard_statement",
+    "for_statement",
+    "while_statement",
+    "repeat_while_statement",
+    "switch_entry",
+    "catch_block",
+    "ternary_expression",
+    "conjunction_expression",
+    "disjunction_expression",
+    "nil_coalescing_expression"
+  ],
+  "logical": {
+    "nodeTypes": [],
+    "operators": []
+  },
+  "nesting": [
+    "if_statement",
+    "guard_statement",
+    "for_statement",
+    "while_statement",
+    "repeat_while_statement",
+    "switch_statement",
+    "do_statement",
+    "lambda_literal"
+  ],
+  "nestingExceptParent": {
+    "if_statement": ["if_statement"]
+  },
+  "shortcuts": [
+    {
+      "kind": "lint_disable",
+      "type": "comment",
+      "pattern": "swiftlint:disable"
+    }
+  ]
+}

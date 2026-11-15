@@ -49,4 +49,37 @@ describe("factory-city CLI", () => {
     }
     expect(message).toContain("needs a git repository");
   });
+
+  it("lists the three tiers of languages", () => {
+    const text = run(["languages"]);
+    expect(text).toMatch(/TypeScript\s+tier 1/);
+    expect(text).toMatch(/Python\s+tier 2/);
+    expect(text).toMatch(/Swift\s+tier 2/);
+    expect(text).toContain("tier 3  any other text file, with --all");
+    const listed = JSON.parse(run(["languages", "--json"])) as Array<{ id: string; tier: number }>;
+    expect(listed.filter((l) => l.tier === 2).length).toBeGreaterThanOrEqual(11);
+  });
+
+  it("analyzes a small Python project", () => {
+    const dir = makeTree({ "app/main.py": "def main():\n    if True:\n        return 1\n" });
+    const out = makeTree({});
+    expect(run(["analyze", dir, "-o", out])).toContain("Analyzed 1 file.");
+    const manifest = JSON.parse(readFileSync(join(out, "analysis.json"), "utf8"));
+    expect(manifest.metrics).toContain("mcc");
+  });
+
+  it("adds duplication with --with duplication, and refuses an unknown collector", () => {
+    const dir = makeTree({ "a.ts": "export const a = 1;\n" });
+    const out = makeTree({});
+    run(["analyze", dir, "--with", "duplication", "-o", out]);
+    const manifest = JSON.parse(readFileSync(join(out, "analysis.json"), "utf8"));
+    expect(manifest.metrics).toContain("duplication_ratio");
+    let message = "";
+    try {
+      run(["analyze", dir, "--with", "magic", "-o", makeTree({})]);
+    } catch (err) {
+      message = String((err as { stderr?: string }).stderr);
+    }
+    expect(message).toContain('Unknown --with value "magic". Available: duplication.');
+  });
 });

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Fails on a license outside the policy (brief section 11) and regenerates THIRD-PARTY-NOTICES.md.
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const ALLOWED = new Set([
   "MIT",
@@ -28,6 +29,68 @@ function pnpmLicenses(args) {
 function isAllowed(expression) {
   const clean = expression.replace(/[()]/g, " ").trim();
   return clean.split(/\s+OR\s+/i).some((alt) => alt.split(/\s+AND\s+/i).every((l) => ALLOWED.has(l.trim())));
+}
+
+/** Grammar files shipped in the repository: prebuilt upstream releases, pinned by checksum. */
+const GRAMMARS_DIR = new URL("../packages/analyzer/grammars/", import.meta.url);
+const BUNDLED_GRAMMARS = [
+  {
+    file: "tree-sitter-c.wasm",
+    source: "https://github.com/tree-sitter/tree-sitter-c",
+    version: "0.24.1",
+    license: "MIT",
+    copyright: "Copyright (c) 2014 Max Brunsfeld",
+    licenseFile: "LICENSE-tree-sitter-c.txt",
+    sha256: "c852c2a85ebf2beb636aa3b0ef7f7e70458684d74f6741b20dcb296885bed9f9",
+  },
+  {
+    file: "tree-sitter-kotlin.wasm",
+    source: "https://github.com/tree-sitter-grammars/tree-sitter-kotlin",
+    version: "1.1.0",
+    license: "MIT",
+    copyright: "Copyright (c) 2024 Amaan Qureshi",
+    licenseFile: "LICENSE-tree-sitter-kotlin.txt",
+    sha256: "7009d69453bc8735e438b2818a633efb21c88f99782769abba60dffedfab73f7",
+  },
+  {
+    file: "tree-sitter-swift.wasm",
+    source: "https://github.com/alex-pinkus/tree-sitter-swift",
+    version: "0.7.3",
+    license: "MIT",
+    copyright: "Copyright (c) 2021 alex-pinkus",
+    licenseFile: "LICENSE-tree-sitter-swift.txt",
+    sha256: "0258a7ef17303a8079ffe0748b3583d59656b5c3e8653fca7b6451b3e6689eb2",
+  },
+];
+
+/** Every bundled grammar is listed, unchanged, under an allowed license, with its license text beside it. */
+function checkBundledGrammars() {
+  const problems = [];
+  const listed = new Set(BUNDLED_GRAMMARS.map((g) => g.file));
+  for (const file of readdirSync(GRAMMARS_DIR)) {
+    if (file.endsWith(".wasm") && !listed.has(file))
+      problems.push(`${file}: not listed in scripts/licenses-check.mjs`);
+  }
+  for (const g of BUNDLED_GRAMMARS) {
+    const path = new URL(g.file, GRAMMARS_DIR);
+    if (!existsSync(path)) {
+      problems.push(`${g.file}: missing`);
+      continue;
+    }
+    const actual = createHash("sha256").update(readFileSync(path)).digest("hex");
+    if (actual !== g.sha256) problems.push(`${g.file}: checksum ${actual} differs from the pinned one`);
+    if (!isAllowed(g.license)) problems.push(`${g.file}: license ${g.license} is outside the policy`);
+    if (!existsSync(new URL(g.licenseFile, GRAMMARS_DIR)))
+      problems.push(`${g.file}: ${g.licenseFile} is missing`);
+  }
+  return problems;
+}
+
+const grammarProblems = checkBundledGrammars();
+if (grammarProblems.length > 0) {
+  console.error("Bundled grammars:");
+  for (const p of grammarProblems) console.error(`  ${p}`);
+  process.exit(1);
 }
 
 const all = pnpmLicenses([]);
@@ -64,9 +127,13 @@ const notices = [
   "  BSD-3-Clause License: redistribution and use in source and binary forms, with or without modification,",
   "  are permitted provided that the copyright notice, the list of conditions and the disclaimer of the",
   "  license are retained, and that the name of the copyright holder is not used to endorse derived products.",
+  ...BUNDLED_GRAMMARS.map(
+    (g) =>
+      `- \`packages/analyzer/grammars/${g.file}\`: prebuilt grammar, unchanged from ${g.source} ${g.version}. ${g.copyright}. ${g.license} License, full text in \`packages/analyzer/grammars/${g.licenseFile}\`.`,
+  ),
   "",
 ];
 writeFileSync(new URL("../THIRD-PARTY-NOTICES.md", import.meta.url), notices.join("\n"));
 console.log(
-  `Licenses OK: ${all.length} packages checked, ${rows.length} production packages in THIRD-PARTY-NOTICES.md`,
+  `Licenses OK: ${all.length} packages checked, ${BUNDLED_GRAMMARS.length} bundled grammars verified, ${rows.length} production packages in THIRD-PARTY-NOTICES.md`,
 );

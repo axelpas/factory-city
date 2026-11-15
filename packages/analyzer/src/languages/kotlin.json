@@ -1,0 +1,47 @@
+{
+  "id": "kotlin",
+  "label": "Kotlin",
+  "tier": 2,
+  "grammar": "kotlin",
+  "extensions": [".kt", ".kts"],
+  "comment": ["line_comment", "block_comment"],
+  "functions": ["function_declaration", "secondary_constructor", "lambda_literal", "anonymous_function"],
+  "branches": [
+    "if_expression",
+    "for_statement",
+    "while_statement",
+    "do_while_statement",
+    "when_entry",
+    "catch_block"
+  ],
+  "logical": {
+    "nodeTypes": ["binary_expression"],
+    "operators": ["&&", "||", "?:"]
+  },
+  "nesting": [
+    "if_expression",
+    "for_statement",
+    "while_statement",
+    "do_while_statement",
+    "when_expression",
+    "try_expression",
+    "lambda_literal",
+    "anonymous_function"
+  ],
+  "nestingExceptParent": {
+    "if_expression": ["if_expression"]
+  },
+  "shortcuts": [
+    {
+      "kind": "lint_disable",
+      "type": "comment",
+      "pattern": "ktlint-disable|detekt:disable|noinspection"
+    },
+    {
+      "kind": "lint_disable",
+      "type": "node",
+      "nodeType": "annotation",
+      "pattern": "^@Suppress\\b"
+    }
+  ]
+}

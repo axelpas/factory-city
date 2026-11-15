@@ -47,3 +47,8 @@ Each dimension reads one metric and has three upper bounds (low, moderate, high;
 - Hotspots: non-test files ranked by the product of two percentile ranks, complexity and recent commits (files that did not change are left out), or complexity and real lines when there is no history. Ties are broken by path.
 - Actions follow the dimensions rated high or very high: split along cohesion groups (named by their declarations), extract functions, flatten nesting, deduplicate, reduce imports, remove shortcuts (by kind), add tests (recent fixes), separate concerns (3 recent issues or more), split a large file. Size is S under 150 real lines, M under 500, else L.
 - The report names declarations for cohesion groups only; it holds no source code.
+
+## Addendum 2026-11-15: duplication and Tier 2 (milestone 13)
+- Duplication is optional (`--with duplication`). A copied block is at least 5 lines and 50 tokens, the detector's defaults, compared within one language. `duplicated_lines` counts every line of a file that belongs to a copied block once, in the original and in the copy alike; `duplication_ratio` is that count over the file's lines (`loc`). A format the detector does not know has no value. The bounds of the dimension (0.03, 0.05, 0.2) stay a project default.
+- Tier 2 complexity uses the same rule as Tier 1: one per function plus one per decision point, where the decision points are the node types listed in the language's configuration. Definitions therefore follow each grammar: a `default` clause counts where the grammar does not tell it from a `case`.
+- A shortcut kind may be fed by several rules of a configuration; each kind is counted once in `escape_hatches`.

@@ -25,6 +25,8 @@
     "web-tree-sitter": "0.27.2"
   },
   "optionalDependencies": {
+    "@jscpd/core": "4.2.5",
+    "@jscpd/tokenizer": "4.2.6",
     "playwright-core": "1.65.1"
   }
 }

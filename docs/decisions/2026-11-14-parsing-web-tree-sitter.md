@@ -1,6 +1,6 @@
 # Parsing: web-tree-sitter with the VS Code grammar pack
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-14
 
 ## Context
@@ -15,3 +15,14 @@ Use `web-tree-sitter` 0.27.2 with `@vscode/tree-sitter-wasm` 0.3.1. This fully c
 
 ## Consequences
 Tier 1 is unaffected. Language configuration stays declarative, one file per language. Grammar binaries are pinned by version and listed in `THIRD-PARTY-NOTICES.md`.
+
+## Addendum 2026-11-15: C, Kotlin and Swift grammars (milestone 13)
+Neither candidate above was kept: pinning `web-tree-sitter` 0.25.x would move Tier 1 to an older runtime, and building grammars ourselves needs a toolchain. The npm packages of the three grammars run a native build at install, so they cannot be dependencies. Their upstream releases, however, contain a prebuilt `.wasm` that loads with `web-tree-sitter` 0.27.2 (checked by parsing a sample of each language without error nodes). These three files are bundled, unchanged, in `packages/analyzer/grammars/`:
+
+| File | Source | Version | License | SHA-256 |
+|---|---|---|---|---|
+| `tree-sitter-c.wasm` | npm package `tree-sitter-c` | 0.24.1 | MIT, Copyright (c) 2014 Max Brunsfeld | `c852c2a85ebf2beb636aa3b0ef7f7e70458684d74f6741b20dcb296885bed9f9` |
+| `tree-sitter-kotlin.wasm` | npm package `@tree-sitter-grammars/tree-sitter-kotlin` | 1.1.0 | MIT, Copyright (c) 2024 Amaan Qureshi | `7009d69453bc8735e438b2818a633efb21c88f99782769abba60dffedfab73f7` |
+| `tree-sitter-swift.wasm` | GitHub release of `alex-pinkus/tree-sitter-swift` | 0.7.3 | MIT, Copyright (c) 2021 alex-pinkus | `0258a7ef17303a8079ffe0748b3583d59656b5c3e8653fca7b6451b3e6689eb2` |
+
+Consequences: the repository carries 7.9 MB of binary files; `pnpm licenses:check` fails when a bundled grammar is unlisted, changed, or without its license text; `parse.ts` looks in this folder before the grammar package. `.h` files are read with the C++ grammar under their own label, because a C++ header read as C would be full of errors.

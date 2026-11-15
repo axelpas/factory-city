@@ -29,6 +29,17 @@ describe("presets", () => {
     expect(status.available).toBe(false);
     expect(status.reason).toContain("mcc");
   });
+
+  it("lists Duplication as unavailable until it is computed, and says how to get it", () => {
+    const find = (m: typeof model) => presetStatuses(m).find((s) => s.preset.id === "duplication");
+    const without = find(model);
+    expect(without?.available).toBe(false);
+    expect(without?.reason).toContain("--with duplication");
+    const computed = makeModel(
+      SAMPLE.map((s) => ({ ...s, values: { ...s.values, duplication_ratio: 0.1 } })),
+    );
+    expect(find(computed)).toMatchObject({ available: true, mapping: { color: "duplication_ratio" } });
+  });
 });
 
 describe("placements", () => {

@@ -1,4 +1,16 @@
+import c from "./c.json" with { type: "json" };
+import cHeader from "./c-header.json" with { type: "json" };
+import cpp from "./cpp.json" with { type: "json" };
+import csharp from "./csharp.json" with { type: "json" };
+import go from "./go.json" with { type: "json" };
+import java from "./java.json" with { type: "json" };
 import javascript from "./javascript.json" with { type: "json" };
+import kotlin from "./kotlin.json" with { type: "json" };
+import php from "./php.json" with { type: "json" };
+import python from "./python.json" with { type: "json" };
+import ruby from "./ruby.json" with { type: "json" };
+import rust from "./rust.json" with { type: "json" };
+import swift from "./swift.json" with { type: "json" };
 import tsx from "./tsx.json" with { type: "json" };
 import typescript from "./typescript.json" with { type: "json" };
 
@@ -7,7 +19,12 @@ export interface LanguageConfig {
   id: string;
   label: string;
   tier: 1 | 2;
-  /** Grammar file name without prefix, e.g. `typescript` for `tree-sitter-typescript.wasm`. */
+  /** The configuration this one inherits from: only what differs is written in its file. */
+  extends?: string;
+  /**
+   * Grammar file name without prefix, e.g. `typescript` for `tree-sitter-typescript.wasm`. Looked up in the
+   * package's own `grammars/` folder first, then in the grammar package.
+   */
   grammar: string;
   extensions: string[];
   comment: string[];
@@ -49,7 +66,10 @@ export interface CohesionConfig {
   minStemLength: number;
 }
 
-/** One shortcut kind. `comment` matches comment text, `node` matches a node type and its text, `call` matches the callee, `emptyBlock` matches a node whose body has no statement. */
+/**
+ * One shortcut rule; several rules may feed the same kind. `comment` matches comment text, `node` matches a node
+ * type and its text, `call` matches the callee, `emptyBlock` matches a node whose body has no statement.
+ */
 export interface ShortcutRule {
   kind: string;
   type: "comment" | "node" | "call" | "emptyBlock";
@@ -59,11 +79,28 @@ export interface ShortcutRule {
 }
 
 type RawConfig = Partial<LanguageConfig> &
-  Pick<LanguageConfig, "id" | "label" | "tier" | "grammar" | "extensions"> & {
-    extends?: string;
-  };
+  Pick<LanguageConfig, "id" | "label" | "tier" | "grammar" | "extensions">;
 
-const RAW: RawConfig[] = [typescript as RawConfig, tsx as RawConfig, javascript as RawConfig];
+/**
+ * The order is the category code stored in snapshots: append new languages, never reorder.
+ */
+const RAW: RawConfig[] = [
+  typescript,
+  tsx,
+  javascript,
+  python,
+  go,
+  java,
+  csharp,
+  c,
+  cpp,
+  cHeader,
+  rust,
+  php,
+  ruby,
+  kotlin,
+  swift,
+] as RawConfig[];
 
 function resolve(raw: RawConfig, all: Map<string, RawConfig>): LanguageConfig {
   const base = raw.extends ? resolve(must(all.get(raw.extends), raw.extends), all) : undefined;

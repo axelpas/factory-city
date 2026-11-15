@@ -1,0 +1,47 @@
+{
+  "id": "python",
+  "label": "Python",
+  "tier": 2,
+  "grammar": "python",
+  "extensions": [".py", ".pyw"],
+  "comment": ["comment"],
+  "functions": ["function_definition", "lambda"],
+  "branches": [
+    "if_statement",
+    "elif_clause",
+    "for_statement",
+    "while_statement",
+    "except_clause",
+    "conditional_expression",
+    "case_clause",
+    "for_in_clause",
+    "if_clause"
+  ],
+  "logical": {
+    "nodeTypes": ["boolean_operator"],
+    "operators": ["and", "or"]
+  },
+  "nesting": [
+    "if_statement",
+    "for_statement",
+    "while_statement",
+    "try_statement",
+    "with_statement",
+    "match_statement",
+    "lambda"
+  ],
+  "nestingExceptParent": {},
+  "shortcuts": [
+    {
+      "kind": "lint_disable",
+      "type": "comment",
+      "pattern": "#\\s*(noqa|type:\\s*ignore|pylint:\\s*disable|ruff:\\s*noqa|pyright:\\s*ignore)"
+    },
+    {
+      "kind": "skipped_test",
+      "type": "node",
+      "nodeType": "decorator",
+      "pattern": "^@(pytest\\.mark\\.skip|unittest\\.skip)"
+    }
+  ]
+}

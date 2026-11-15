@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { basename, resolve } from "node:path";
 import type { AnalysisManifest, AttributeDescriptor, CcJson, FileNode, Report } from "@factory-city/schema";
 import { buildCcJson, getMetric, nodeId } from "@factory-city/schema";
+import { detectDuplication } from "./collectors/duplication.js";
 import type { HistoryResult } from "./collectors/history.js";
 import { collectHistory, historyMetrics } from "./collectors/history.js";
 import { buildLineage } from "./collectors/lineage.js";
@@ -22,7 +23,7 @@ import type { RepoInfo } from "./source/git.js";
 import { findRepo, GitSource, revParse } from "./source/git.js";
 import type { Source } from "./source/types.js";
 
-export const ANALYZER_VERSION = "0.4.0";
+export const ANALYZER_VERSION = "0.5.0";
 
 /** Shown with every score. */
 export const SCORE_NOTICE =
@@ -41,6 +42,8 @@ export interface AnalyzeOptions {
   all?: boolean;
   include?: string[];
   exclude?: string[];
+  /** Optional collector (`--with duplication`): copied blocks across the analyzed files. */
+  duplication?: boolean;
   /** State shared by the frames of a timeline: caches and a preloaded history. */
   shared?: AnalyzeShared;
 }
@@ -78,6 +81,7 @@ const ABSOLUTE = new Set([
   "imports_out",
   "imports_in",
   "escape_hatches",
+  "duplicated_lines",
   "number_of_commits",
   "recent_commits",
   "lines_added_recent",
@@ -235,6 +239,7 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
     let syntaxErrorFiles = 0;
 
     const blobs = new Map<string, string>();
+    const analyzedEntries: Array<(typeof candidates)[number]["entry"]> = [];
     const fileCache = opts.shared?.fileCache;
     for (const { entry, language, isTest } of candidates) {
       const cacheKey = entry.blobId
@@ -260,6 +265,7 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
         continue;
       }
       const result = cached.result;
+      analyzedEntries.push(entry);
       if (entry.blobId) blobs.set(entry.path, entry.blobId);
       if (language?.imports) importsByFile.set(entry.path, result.imports);
       if (result.syntaxErrors) syntaxErrorFiles++;
@@ -276,6 +282,24 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
       warnings.push(`${syntaxErrorFiles} file(s) have syntax errors; metrics are approximate for them.`);
     for (const [key, n] of Object.entries(summary.warnings))
       warnings.push(`${n} entr${n === 1 ? "y" : "ies"} skipped: ${key}.`);
+
+    // optional: copied blocks, found in memory across the analyzed files
+    const duplicates = new Map<string, string>();
+    if (opts.duplication) {
+      const texts: Array<{ path: string; text: string }> = [];
+      for (const entry of analyzedEntries) {
+        const { text } = inspectContent(await source.read(entry), !opts.all);
+        if (text !== undefined) texts.push({ path: entry.path, text });
+      }
+      for (const [path, found] of await detectDuplication(texts)) {
+        const values = attributesByPath.get(path);
+        if (!values) continue;
+        values.duplicated_lines = found.lines;
+        const loc = values.loc ?? 0;
+        if (loc > 0) values.duplication_ratio = Math.min(1, found.lines / loc);
+        if (found.partner) duplicates.set(path, found.partner);
+      }
+    }
 
     const folderAttributes = new Map<string, Record<string, number>>();
     let coChange: Array<[string, string]> = [];
@@ -397,7 +421,7 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
     const config =
       opts.shared?.config ?? (await loadConfig(resolve(opts.folder)).catch(() => DEFAULT_CONFIG));
     const dimensions = resolveDimensions(config.thresholds);
-    const extras = { groups: groupNames, imports: importLinks, coChange };
+    const extras = { groups: groupNames, imports: importLinks, coChange, duplicates };
     const report: Report = {
       kind: "report",
       schemaVersion: 1,

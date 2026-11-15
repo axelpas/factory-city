@@ -25,6 +25,8 @@ export interface HealthExtras {
   imports?: ReadonlyArray<readonly [string, string]>;
   /** Pairs of files that usually change together. */
   coChange?: ReadonlyArray<readonly [string, string]>;
+  /** File path to the file it shares the most copied lines with. */
+  duplicates?: ReadonlyMap<string, string>;
 }
 
 const round = (x: number, digits = 4) => Math.round(x * 10 ** digits) / 10 ** digits;
@@ -112,7 +114,10 @@ function actionsFor(file: HealthFile, exceeded: Hotspot["exceeded"], extras: Hea
       "flatten-nesting",
       `Flatten nesting (deepest level ${v.max_nesting_level}) with early returns or extracted helpers.`,
     );
-  if (is("duplication")) add("deduplicate", "Deduplicate the copied code.");
+  if (is("duplication")) {
+    const partner = extras.duplicates?.get(file.path);
+    add("deduplicate", partner ? `Deduplicate with \`${partner}\`.` : "Deduplicate the copied code.");
+  }
   if (is("coupling")) add("reduce-imports", `Reduce imports (${v.imports_out} internal modules).`);
   if (is("shortcuts")) {
     const kinds = Object.entries(SHORTCUT_NAMES)

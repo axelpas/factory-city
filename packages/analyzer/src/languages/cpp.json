@@ -1,0 +1,55 @@
+{
+  "id": "cpp",
+  "label": "C++",
+  "tier": 2,
+  "grammar": "cpp",
+  "extensions": [".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx"],
+  "comment": ["comment"],
+  "functions": ["function_definition", "lambda_expression"],
+  "branches": [
+    "if_statement",
+    "for_statement",
+    "while_statement",
+    "do_statement",
+    "case_statement",
+    "conditional_expression",
+    "for_range_loop",
+    "catch_clause"
+  ],
+  "logical": {
+    "nodeTypes": ["binary_expression"],
+    "operators": ["&&", "||"]
+  },
+  "nesting": [
+    "if_statement",
+    "for_statement",
+    "while_statement",
+    "do_statement",
+    "switch_statement",
+    "for_range_loop",
+    "try_statement",
+    "lambda_expression"
+  ],
+  "nestingExceptParent": {
+    "if_statement": ["else_clause"]
+  },
+  "shortcuts": [
+    {
+      "kind": "lint_disable",
+      "type": "comment",
+      "pattern": "NOLINT|cppcheck-suppress"
+    },
+    {
+      "kind": "lint_disable",
+      "type": "node",
+      "nodeType": "preproc_call",
+      "pattern": "^#\\s*pragma\\s+((GCC|clang)\\s+diagnostic\\s+ignored|warning\\s*\\(\\s*disable)"
+    },
+    {
+      "kind": "empty_catch",
+      "type": "emptyBlock",
+      "nodeType": "catch_clause",
+      "bodyField": "body"
+    }
+  ]
+}

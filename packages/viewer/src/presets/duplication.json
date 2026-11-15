@@ -1,0 +1,11 @@
+{
+  "id": "duplication",
+  "label": "Duplication",
+  "group": "Code",
+  "level": 0,
+  "question": "Where is code copied instead of reused?",
+  "area": "rloc",
+  "height": "mcc",
+  "color": ["duplication_ratio"],
+  "needs": "Run the analysis with --with duplication."
+}

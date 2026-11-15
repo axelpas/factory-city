@@ -5,6 +5,7 @@ import change from "./change.json";
 import cohesion from "./cohesion.json";
 import contention from "./contention.json";
 import cost from "./cost.json";
+import duplication from "./duplication.json";
 import hotspots from "./hotspots.json";
 import language from "./language.json";
 import shortcuts from "./shortcuts.json";
@@ -28,6 +29,8 @@ export interface Preset {
   /** Optional extra channels, off by default. */
   twist?: string;
   tint?: string;
+  /** What to do when the preset is unavailable, added to the reason. */
+  needs?: string;
 }
 
 export const PRESETS: readonly Preset[] = [
@@ -35,6 +38,7 @@ export const PRESETS: readonly Preset[] = [
   cohesion as Preset,
   threeCs as Preset,
   shortcuts as Preset,
+  duplication as Preset,
   language as Preset,
   hotspots as Preset,
   bugMagnets as Preset,
@@ -88,11 +92,8 @@ export function presetStatus(model: Model, preset: Preset): PresetStatus {
   }
   const color = preset.color.find((id) => covered(model, id));
   if (!color) {
-    return {
-      preset,
-      available: false,
-      reason: `None of ${preset.color.map((c) => `"${c}"`).join(", ")} is available for at least half of the code.`,
-    };
+    const missing = `None of ${preset.color.map((c) => `"${c}"`).join(", ")} is available for at least half of the code.`;
+    return { preset, available: false, reason: preset.needs ? `${missing} ${preset.needs}` : missing };
   }
   return {
     preset,

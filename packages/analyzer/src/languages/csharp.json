@@ -1,0 +1,67 @@
+{
+  "id": "csharp",
+  "label": "C#",
+  "tier": 2,
+  "grammar": "c-sharp",
+  "extensions": [".cs"],
+  "comment": ["comment"],
+  "functions": [
+    "method_declaration",
+    "constructor_declaration",
+    "destructor_declaration",
+    "operator_declaration",
+    "conversion_operator_declaration",
+    "local_function_statement",
+    "lambda_expression",
+    "anonymous_method_expression"
+  ],
+  "branches": [
+    "if_statement",
+    "for_statement",
+    "foreach_statement",
+    "while_statement",
+    "do_statement",
+    "switch_section",
+    "switch_expression_arm",
+    "catch_clause",
+    "conditional_expression"
+  ],
+  "logical": {
+    "nodeTypes": ["binary_expression"],
+    "operators": ["&&", "||", "??"]
+  },
+  "nesting": [
+    "if_statement",
+    "for_statement",
+    "foreach_statement",
+    "while_statement",
+    "do_statement",
+    "switch_statement",
+    "switch_expression",
+    "try_statement",
+    "lambda_expression",
+    "anonymous_method_expression"
+  ],
+  "nestingExceptParent": {
+    "if_statement": ["if_statement"]
+  },
+  "shortcuts": [
+    {
+      "kind": "lint_disable",
+      "type": "comment",
+      "pattern": "ReSharper\\s+disable|NOSONAR"
+    },
+    {
+      "kind": "lint_disable",
+      "type": "node",
+      "nodeType": "preproc_pragma",
+      "pattern": "warning\\s+disable"
+    },
+    {
+      "kind": "empty_catch",
+      "type": "emptyBlock",
+      "nodeType": "catch_clause",
+      "bodyField": "body"
+    }
+  ]
+}
