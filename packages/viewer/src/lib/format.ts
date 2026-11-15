@@ -6,9 +6,14 @@ export interface Formatter {
   integer(value: number): string;
   number(value: number, maxFractionDigits?: number): string;
   percent(ratio: number): string;
+  /** A number with its unit, in agreement: "1 module", "6 modules"; a share reads as a percentage. */
+  quantity(value: number, unit: string): string;
   date(value: string | Date): string;
   dateTime(value: string | Date): string;
 }
+
+/** Units that are not written after the number. */
+const UNITLESS = new Set(["", "flag", "ratio", "category"]);
 
 export interface FormatOptions {
   /** Time zone for dates; defaults to the browser's. */
@@ -30,11 +35,22 @@ export function createFormat(preferred?: readonly string[], options: FormatOptio
   const locale = resolveLocale(preferred);
   const tz = options.timeZone ? { timeZone: options.timeZone } : {};
   const toDate = (v: string | Date) => (v instanceof Date ? v : new Date(v));
+  const number = (v: number, max = 2) =>
+    new Intl.NumberFormat(locale, { maximumFractionDigits: max }).format(v);
+  const percent = (v: number) =>
+    new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 }).format(v);
   return {
     locale,
     integer: (v) => new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(v),
-    number: (v, max = 2) => new Intl.NumberFormat(locale, { maximumFractionDigits: max }).format(v),
-    percent: (v) => new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 }).format(v),
+    number,
+    percent,
+    quantity: (v, unit) => {
+      if (unit === "share") return percent(v);
+      if (UNITLESS.has(unit)) return number(v);
+      // registry units are plural words: one of them loses its final "s"
+      const word = Math.abs(v) === 1 && /^[a-z]+s$/.test(unit) ? unit.slice(0, -1) : unit;
+      return `${number(v)} ${word}`;
+    },
     date: (v) => new Intl.DateTimeFormat(locale, { dateStyle: "medium", ...tz }).format(toDate(v)),
     dateTime: (v) =>
       new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", ...tz }).format(toDate(v)),

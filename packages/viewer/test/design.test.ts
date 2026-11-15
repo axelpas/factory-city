@@ -5,6 +5,7 @@ import { createFormat } from "../src/lib/format";
 import { defaultMapping, PRESETS, presetStatus, presetStatuses } from "../src/presets/index";
 import { DEFAULT_THEME } from "../src/themes/index";
 import { fileCard, folderCard } from "../src/view/card";
+import { fileDetails } from "../src/view/details";
 import { legendLines } from "../src/view/legend";
 import { isMarked, type Marker, markedCount, resolveMarker } from "../src/view/marker";
 import { computePlacements, computeTints, PARCEL_INSET } from "../src/view/placements";
@@ -224,8 +225,10 @@ describe("cards and legend for design metrics", () => {
   it("shows the marker channel and the coupling on the file card", () => {
     const card = fileCard(model, model.filesByPath.get("core/a.ts") as number, m, fmt);
     expect(card.channels.map((c) => c.label)).toContain("Marker: Cohesion groups");
-    const other = fileCard(model, model.filesByPath.get("core/a.ts") as number, mapping, fmt);
-    expect(other.metrics.map((r) => r.label)).toEqual(
+    // the other metrics are no longer on the card: they are in the details
+    const details = fileDetails(model, model.filesByPath.get("core/a.ts") as number, mapping, fmt);
+    const coupling = details.groups.find((g) => g.name === "Coupling and cohesion");
+    expect(coupling?.rows.map((r) => r.label)).toEqual(
       expect.arrayContaining(["Imported by", "Cohesion groups"]),
     );
   });

@@ -2,6 +2,8 @@ import { categoryLabel, type Model, percentileRank } from "../data/model";
 import type { TimelineData } from "../data/timeline";
 import type { Formatter } from "../lib/format";
 import type { Mapping } from "../presets/index";
+import { risksOf } from "./details";
+import type { Bounded } from "./marker";
 
 export interface CardRow {
   label: string;
@@ -18,10 +20,10 @@ export interface FileCard {
   folder: string;
   language: string;
   isTest: boolean;
-  /** Mapped channels: ground area, height, color. */
+  /** Mapped channels: area, height, color, and the marker when one is set. */
   channels: CardRow[];
-  metrics: CardRow[];
-  flags: string[];
+  /** At most two other facts, chosen because they stand out: a risk threshold exceeded, the main author. */
+  facts: CardRow[];
   hint: string;
 }
 
@@ -33,20 +35,8 @@ export interface FolderCard {
   worst: Array<{ path: string; value: string }>;
 }
 
-/** Other key metrics shown on the card when the snapshot has them. */
-export const KEY_METRICS = [
-  "rloc",
-  "mcc",
-  "functions",
-  "max_function_complexity",
-  "max_nesting_level",
-  "imports_in",
-  "imports_out",
-  "cohesion_groups",
-  "recent_commits",
-  "fix_commits",
-  "main_agent",
-] as const;
+/** The card is a glance: it never shows more than this many facts beside the mapped channels. */
+export const MAX_CARD_FACTS = 2;
 
 export function metricRow(
   model: Model,
@@ -61,16 +51,21 @@ export function metricRow(
   const stats = model.stats.get(metricId);
   if (metric.kind === "category")
     return { label: metric.label, value: categoryLabel(model, metricId, value) };
-  const unit = metric.unit && metric.unit !== "flag" ? ` ${metric.unit}` : "";
   return {
     label: metric.label,
-    value: `${fmt.number(value)}${unit}`,
+    value: fmt.quantity(value, metric.unit),
     // a marker says where the value stands in the city: meaningless when every file has the same value
     marker: stats && stats.max > stats.min ? percentileRank(stats, value) : undefined,
   };
 }
 
-export function fileCard(model: Model, index: number, mapping: Mapping, fmt: Formatter): FileCard {
+export function fileCard(
+  model: Model,
+  index: number,
+  mapping: Mapping,
+  fmt: Formatter,
+  dimensions: ReadonlyArray<Bounded & { label?: string }> = [],
+): FileCard {
   const file = model.files[index];
   if (!file) throw new Error(`No file at index ${index}`);
   const channels: CardRow[] = [];
@@ -85,21 +80,25 @@ export function fileCard(model: Model, index: number, mapping: Mapping, fmt: For
     const row = metricRow(model, id, file.values, fmt);
     if (row) channels.push({ ...row, label: `${role}: ${row.label}` });
   }
-  const mapped = new Set([mapping.area, mapping.height, mapping.color, mapping.marker?.metric]);
-  const metrics = KEY_METRICS.filter((id) => !mapped.has(id))
-    .map((id) => metricRow(model, id, file.values, fmt))
-    .filter((r): r is CardRow => r !== undefined);
+  // what stands out: the risk levels exceeded, worst first, then who wrote most of the file
+  const facts: CardRow[] = risksOf(model, file.values, dimensions, fmt).map((text) => {
+    const cut = text.indexOf(": ");
+    return { label: text.slice(0, cut), value: text.slice(cut + 2) };
+  });
+  const author =
+    file.values.main_agent === undefined ? undefined : metricRow(model, "main_agent", file.values, fmt);
+  if (author) facts.push(author);
   const languageValue = file.values.language;
   return {
     kind: "file",
     title: file.name,
     folder: file.dir === "" ? "(root)" : file.dir,
-    language: languageValue === undefined ? "unknown" : categoryLabel(model, "language", languageValue),
+    language:
+      languageValue === undefined ? "Unknown language" : categoryLabel(model, "language", languageValue),
     isTest: file.isTest,
     channels,
-    metrics,
-    flags: [],
-    hint: "Click for details",
+    facts: facts.slice(0, MAX_CARD_FACTS),
+    hint: "Click for all its metrics",
   };
 }
 
@@ -244,9 +243,7 @@ export function lastChangeRow(
   const file = current?.model.files[current.modelIndex[union] as number];
   const days = file?.values.days_since_last_change;
   if (days === undefined) return undefined;
-  const value =
-    days === 0
-      ? "the day of the snapshot"
-      : `${fmt.integer(days)} day${days === 1 ? "" : "s"} before the snapshot`;
+  // a snapshot carries no date of its own here: the change is told relative to it
+  const value = days === 0 ? "on the snapshot's day" : `${fmt.quantity(days, "days")} before the snapshot`;
   return { label: "Last change", value };
 }

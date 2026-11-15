@@ -18,7 +18,7 @@ describe("file card", () => {
   it("shows name, folder, language and test flag", () => {
     expect(card.title).toBe("a.ts");
     expect(card.folder).toBe("src");
-    expect(card.language).toBe("typescript");
+    expect(card.language).toBe("TypeScript");
     expect(card.isTest).toBe(false);
   });
 
@@ -29,21 +29,30 @@ describe("file card", () => {
     expect(card.channels[0]?.marker).toBeGreaterThan(0.5);
   });
 
-  it("lists other key metrics but not the ones already mapped", () => {
-    const labels = card.metrics.map((m) => m.label);
-    expect(labels).toContain("Functions");
-    expect(labels).not.toContain("Real lines");
+  it("is a glance: the mapped channels and at most two facts that stand out", () => {
+    expect(card.facts).toEqual([]);
+    const dimensions = [
+      { label: "Complexity", metric: "mcc", bounds: [5, 10, 20] },
+      { label: "File size", metric: "rloc", bounds: [20, 50, 500] },
+      { label: "Nesting", metric: "max_nesting_level", bounds: [0, 1, 2] },
+    ];
+    const risky = fileCard(model, model.filesByPath.get("src/a.ts") as number, mapping, fmt, dimensions);
+    expect(risky.facts.length).toBeLessThanOrEqual(2);
+    // the worst level first
+    expect(risky.facts[0]).toEqual({ label: "Complexity", value: "very high (30)" });
   });
 
-  it("shows n/a with a reason for a value the file does not have", () => {
-    const c = fileCard(model, model.filesByPath.get("src/const.ts") as number, mapping, fmt);
-    const row = c.metrics.find((m) => m.label === "Worst function complexity");
-    expect(row).toMatchObject({ value: "n/a" });
-    expect(row?.note).toBeTruthy();
+  it("writes units in agreement with the number", () => {
+    expect(fmt.quantity(1, "modules")).toBe("1 module");
+    expect(fmt.quantity(6, "modules")).toBe("6 modules");
+    expect(fmt.quantity(0, "places")).toBe("0 places");
+    expect(fmt.quantity(0.25, "share")).toBe("25%");
+    expect(fmt.quantity(28, "")).toBe("28");
+    expect(fmt.quantity(1, "per 1,000 lines")).toBe("1 per 1,000 lines");
   });
 
   it("offers the details on click", () => {
-    expect(card.hint).toBe("Click for details");
+    expect(card.hint).toBe("Click for all its metrics");
   });
 });
 

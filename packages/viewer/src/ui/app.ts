@@ -13,7 +13,7 @@ import {
   readDropped,
   type SourceKey,
 } from "../data/load";
-import { type Model, percentileRank } from "../data/model";
+import type { Model } from "../data/model";
 import { syntheticSnapshots } from "../data/synthetic";
 import { buildTimelineData, layoutWeights, type TimelineData } from "../data/timeline";
 import { type EncodedVideo, encodeVideo, pixelHash, planVideo, type VideoOptions } from "../export/video";
@@ -39,11 +39,13 @@ import {
   frameChangeRows,
   lastChangeRow,
   lotCard,
-  metricRow,
 } from "../view/card";
+import { placeCard } from "../view/card-place";
 import { biggestChanges, CHANGE, changePlacements, type FileChange } from "../view/change";
 import { parseHex } from "../view/color";
+import { type DetailRow, fileDetails } from "../view/details";
 import { factoryView } from "../view/factory";
+import { freeRect, type Insets, NO_INSETS } from "../view/framing";
 import { healthView, trendPoints } from "../view/health";
 import { dataLevelLine, hiddenContentLine, type LegendModel, legendModel } from "../view/legend";
 import { hiddenLensesLine } from "../view/lenses";
@@ -123,6 +125,8 @@ export class App {
   });
   private readonly dropZone = el("div", { class: "drop" });
   private readonly panel = el("aside", { class: "panel", attrs: { "aria-label": "View settings" } });
+  /** What the bar, the panels and the timeline cover, as last measured. */
+  private insets: Insets = NO_INSETS;
   private readonly panelState = el("p", { class: "panel-state", attrs: { hidden: "" } });
   /** Folded to a rail unless the user opened it: a preset is enough for most sessions. */
   private panelOpen = safeStorage(() => localStorage.getItem(PANEL_KEY)) === "open";
@@ -1269,23 +1273,22 @@ export class App {
           ),
         );
       } else {
-        const data = fileCard(s.model, m, s.mapping, format);
+        const data = fileCard(s.model, m, s.mapping, format, this.report?.dimensions);
         const last = lastChangeRow(s.data, frame, pick.index, format);
-        const changes = [
-          ...(last ? [last] : []),
-          ...frameChangeRows(s.data, frame, pick.index, s.mapping, format),
-        ];
-        this.card.append(this.fileCardView(data, changes));
+        this.card.append(this.fileCardView(data, last ? [last] : []));
       }
     }
     this.card.classList.add("on");
-    const margin = 18;
-    const w = this.card.offsetWidth;
-    const h = this.card.offsetHeight;
-    const left = x + margin + w > window.innerWidth ? x - margin - w : x + margin;
-    const top = y + margin + h > window.innerHeight ? Math.max(8, y - margin - h) : y + margin;
-    this.card.style.left = `${Math.max(8, left)}px`;
-    this.card.style.top = `${top}px`;
+    // beside the pointer, inside what the bar, the panels and the timeline leave free
+    const stage = this.stage.getBoundingClientRect();
+    const free = freeRect({ w: stage.width, h: stage.height }, this.insets);
+    const place = placeCard(
+      { x: x - stage.left, y: y - stage.top },
+      { w: this.card.offsetWidth, h: this.card.offsetHeight },
+      free,
+    );
+    this.card.style.left = `${stage.left + place.left}px`;
+    this.card.style.top = `${stage.top + place.top}px`;
   }
 
   private hideCard(): void {
@@ -1319,11 +1322,9 @@ export class App {
       el("div", { class: "muted", text: c.folder }),
       el("div", { class: "muted", text: `${c.language}${c.isTest ? " · test" : ""}` }),
       ...c.channels.map((r) => this.rowView(r)),
-      c.metrics.length ? el("hr") : undefined,
-      ...c.metrics.map((r) => this.rowView(r)),
-      changes.length ? el("hr") : undefined,
+      c.facts.length || changes.length ? el("hr") : undefined,
+      ...c.facts.map((r) => this.rowView({ ...r, marker: undefined })),
       ...changes.map((r) => this.rowView(r)),
-      c.flags.length ? el("div", { class: "muted", text: c.flags.join(", ") }) : undefined,
       el("div", { class: "hint", text: c.hint }),
     );
   }
@@ -1352,31 +1353,91 @@ export class App {
   private openDetails(union: number): void {
     const s = this.state;
     if (!s) return;
-    const file = s.model.files[this.modelIndex(union)];
+    const index = this.modelIndex(union);
+    const file = s.model.files[index];
     if (!file) return;
+    const frame = this.animator?.frame ?? 0;
+    const d = fileDetails(s.model, index, s.mapping, format, this.report?.dimensions);
     clear(this.details);
-    const rows = el("div", { class: "kvs" });
-    for (const m of s.model.metrics.values()) {
-      if (m.scope !== "file") continue;
-      const row = metricRow(s.model, m.id, file.values, format);
-      if (!row) continue;
-      const stats = s.model.stats.get(m.id);
-      const rank =
-        file.values[m.id] !== undefined && stats && m.kind !== "category"
-          ? percentileRank(stats, file.values[m.id] as number)
-          : undefined;
-      rows.append(
-        el(
-          "div",
-          { class: "kv", title: `${m.definition} ${m.limits}` },
-          el("span", { class: "k", text: m.label }),
-          el("span", { class: row.value === "n/a" ? "v na" : "v", text: row.value }),
-          rank !== undefined
-            ? el("span", { class: "muted", text: `higher than ${format.percent(rank)} of files` })
-            : undefined,
+
+    const copy = el("button", {
+      class: "quiet copy",
+      text: "Copy path",
+      title: "Copy the path of the file",
+      attrs: { type: "button" },
+    });
+    copy.addEventListener("click", () => {
+      void navigator.clipboard?.writeText(d.path).then(() => {
+        copy.textContent = "Copied";
+        setTimeout(() => {
+          copy.textContent = "Copy path";
+        }, 1500);
+      });
+    });
+    const detailRow = (r: DetailRow) =>
+      el(
+        "div",
+        { class: "kv", title: r.title, attrs: { "data-metric": r.id } },
+        el("span", { class: "k", text: r.label }),
+        el("span", { class: "v", text: r.value }),
+        r.rank !== undefined
+          ? el(
+              "span",
+              { class: "rank", title: `Higher than ${format.percent(r.rank)} of the files` },
+              el("i", { style: { width: `${Math.round(r.rank * 100)}%` } }),
+            )
+          : undefined,
+      );
+    this.details.append(
+      el("h2", { class: "pane-title", text: d.title }),
+      el("div", { class: "pane-path" }, el("span", { class: "muted", text: d.path }), copy),
+      el("div", { class: "muted", text: `${d.language}${d.isTest ? " · test file" : ""}` }),
+      ...(d.risks.length ? [el("p", { class: "risks", text: d.risks.join(" · ") })] : []),
+      el("h3", { text: "Shown in the city" }),
+      ...d.channels.map((r) => this.rowView(r)),
+    );
+    const changes = frameChangeRows(s.data, frame, union, s.mapping, format);
+    if (changes.length) {
+      this.details.append(el("h3", { text: "This frame" }), ...changes.map((r) => this.rowView(r)));
+    }
+    for (const group of d.groups) {
+      if (group.allZero) {
+        // a list of zeros says one thing: say it once, and keep the list one click away
+        this.details.append(
+          el(
+            "details",
+            { class: "zero-group", attrs: { "data-group": group.name } },
+            el(
+              "summary",
+              {},
+              el("b", { class: "zero-name", text: group.name }),
+              el("span", { class: "muted", text: group.zeroText }),
+            ),
+            ...group.rows.map(detailRow),
+          ),
+        );
+      } else {
+        this.details.append(
+          el("h3", { text: group.name, attrs: { "data-group": group.name } }),
+          ...group.rows.map(detailRow),
+        );
+      }
+    }
+    if (d.unavailable.length) {
+      this.details.append(
+        el("h3", { text: "Not available for this file" }),
+        ...d.unavailable.map((u) =>
+          el(
+            "div",
+            { class: "kv" },
+            el("span", { class: "k", text: u.label }),
+            el("span", { class: "v na", text: "n/a" }),
+            el("span", { class: "note", text: u.note }),
+          ),
         ),
       );
     }
+
     const history = el("div", { class: "kvs" });
     const touching = s.data.frames.filter(
       (f) => f.info && (f.info.added.includes(file.path) || f.info.modified.includes(file.path)),
@@ -1389,28 +1450,20 @@ export class App {
         title: "Go to this frame",
         attrs: { type: "button" },
       });
-      const index = f.info.index;
-      jump.addEventListener("click", () => this.animator?.goTo(index));
+      const target = f.info.index;
+      jump.addEventListener("click", () => this.animator?.goTo(target));
       history.append(
         el("div", { class: "kv" }, jump, el("span", { class: "muted", text: format.date(f.info.date) })),
       );
     }
-    this.details.append(
-      el("h2", { class: "pane-title", text: file.name }),
-      el("div", { class: "muted", text: file.path }),
-      rows,
-      el("h3", { text: "Risk flags" }),
-      el("p", { class: "muted", text: "None computed at this data level." }),
-      el("h3", { text: "History" }),
-      s.data.frames.length < 2
-        ? el("p", {
-            class: "muted",
-            text: "Build a timeline (factory-city timeline) to see the frames that touched this file.",
-          })
-        : touching.length === 0
+    if (s.data.frames.length >= 2) {
+      this.details.append(
+        el("h3", { text: "Frames that changed it" }),
+        touching.length === 0
           ? el("p", { class: "muted", text: "No frame of this timeline changed this file." })
           : history,
-    );
+      );
+    }
     this.details.hidden = false;
   }
 
@@ -1927,6 +1980,7 @@ export class App {
       bottom: bottom ? stage.bottom - bottom.top : 0,
     };
     // what sits on the stage (the legend) places itself in the free area through these
+    this.insets = insets;
     for (const [side, value] of Object.entries(insets))
       this.stage.parentElement?.style.setProperty(`--free-${side}`, `${Math.round(value)}px`);
     this.scene.setFreeArea(insets);

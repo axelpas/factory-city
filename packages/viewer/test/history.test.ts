@@ -75,6 +75,6 @@ describe("provenance presets", () => {
       mapping,
       createFormat(["en-US"]),
     );
-    expect(card.metrics).toContainEqual(expect.objectContaining({ label: "Main author", value: "unknown" }));
+    expect(card.facts).toContainEqual(expect.objectContaining({ label: "Main author", value: "unknown" }));
   });
 });

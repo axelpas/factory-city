@@ -1,5 +1,6 @@
 import type { AnalysisManifest, CcJson, FileNode } from "@factory-city/schema";
 import { METRICS, type MetricDefinition } from "@factory-city/schema/registry";
+import { languageLabel } from "../view/labels";
 
 export interface FileRec {
   id: string;
@@ -226,5 +227,8 @@ export function buildModel(cc: CcJson, manifest?: AnalysisManifest): Model {
 }
 
 export function categoryLabel(model: Model, metricId: string, value: number): string {
-  return model.categories[metricId]?.[value] ?? `#${value}`;
+  const label = model.categories[metricId]?.[value];
+  if (label === undefined) return `#${value}`;
+  // languages are stored by id: show their name
+  return metricId === "language" ? languageLabel(label) : label;
 }
