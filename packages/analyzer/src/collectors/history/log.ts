@@ -1,0 +1,106 @@
+import { execFile } from "node:child_process";
+
+const FIX_BRANCH_MERGE = /(from \S*\b|Merge branch ')(hot)?fix\//i;
+
+function git(cwd: string, args: string[]): Promise<string> {
+  return new Promise((ok, fail) => {
+    execFile("git", args, { cwd, maxBuffer: 1024 * 1024 * 1024, encoding: "utf8" }, (err, stdout, stderr) => {
+      if (err) fail(new Error(`git ${args.join(" ")} failed: ${(stderr || err.message).trim()}`));
+      else ok(stdout);
+    });
+  });
+}
+
+export interface RawCommit {
+  hash: string;
+  time: number;
+  author: string;
+  subject: string;
+  /** Changed paths at the repository root; renames carry the old path. */
+  changes: Array<{ path: string; oldPath?: string; added: number; deleted: number }>;
+}
+
+/** Parses `git log --numstat -z -M` output written with our record separators. */
+export function parseLog(output: string): RawCommit[] {
+  const commits: RawCommit[] = [];
+  for (const chunk of output.split("\u0001")) {
+    if (!chunk) continue;
+    const end = chunk.indexOf("\u0003");
+    if (end < 0) continue;
+    const [hash = "", time = "0", author = "", subject = ""] = chunk.slice(0, end).split("\u0002");
+    // after the header git writes NUL, a line break, then NUL-separated numstat records
+    const tokens = chunk
+      .slice(end + 1)
+      .split("\0")
+      .map((t) => t.replace(/^\n+/, ""));
+    const changes: RawCommit["changes"] = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const m = /^(\d+|-)\t(\d+|-)\t([\s\S]*)$/.exec(tokens[i] as string);
+      if (!m) continue;
+      const added = m[1] === "-" ? 0 : Number(m[1]);
+      const deleted = m[2] === "-" ? 0 : Number(m[2]);
+      if (m[3] === "") {
+        // rename: the next two tokens are the old and the new path
+        const oldPath = tokens[i + 1] as string;
+        const path = tokens[i + 2] as string;
+        i += 2;
+        if (path) changes.push({ path, oldPath, added, deleted });
+      } else {
+        changes.push({ path: m[3] as string, added, deleted });
+      }
+    }
+    commits.push({ hash, time: Number(time), author: author.toLowerCase(), subject, changes });
+  }
+  return commits;
+}
+
+/** Commits that arrived through a branch named fix/ (found from the merge commits). */
+async function fixBranchCommits(topLevel: string, rev: string): Promise<Set<string>> {
+  const out = new Set<string>();
+  const merges = (await git(topLevel, ["log", rev, "--merges", "--format=%H%x02%P%x02%s"]))
+    .split("\n")
+    .filter(Boolean);
+  for (const line of merges.slice(0, 300)) {
+    const [, parents = "", subject = ""] = line.split("\u0002");
+    const [first, second] = parents.split(" ");
+    if (!first || !second || !FIX_BRANCH_MERGE.test(subject)) continue;
+    for (const hash of (await git(topLevel, ["rev-list", `${first}..${second}`])).split("\n"))
+      if (hash) out.add(hash);
+  }
+  return out;
+}
+
+/** The commits reachable from a revision, read once and reusable for every earlier revision. */
+export interface HistoryLog {
+  commits: RawCommit[];
+  fixBranch: Set<string>;
+}
+
+/**
+ * The commits reachable from a revision with the files each one changed. A `scope` (a folder of the
+ * repository) narrows the log to the changes under it: on a partial clone, git then fetches only the blobs of
+ * that folder instead of every blob the history ever changed.
+ */
+export async function loadHistoryLog(topLevel: string, rev: string, scope = ""): Promise<HistoryLog> {
+  const raw = await git(topLevel, [
+    "log",
+    rev,
+    "--no-merges",
+    "--topo-order",
+    "-M",
+    "--numstat",
+    "-z",
+    "--format=%x01%H%x02%ct%x02%ae%x02%s%x03",
+    ...(scope ? ["--", scope] : []),
+  ]);
+  return { commits: parseLog(raw), fixBranch: await fixBranchCommits(topLevel, rev) };
+}
+
+/** Hashes of the non-merge commits reachable from a revision. */
+export async function reachableCommits(topLevel: string, rev: string): Promise<Set<string>> {
+  return new Set((await git(topLevel, ["rev-list", "--no-merges", rev])).split("\n").filter(Boolean));
+}
+
+export async function revisionTime(topLevel: string, rev: string): Promise<number> {
+  return Number((await git(topLevel, ["show", "-s", "--format=%ct", `${rev}^{commit}`])).trim());
+}
