@@ -1,15 +1,12 @@
 import type { Report } from "@factory-city/schema";
-import type { Model } from "../data/model";
-import type { TimelineData } from "../data/timeline";
 import { clear, el } from "../lib/dom";
 import { format } from "../lib/format";
-import type { Mapping } from "../presets/index";
-import type { Pick } from "../scene/CityScene";
 import { fileCard, folderCard } from "../view/card";
 import { placeCard } from "../view/card-place";
 import { lastChangeRow, lotCard } from "../view/frame-cards";
-import { freeRect, type Insets } from "../view/framing";
+import { freeRect } from "../view/framing";
 import { fileCardView, folderCardView } from "./card-view";
+import type { Insets, Mapping, Model, Pick, TimelineData } from "./types";
 
 /** What a card tells about the city. */
 export interface CardState {

@@ -1,18 +1,22 @@
 import type { Layout } from "@factory-city/layout";
 import type { Report } from "@factory-city/schema";
-import type { Animator } from "../anim/animator";
-import type { Model } from "../data/model";
-import type { TimelineData } from "../data/timeline";
 import { el } from "../lib/dom";
 import { format } from "../lib/format";
-import type { Mapping, Preset } from "../presets/index";
-import type { CameraState, CityScene } from "../scene/CityScene";
-import type { Theme } from "../themes/index";
 import { scoreAt } from "../view/health";
-import type { LegendModel } from "../view/legend";
 import type { DistrictLabelLayer } from "./district-labels";
 import type { ExportMenu } from "./export-menu";
 import { drawOverlay } from "./overlay";
+import type {
+  Animator,
+  CameraState,
+  CityScene,
+  LegendModel,
+  Mapping,
+  Model,
+  Preset,
+  Theme,
+  TimelineData,
+} from "./types";
 
 /** What the page is showing, as far as a picture of it needs to know. */
 export interface ExportState {

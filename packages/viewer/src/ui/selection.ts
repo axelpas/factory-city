@@ -1,15 +1,11 @@
 import type { Layout } from "@factory-city/layout";
 import type { Report } from "@factory-city/schema";
-import type { Animator } from "../anim/animator";
-import type { Model } from "../data/model";
-import type { TimelineData } from "../data/timeline";
 import { clear, el } from "../lib/dom";
 import { format } from "../lib/format";
-import type { Mapping } from "../presets/index";
-import type { CityScene } from "../scene/CityScene";
 import { fileDetails } from "../view/details";
 import { frameChangeRows } from "../view/frame-cards";
 import { renderFileDetails } from "./details-view";
+import type { Animator, CityScene, Mapping, Model, TimelineData } from "./types";
 
 /** What the details read of the page. */
 export interface SelectionState {

@@ -1,20 +1,24 @@
 import type { Layout } from "@factory-city/layout";
-import type { Animator } from "../anim/animator";
-import type { Model } from "../data/model";
-import type { TimelineData } from "../data/timeline";
 import { clear, el } from "../lib/dom";
 import { format } from "../lib/format";
-import type { Mapping, Preset } from "../presets/index";
-import type { CityScene } from "../scene/CityScene";
-import type { Theme } from "../themes/index";
-import type { FileChange } from "../view/change";
 import { describeCity } from "../view/describe";
-import { type LegendModel, legendModel } from "../view/legend";
-import type { ColorLegend } from "../view/placements";
+import { legendModel } from "../view/legend";
 import { statusChip, statusDetails } from "../view/status";
 import { blockLegend, blockSize } from "../view/voxel";
 import { renderLegendBox } from "./legend-box";
 import { renderStatusChip } from "./status-chip";
+import type {
+  Animator,
+  CityScene,
+  ColorLegend,
+  FileChange,
+  LegendModel,
+  Mapping,
+  Model,
+  Preset,
+  Theme,
+  TimelineData,
+} from "./types";
 
 /** What the notes say about the city. */
 export interface NotesState {
