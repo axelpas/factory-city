@@ -74,41 +74,76 @@ export const REQUIRED_COLORS = [
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 const RENDERERS = ["solid", "voxel", "wireframe"];
 
+type Tokens = Partial<Theme>;
+/** A check says what is wrong with the tokens, or nothing when they are fine. */
+type Check = (t: Tokens) => string | undefined;
+
+const isHex = (value: string | undefined) => HEX.test(value ?? "");
+
+const identity: Check = (t) =>
+  typeof t.id !== "string" || typeof t.label !== "string" ? "id and label are required" : undefined;
+
+const renderer: Check = (t) =>
+  RENDERERS.includes(t.renderer as string) ? undefined : `renderer must be one of ${RENDERERS.join(", ")}`;
+
+const mode: Check = (t) =>
+  t.mode === "light" || t.mode === "dark" ? undefined : "mode must be light or dark";
+
+const colors: Check = (t) => {
+  const missing = REQUIRED_COLORS.find((key) => !isHex(t.colors?.[key]));
+  if (missing) return `colors.${missing} must be a hex color`;
+  return t.effects?.grid && !isHex(t.colors?.gridLine)
+    ? "colors.gridLine is needed for the ground grid"
+    : undefined;
+};
+
+const RAMPS = ["sequential", "diverging", "categorical", "tint"] as const;
+
+const ramps: Check = (t) => {
+  if (!t.ramps) return "ramps are required";
+  const bad = RAMPS.find((name) => {
+    const list = t.ramps?.[name];
+    return !Array.isArray(list) || list.length < 2 || list.length > 8 || !list.every((c) => HEX.test(c));
+  });
+  if (bad) return `ramps.${bad} must hold 2 to 8 hex colors`;
+  return isHex(t.ramps.other) ? undefined : "ramps.other must be a hex color";
+};
+
+const light: Check = (t) =>
+  t.light && typeof t.light.ambient === "number" && typeof t.light.sun === "number"
+    ? undefined
+    : "light.ambient and light.sun are required";
+
+const camera: Check = (t) => {
+  if (!t.camera || (t.camera.type !== "perspective" && t.camera.type !== "orthographic"))
+    return "camera.type must be perspective or orthographic";
+  const direction = t.camera.direction;
+  return Array.isArray(direction) && direction.length === 3
+    ? undefined
+    : "camera.direction must hold three numbers";
+};
+
+const typography: Check = (t) =>
+  typeof t.font === "string" && typeof t.heightScale === "number"
+    ? undefined
+    : "font and heightScale are required";
+
+const CHECKS: readonly Check[] = [identity, renderer, mode, colors, ramps, light, camera, typography];
+
 /** Checks a token file and returns it as a theme. The message says which token is wrong. */
 export function validateTheme(raw: unknown): Theme {
-  const t = raw as Partial<Theme> | null;
-  const fail = (what: string): never => {
-    throw new Error(`Invalid theme${t?.id ? ` "${t.id}"` : ""}: ${what}.`);
-  };
-  if (!t || typeof t !== "object") return fail("a theme is an object of tokens");
-  if (typeof t.id !== "string" || typeof t.label !== "string") return fail("id and label are required");
-  if (!RENDERERS.includes(t.renderer as string))
-    return fail(`renderer must be one of ${RENDERERS.join(", ")}`);
-  if (t.mode !== "light" && t.mode !== "dark") return fail("mode must be light or dark");
-  const colors = t.colors ?? {};
-  for (const key of REQUIRED_COLORS) {
-    if (!HEX.test(colors[key] ?? "")) return fail(`colors.${key} must be a hex color`);
-  }
-  if (t.effects?.grid && !HEX.test(colors.gridLine ?? ""))
-    return fail("colors.gridLine is needed for the ground grid");
-  const ramps = t.ramps;
-  if (!ramps) return fail("ramps are required");
-  for (const name of ["sequential", "diverging", "categorical", "tint"] as const) {
-    const list = ramps[name];
-    if (!Array.isArray(list) || list.length < 2 || list.length > 8 || !list.every((c) => HEX.test(c))) {
-      return fail(`ramps.${name} must hold 2 to 8 hex colors`);
-    }
-  }
-  if (!HEX.test(ramps.other ?? "")) return fail("ramps.other must be a hex color");
-  if (!t.light || typeof t.light.ambient !== "number" || typeof t.light.sun !== "number")
-    return fail("light.ambient and light.sun are required");
-  if (!t.camera || (t.camera.type !== "perspective" && t.camera.type !== "orthographic"))
-    return fail("camera.type must be perspective or orthographic");
-  if (!Array.isArray(t.camera.direction) || t.camera.direction.length !== 3)
-    return fail("camera.direction must hold three numbers");
-  if (typeof t.font !== "string" || typeof t.heightScale !== "number")
-    return fail("font and heightScale are required");
+  const t = raw as Tokens | null;
+  const problem = !t || typeof t !== "object" ? "a theme is an object of tokens" : firstProblem(t);
+  if (problem) throw new Error(`Invalid theme${t?.id ? ` "${t.id}"` : ""}: ${problem}.`);
   return t as Theme;
+}
+
+function firstProblem(t: Tokens): string | undefined {
+  for (const check of CHECKS) {
+    const problem = check(t);
+    if (problem) return problem;
+  }
+  return undefined;
 }
 
 export const THEMES: readonly Theme[] = [architect, isometric, blocks, hologram].map(validateTheme);
