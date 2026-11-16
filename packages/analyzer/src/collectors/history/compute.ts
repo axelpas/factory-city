@@ -99,6 +99,37 @@ function coupledFiles(pairs: ReadonlyMap<string, number>, history: ReadonlyMap<s
   return coupled;
 }
 
+/** What the history reads along the way: renames, the history of each file, and the pairs changed together. */
+interface Accumulator {
+  alias: Map<string, string>;
+  history: Map<string, FileHistory>;
+  pairs: Map<string, number>;
+}
+
+/** The files of the analyzed folder, as the history sees them: which paths count, and how they are named. */
+interface Scope {
+  prefix: string;
+  files: ReadonlySet<string>;
+}
+
+/** One commit: its changes to the files of the scope are added to their histories, and its pairs counted. */
+function addCommit(acc: Accumulator, commit: Commit, scope: Scope, isFix: boolean, recent: boolean): void {
+  const cut = scope.prefix ? scope.prefix.length + 1 : 0;
+  const touched = new Set<string>();
+  for (const change of commit.changes) {
+    const target = acc.alias.get(change.path) ?? change.path;
+    if (change.oldPath) acc.alias.set(change.oldPath, target);
+    const rel = target.slice(cut);
+    if ((scope.prefix && !target.startsWith(`${scope.prefix}/`)) || !scope.files.has(rel)) continue;
+    const h = acc.history.get(rel) ?? emptyHistory(commit.time);
+    acc.history.set(rel, h);
+    if (touched.has(rel)) continue;
+    touched.add(rel);
+    addChange(h, commit, change, isFix, recent);
+  }
+  countPairs(acc.pairs, touched);
+}
+
 /**
  * History of the given files from a log. `reachable` restricts the log to the commits of one revision,
  * so that a frame of a timeline never uses a later commit.
@@ -114,35 +145,22 @@ export function computeHistory(
   const commits = reachable ? log.commits.filter((c) => reachable.has(c.hash)) : log.commits;
   const fixPatterns = options.fixPatterns.map((p) => new RegExp(p, "i"));
   const windowStart = snapshotTime - options.recentDays * DAY;
-  const cut = prefix ? prefix.length + 1 : 0;
-  const inScope = (p: string) => !prefix || p.startsWith(`${prefix}/`);
-
   // newest to oldest: a rename tells that older commits of the old path belong to the new one
-  const alias = new Map<string, string>();
-  const history = new Map<string, FileHistory>();
-  const pairs = new Map<string, number>();
-
+  const acc: Accumulator = { alias: new Map(), history: new Map(), pairs: new Map() };
   for (const commit of commits) {
     const isFix =
       CONVENTIONAL_FIX.test(commit.subject) ||
       fixPatterns.some((re) => re.test(commit.subject)) ||
       log.fixBranch.has(commit.hash);
     const recent = commit.time >= windowStart && commit.time <= snapshotTime;
-    const touched = new Set<string>();
-    for (const change of commit.changes) {
-      const target = alias.get(change.path) ?? change.path;
-      if (change.oldPath) alias.set(change.oldPath, target);
-      const rel = target.slice(cut);
-      if (!inScope(target) || !files.has(rel)) continue;
-      const h = history.get(rel) ?? emptyHistory(commit.time);
-      history.set(rel, h);
-      if (touched.has(rel)) continue;
-      touched.add(rel);
-      addChange(h, commit, change, isFix, recent);
-    }
-    countPairs(pairs, touched);
+    addCommit(acc, commit, { prefix, files }, isFix, recent);
   }
-  return { files: history, commitCount: commits.length, snapshotTime, coupled: coupledFiles(pairs, history) };
+  return {
+    files: acc.history,
+    commitCount: commits.length,
+    snapshotTime,
+    coupled: coupledFiles(acc.pairs, acc.history),
+  };
 }
 
 /** Metrics of one file's history, in registry ids. Days are whole days before the snapshot. */

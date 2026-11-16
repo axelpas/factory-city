@@ -74,8 +74,8 @@ function isAttemptRow(row: string[], c: Columns, mapping: FactsMapping): boolean
 
 type Read = ReturnType<typeof rowReader>;
 
-/** What a row adds to the fact of its issue: numbers are summed, the last text wins. */
-function addRow(fact: Fact, row: string[], read: Read, attempt: boolean): void {
+/** What every row of an issue adds: numbers are summed, the last date, currency and estimate win. */
+function addTotals(fact: Fact, row: string[], read: Read): void {
   for (const field of NUMERIC) {
     const n = toNumber(read(row, field));
     if (n !== undefined) fact[field] = (fact[field] ?? 0) + n;
@@ -86,7 +86,10 @@ function addRow(fact: Fact, row: string[], read: Read, attempt: boolean): void {
   if (currency) fact.currency = currency;
   const estimate = read(row, "estimate");
   if (/^(XS|S|M|L|XL)$/i.test(estimate)) fact.estimate = estimate.toUpperCase();
-  if (!attempt) return;
+}
+
+/** What an attempt row adds: one more attempt, with its outcome, agent and model. */
+function addAttempt(fact: Fact, row: string[], read: Read): void {
   fact.attempts++;
   const outcome = read(row, "outcome").toLowerCase();
   if (OUTCOMES.includes(outcome as FactOutcome)) {
@@ -128,6 +131,32 @@ function subjectOf(row: string[], read: Read): { issue?: number; commit?: string
   return issue !== undefined ? { issue } : { commit };
 }
 
+/** The facts of all the rows, merged by issue (or commit), and how many rows were kept and skipped. */
+function mergeRows(table: Table, columns: Columns, mapping: FactsMapping, read: Read) {
+  const facts = new Map<string, Fact>();
+  let kept = 0;
+  let skipped = 0;
+  const filtered = (row: string[]) =>
+    mapping.filter && !mapping.filter.values.includes((row[columns.filterAt] ?? "").trim());
+  for (const row of table.rows) {
+    if (filtered(row)) continue;
+    const subject = subjectOf(row, read);
+    if (!subject) {
+      skipped++;
+      continue;
+    }
+    kept++;
+    const key = subject.issue !== undefined ? `#${subject.issue}` : `@${subject.commit}`;
+    const fact = facts.get(key) ?? { ...subject, attempts: 0, succeeded_attempts: 0, tags: {} };
+    facts.set(key, fact);
+    addTotals(fact, row, read);
+    if (!isAttemptRow(row, columns, mapping)) continue;
+    addAttempt(fact, row, read);
+    addTags(fact, row, table.names, columns);
+  }
+  return { facts, kept, skipped };
+}
+
 /**
  * Imports a facts file with a mapping: which column is which field, which rows to keep, how raw values read,
  * and which rows are attempts. Several rows of one issue are merged: numbers are summed, the last attempt
@@ -138,24 +167,7 @@ export function importFacts(text: string, mapping: FactsMapping, now = new Date(
   // an empty file holds no fact: nothing to check a mapping against
   if (table.rows.length === 0 && table.names.length === 0) return emptyFacts(now);
   const columns = resolveColumns(table, mapping);
-  const read = rowReader(columns, mapping);
-  const facts = new Map<string, Fact>();
-  let kept = 0;
-  let skipped = 0;
-  for (const row of table.rows) {
-    if (mapping.filter && !mapping.filter.values.includes((row[columns.filterAt] ?? "").trim())) continue;
-    const subject = subjectOf(row, read);
-    if (!subject) {
-      skipped++;
-      continue;
-    }
-    kept++;
-    const key = subject.issue !== undefined ? `#${subject.issue}` : `@${subject.commit}`;
-    const fact = facts.get(key) ?? { ...subject, attempts: 0, succeeded_attempts: 0, tags: {} };
-    facts.set(key, fact);
-    addRow(fact, row, read, isAttemptRow(row, columns, mapping));
-    if (isAttemptRow(row, columns, mapping)) addTags(fact, row, table.names, columns);
-  }
+  const { facts, kept, skipped } = mergeRows(table, columns, mapping, rowReader(columns, mapping));
   const order = (f: Fact) => f.issue ?? Number.MAX_SAFE_INTEGER;
   return {
     kind: "facts",
