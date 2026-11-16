@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { Theme } from "../themes/index";
-import { FRAGMENT_COMMON, patchRoofVertex, patchVertex, type Uniforms } from "./shaders";
+import { patchRoofVertex, patchVertex } from "./patches";
+import { FRAGMENT_COMMON, type Uniforms } from "./shaders";
 
 /** The material of the buildings, and the one that draws their shadows: both follow the animated shape. */
 export function buildingMaterials(theme: Theme, uniforms: Uniforms) {

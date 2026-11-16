@@ -28,7 +28,8 @@ import { fadeStep, selectionBox } from "../view/scene-logic";
 import { CameraRig, type CameraState } from "./camera-rig";
 import { buildLots } from "./lots";
 import { buildingMaterials, roofMaterials } from "./materials";
-import { MAX_RAMP, pyramidGeometry } from "./shaders";
+import { pyramidGeometry } from "./patches";
+import { MAX_RAMP } from "./shaders";
 
 export type { CameraState } from "./camera-rig";
 
