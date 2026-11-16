@@ -90,6 +90,42 @@ async function loadRuns(run: GhRunner): Promise<CiRun[] | undefined> {
   }
 }
 
+function issueOf(i: RawIssue): ForgeIssue {
+  return {
+    number: i.number,
+    title: i.title,
+    state: i.state.toLowerCase(),
+    labels: i.labels.map((l) => l.name),
+    url: i.url,
+    ...(i.createdAt ? { createdAt: i.createdAt } : {}),
+    ...(i.closedAt ? { closedAt: i.closedAt } : {}),
+  };
+}
+
+function pullOf(p: RawPull): ForgePull {
+  return {
+    number: p.number,
+    title: p.title,
+    body: p.body ?? "",
+    branch: p.headRefName,
+    url: p.url,
+    closes: (p.closingIssuesReferences ?? []).map((r) => r.number),
+    ...(p.createdAt ? { createdAt: p.createdAt } : {}),
+    ...(p.mergedAt ? { mergedAt: p.mergedAt } : {}),
+  };
+}
+
+/** What `gh` said, in the shape kept on disk. */
+function toCached(issues: RawIssue[], pulls: RawPull[], runs: CiRun[] | undefined, now: number): Cached {
+  return {
+    version: CACHE_VERSION,
+    fetchedAt: new Date(now).toISOString(),
+    issues: issues.map(issueOf),
+    pulls: pulls.map(pullOf),
+    ...(runs ? { runs } : {}),
+  };
+}
+
 /**
  * Issues, pull requests and CI runs of the repository, in three batched `gh` calls, cached on disk for a few
  * minutes. Throws when `gh` is missing, not signed in or rate limited: the caller falls back to git data alone.
@@ -111,30 +147,7 @@ export async function loadForge(run: GhRunner, cachePath: string, now = Date.now
     await list("pr", "number,title,body,headRefName,url,createdAt,mergedAt,closingIssuesReferences"),
   ) as RawPull[];
   const runs = await loadRuns(run);
-  const cached: Cached = {
-    version: CACHE_VERSION,
-    fetchedAt: new Date(now).toISOString(),
-    issues: rawIssues.map((i) => ({
-      number: i.number,
-      title: i.title,
-      state: i.state.toLowerCase(),
-      labels: i.labels.map((l) => l.name),
-      url: i.url,
-      ...(i.createdAt ? { createdAt: i.createdAt } : {}),
-      ...(i.closedAt ? { closedAt: i.closedAt } : {}),
-    })),
-    pulls: rawPulls.map((p) => ({
-      number: p.number,
-      title: p.title,
-      body: p.body ?? "",
-      branch: p.headRefName,
-      url: p.url,
-      closes: (p.closingIssuesReferences ?? []).map((r) => r.number),
-      ...(p.createdAt ? { createdAt: p.createdAt } : {}),
-      ...(p.mergedAt ? { mergedAt: p.mergedAt } : {}),
-    })),
-    ...(runs ? { runs } : {}),
-  };
+  const cached = toCached(rawIssues, rawPulls, runs, now);
   await mkdir(dirname(cachePath), { recursive: true });
   await writeFile(cachePath, JSON.stringify(cached));
   return toData(cached);
