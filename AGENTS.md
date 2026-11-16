@@ -5,10 +5,10 @@ Instructions for every coding agent and contributor working on this repository. 
 ## Project
 
 - Name: Factory City
-- Goal: turn a codebase into a 3D city (folders are districts, files are buildings) to show what a software factory builds, how its quality evolves and what its process leaves behind. An analyzer (CLI) writes data files; a viewer (static web app) reads them. Full specification: `docs/specs/factory-city-brief.md`.
+- Goal: turn a codebase into a 3D city (folders are districts, files are buildings) to show what a software factory builds, how its quality evolves and what its process leaves behind. An analyzer (CLI) writes data files; a viewer (static web app) reads them.
 - Stack: strict TypeScript, pnpm workspaces monorepo, Node.js >= 22, Vitest, Vite, three.js, web-tree-sitter (WebAssembly). Dependency choices are recorded as ADRs in `docs/decisions/`.
 - Commands: `pnpm install` / `pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build` / `pnpm licenses:check` / `pnpm docs:assets` (scripts appear as the milestones land).
-- Backlog: GitHub Issues of this repository. One issue per milestone; each issue lists the brief sections it implements.
+- Backlog: GitHub Issues of this repository. One issue per milestone; each issue lists acceptance criteria and a manual scenario.
 - Language: English
 - Mode: exploration (prototype, no users yet)
 
@@ -19,11 +19,10 @@ Instructions for every coding agent and contributor working on this repository. 
 - `packages/layout`: the parcel layout, a pure deterministic function (no DOM, no Node API).
 - `packages/viewer`: the static web app; depends on `schema` and `layout`.
 - `examples/`: demo datasets built from public repositories.
-- `docs/`: `architecture.md`, `data-model.md`, `glossary.md`, `decisions/` (ADRs), `modules/<package>.md`, `specs/`.
+- `docs/`: `architecture.md`, `data-model.md`, `glossary.md`, `decisions/` (ADRs), `modules/<package>.md`.
 
 ## Where the knowledge is
 
-- Specification: `docs/specs/factory-city-brief.md`
 - Architecture and boundaries: `docs/architecture.md`
 - Data contracts: `docs/data-model.md`
 - Vocabulary: `docs/glossary.md`

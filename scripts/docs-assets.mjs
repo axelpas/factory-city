@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Builds every picture of the README and the demo files of examples/, from public repositories only:
 // this repository (its own per-issue timeline) and one pinned module of an open-source project.
-// Run `pnpm build` first. Options: --skip-twenty (this repository only), --work <dir> (scratch folder).
+// Run `pnpm build` first. Options: --skip-twenty (this repository only), --twenty-only, --work <dir> (scratch folder).
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -74,7 +74,12 @@ async function screenshot(
 ) {
   const { screenshotPage } = await import(renderModule);
   const entry = { slug, name: slug, dataDir, updatedAt: "2026-01-01T00:00:00.000Z" };
-  await screenshotPage({ entry, source, preset, width, height, out: join(assets, `${name}.png`) }, script);
+  // the first-open help card would cover the picture: dismiss it, then set the page up
+  const dismissHelp = `await new Promise((done) => setTimeout(done, 500)); document.querySelector(".help button")?.click();`;
+  await screenshotPage(
+    { entry, source, preset, width, height, out: join(assets, `${name}.png`) },
+    `${dismissHelp}\n${script}`,
+  );
   say(name);
 }
 
@@ -100,57 +105,59 @@ const OPEN_TAB = (tab) => `
   await new Promise((done) => setTimeout(done, 400));
 `;
 
-// ------------------------------------------------------------------ this repository
-const self = join(work, "self");
-rmSync(self, { recursive: true, force: true });
-say("analyzing this repository (per-issue timeline)");
-factory(["timeline", root, "--by", "issue", "--offline", "-o", self]);
-const frames = frameCount(self, "issue");
+const twentyOnly = args.includes("--twenty-only");
+if (!twentyOnly) {
+  const self = join(work, "self");
+  rmSync(self, { recursive: true, force: true });
+  say("analyzing this repository (per-issue timeline)");
+  factory(["timeline", root, "--by", "issue", "--offline", "-o", self]);
+  const frames = frameCount(self, "issue");
 
-picture(self, "hero", { preset: "hotspots" });
-picture(self, "preset-three-cs", { preset: "three-cs" });
-picture(self, "preset-bug-magnets", { preset: "bug-magnets" });
-picture(self, "preset-waste", { preset: "waste" });
-for (const theme of ["architect", "isometric", "blocks", "hologram"])
-  picture(self, `theme-${theme}`, { preset: "hotspots", theme, size: "1000x600" });
-for (const [i, frame] of [1, Math.round(frames / 3), Math.round((2 * frames) / 3), frames].entries())
-  picture(self, `timelapse-${i + 1}`, { preset: "hotspots", frame, size: "1000x600" });
-await screenshot(self, "factory-city", "hover-card", POINT_AT_A_BUILDING, { preset: "hotspots" });
-await screenshot(self, "factory-city", "panel-health", OPEN_TAB("health"), { preset: "hotspots" });
-await screenshot(self, "factory-city", "panel-factory", OPEN_TAB("factory"), { preset: "hotspots" });
+  picture(self, "hero", { preset: "hotspots" });
+  picture(self, "preset-three-cs", { preset: "three-cs" });
+  picture(self, "preset-bug-magnets", { preset: "bug-magnets" });
+  picture(self, "preset-waste", { preset: "waste" });
+  for (const theme of ["architect", "isometric", "blocks", "hologram"])
+    picture(self, `theme-${theme}`, { preset: "hotspots", theme, size: "1000x600" });
+  for (const [i, frame] of [1, Math.round(frames / 3), Math.round((2 * frames) / 3), frames].entries())
+    picture(self, `timelapse-${i + 1}`, { preset: "hotspots", frame, size: "1000x600" });
+  await screenshot(self, "factory-city", "hover-card", POINT_AT_A_BUILDING, { preset: "hotspots" });
+  await screenshot(self, "factory-city", "panel-health", OPEN_TAB("health"), { preset: "hotspots" });
+  await screenshot(self, "factory-city", "panel-factory", OPEN_TAB("factory"), { preset: "hotspots" });
 
-// a branch against its base, as in a pull request
-say("diff");
-const diffOut = join(work, "diff");
-rmSync(diffOut, { recursive: true, force: true });
-factory([
-  "diff",
-  root,
-  "HEAD~8",
-  "HEAD",
-  "--image",
-  join(assets, "diff.png"),
-  "--size",
-  "1600x900",
-  "-o",
-  diffOut,
-]);
+  // a branch against its base, as in a pull request
+  say("diff");
+  const diffOut = join(work, "diff");
+  rmSync(diffOut, { recursive: true, force: true });
+  factory([
+    "diff",
+    root,
+    "HEAD~8",
+    "HEAD",
+    "--image",
+    join(assets, "diff.png"),
+    "--size",
+    "1600x900",
+    "-o",
+    diffOut,
+  ]);
 
-// the demo files
-say("standalone HTML and film of this repository");
-factory(["render", self, "--source", "issue", "--html", join(examples, "factory-city.html")]);
-factory([
-  "render",
-  self,
-  "--source",
-  "issue",
-  "--video",
-  join(examples, "factory-city.mp4"),
-  "--size",
-  "960x540",
-  "--seconds-per-frame",
-  "0.35",
-]);
+  // the demo files
+  say("standalone HTML and film of this repository");
+  factory(["render", self, "--source", "issue", "--html", join(examples, "factory-city.html")]);
+  factory([
+    "render",
+    self,
+    "--source",
+    "issue",
+    "--video",
+    join(examples, "factory-city.mp4"),
+    "--size",
+    "960x540",
+    "--seconds-per-frame",
+    "0.35",
+  ]);
+}
 
 // ------------------------------------------------------------------ one module of a public project
 if (!skipTwenty) {
@@ -193,6 +200,9 @@ if (!skipTwenty) {
       ],
       { cwd: clone, input: `${missing.join("\n")}\n`, stdio: ["pipe", "pipe", "inherit"] },
     );
+  // the module's folder, at the pinned tag, so that the analyzer can start from it
+  run("git", ["sparse-checkout", "set", TWENTY.module], { cwd: clone });
+  run("git", ["checkout", "--quiet"], { cwd: clone });
   rmSync(data, { recursive: true, force: true });
   say("analyzing the module (per-issue timeline)");
   factory([

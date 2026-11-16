@@ -1,6 +1,6 @@
 # Architecture
 
-Status: draft, Phase A. Specification: `specs/factory-city-brief.md` (sections 5 to 9).
+Status: draft, Phase A.
 
 ## Shape
 Two independent programs that share only data files.

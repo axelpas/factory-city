@@ -1,6 +1,6 @@
 # Data model (data contracts)
 
-Status: draft, Phase A. Specification: `specs/factory-city-brief.md` section 7. All contracts are versioned and validated by JSON Schema in both programs.
+Status: draft, Phase A. All contracts are versioned and validated by JSON Schema in both programs.
 
 | Contract | File | Content |
 |---|---|---|
