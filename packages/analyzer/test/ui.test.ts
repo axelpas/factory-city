@@ -644,4 +644,108 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
     expect(seconds(r.fast)).toBeLessThan(seconds(r.normal));
     expect(seconds(r.slow)).toBeGreaterThan(seconds(r.normal));
   });
+
+  // ----- the flows app.ts owns, one test each: they are the safety net for splitting it
+
+  it("changes the preset with P and from the indicator list: question, legend and picker follow", async () => {
+    const r = await inPage<Record<string, unknown>>(`
+      await wait(300);
+      const question = () => document.querySelector(".question").textContent;
+      const picker = () => document.querySelector(".lens-menu > summary").textContent;
+      const legend = () => [...document.querySelectorAll(".legend-line")].map((l) => l.getAttribute("data-channel") + ":" + l.querySelector("b").textContent).join("|");
+      const before = { question: question(), picker: picker(), legend: legend() };
+      key("p");
+      await wait(900);
+      const afterKey = { question: question(), picker: picker(), legend: legend() };
+      document.querySelector(".lens-menu > summary").click();
+      await wait(80);
+      const options = [...document.querySelectorAll(".lens-list button:not(:disabled)")];
+      const other = options.find((b) => !b.textContent.startsWith(picker()));
+      other.click();
+      await wait(900);
+      return { before, afterKey, afterList: { question: question(), picker: picker() }, open: document.querySelector(".lens-menu").open };
+    `);
+    const b = r.before as { question: string; picker: string };
+    const k = r.afterKey as { question: string; picker: string };
+    const l = r.afterList as { question: string; picker: string };
+    expect(k.picker).not.toBe(b.picker);
+    expect(k.question).not.toBe(b.question);
+    expect(l.picker).not.toBe(k.picker);
+    expect(r.open).toBe(false);
+  });
+
+  it("plays and pauses with Space and moves frame by frame with the arrows", async () => {
+    const r = await inPage<Record<string, unknown>>(`
+      await wait(400);
+      const label = () => document.querySelector(".frame-position").textContent;
+      const play = document.querySelector('.transport button.primary');
+      const start = { label: label(), play: play.getAttribute("aria-label") };
+      key("ArrowLeft");
+      await wait(1200);
+      const back = label();
+      key("ArrowRight");
+      await wait(1200);
+      const forward = label();
+      key(" ");
+      await wait(200);
+      const playing = play.getAttribute("aria-label");
+      key(" ");
+      await wait(200);
+      return { start, back, forward, playing, paused: play.getAttribute("aria-label") };
+    `);
+    const start = r.start as { label: string; play: string };
+    expect(start.play).toBe("Play");
+    expect(r.back).not.toBe(start.label);
+    expect(r.forward).toBe(start.label);
+    expect(r.playing).toBe("Pause");
+    expect(r.paused).toBe("Play");
+  });
+
+  it("switches the theme with T and from the appearance menu, and keeps the choice", async () => {
+    const r = await inPage<Record<string, unknown>>(`
+      await wait(300);
+      const bg = () => getComputedStyle(document.documentElement).getPropertyValue("--c-background").trim();
+      const select = () => document.querySelector('select[aria-label="Theme"]');
+      const first = { theme: select().value, bg: bg() };
+      key("t");
+      await wait(400);
+      const second = { theme: select().value, bg: bg() };
+      select().value = first.theme;
+      select().dispatchEvent(new Event("change", { bubbles: true }));
+      await wait(400);
+      return { first, second, back: { theme: select().value, bg: bg() }, stored: localStorage.getItem("fc.theme") };
+    `);
+    const first = r.first as { theme: string; bg: string };
+    const second = r.second as { theme: string; bg: string };
+    expect(second.theme).not.toBe(first.theme);
+    expect(second.bg).not.toBe("");
+    expect(r.back).toEqual(first);
+    expect(r.stored).toBe(first.theme);
+  });
+
+  it("resets the camera and takes a top view without breaking the picture", async () => {
+    const r = await inPage<Record<string, unknown>>(`
+      await wait(300);
+      key("v");
+      await wait(200);
+      const top = window.factoryCity.capture(320, 200, false);
+      key("r");
+      await wait(200);
+      const reset = window.factoryCity.capture(320, 200, false);
+      return { top: top?.startsWith("data:image/png;base64,"), reset: reset?.startsWith("data:image/png;base64,"), different: top !== reset };
+    `);
+    expect(r).toEqual({ top: true, reset: true, different: true });
+  });
+
+  it("exports a picture of the frame asked for, with or without the overlay", async () => {
+    const r = await inPage<Record<string, unknown>>(`
+      await wait(400);
+      const first = window.factoryCity.capture(480, 300, true, 0);
+      // the sample has three frames; the playhead stays where the last picture put it
+      const last = window.factoryCity.capture(480, 300, true, 2);
+      const plain = window.factoryCity.capture(480, 300, false);
+      return { first: first?.startsWith("data:image/png"), differsByFrame: first !== last, overlayChangesPicture: last !== plain };
+    `);
+    expect(r).toEqual({ first: true, differsByFrame: true, overlayChangesPicture: true });
+  });
 });

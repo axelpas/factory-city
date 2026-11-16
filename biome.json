@@ -8,6 +8,7 @@
       "!**/fixtures",
       "!**/*.tsbuildinfo",
       "!docs",
+      "!examples",
       "!pnpm-lock.yaml",
       "!**/*.md"
     ]
