@@ -30,13 +30,23 @@ function totalsOf(m: Attrs) {
   return { files: m.size, rloc, mcc };
 }
 
+/** Whether a metric counts one kind of silenced check (not the total or the density). */
+function isShortcutKind(key: string): boolean {
+  return key.startsWith("escape_") && key !== "escape_hatches" && key !== "escape_hatch_density";
+}
+
 /** The change of each kind of silenced check in one file, added to the running total by kind. */
 function addShortcutKinds(byKind: Record<string, number>, a: Values, b: Values): void {
   for (const key of new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])) {
-    if (!key.startsWith("escape_") || key === "escape_hatches" || key === "escape_hatch_density") continue;
+    if (!isShortcutKind(key)) continue;
     const delta = (b?.[key] ?? 0) - (a?.[key] ?? 0);
     if (delta !== 0) byKind[key.slice(7)] = (byKind[key.slice(7)] ?? 0) + delta;
   }
+}
+
+/** Whether a file that exists on both sides changed: its real lines, its complexity or its line count. */
+function isTouched(a: NonNullable<Values>, b: NonNullable<Values>): boolean {
+  return (a.rloc ?? 0) !== (b.rloc ?? 0) || (a.mcc ?? 0) !== (b.mcc ?? 0) || (a.loc ?? 0) !== (b.loc ?? 0);
 }
 
 /** What happened to a file between the base and the head: added, removed, modified, or nothing. */
@@ -45,8 +55,22 @@ function changeOf(path: string, a: Values, b: Values): DiffFileChange | undefine
   const mcc = (b?.mcc ?? 0) - (a?.mcc ?? 0);
   if (!a) return { path, status: "added", rloc, mcc };
   if (!b) return { path, status: "removed", rloc, mcc };
-  const touched = rloc !== 0 || mcc !== 0 || (a.loc ?? 0) !== (b.loc ?? 0);
-  return touched ? { path, status: "modified", rloc, mcc } : undefined;
+  return isTouched(a, b) ? { path, status: "modified", rloc, mcc } : undefined;
+}
+
+/** The quality score of each side and the hotspots that appeared and went. */
+function qualityOf(base: Side, head: Side) {
+  const b = base.health?.score ?? 0;
+  const h = head.health?.score ?? 0;
+  const baseHotspots = base.health?.hotspots ?? [];
+  const headHotspots = head.health?.hotspots ?? [];
+  return {
+    quality: { base: b, head: h, delta: Math.round((h - b) * 10) / 10 },
+    hotspots: {
+      created: headHotspots.filter((p) => !baseHotspots.includes(p)),
+      resolved: baseHotspots.filter((p) => !headHotspots.includes(p)),
+    },
+  };
 }
 
 export function summarize(project: string, base: Side, head: Side, top = 10): DiffSummary {
@@ -69,8 +93,6 @@ export function summarize(project: string, base: Side, head: Side, top = 10): Di
   changes.sort((x, y) => weight(y) - weight(x) || (x.path < y.path ? -1 : 1));
   const tb = totalsOf(before);
   const th = totalsOf(after);
-  const baseHotspots = base.health?.hotspots ?? [];
-  const headHotspots = head.health?.hotspots ?? [];
   return {
     kind: "diff",
     schemaVersion: 1,
@@ -85,33 +107,8 @@ export function summarize(project: string, base: Side, head: Side, top = 10): Di
     },
     shortcuts: { added: shortcuts, byKind },
     biggest: changes.slice(0, top),
-    quality: {
-      base: base.health?.score ?? 0,
-      head: head.health?.score ?? 0,
-      delta: Math.round(((head.health?.score ?? 0) - (base.health?.score ?? 0)) * 10) / 10,
-    },
-    hotspots: {
-      created: headHotspots.filter((p) => !baseHotspots.includes(p)),
-      resolved: baseHotspots.filter((p) => !headHotspots.includes(p)),
-    },
+    ...qualityOf(base, head),
   };
 }
 
-function signed(n: number): string {
-  return `${n > 0 ? "+" : ""}${n}`;
-}
-
-/** The summary as a few lines of text. */
-export function diffText(s: DiffSummary): string {
-  if (s.base.commit === s.head.commit) return `No change: ${s.head.rev} is at its base (${s.base.commit}).`;
-  const f = s.files;
-  const lines = [
-    `${s.head.rev} (${s.head.commit}) against ${s.base.commit}: ${f.added} files added, ${f.modified} changed, ${f.removed} removed.`,
-    `Real lines ${signed(s.totals.delta.rloc)}, complexity ${signed(s.totals.delta.mcc)}, silenced checks ${signed(s.shortcuts.added)}.`,
-    `Score ${s.quality.head} out of 100 (${signed(s.quality.delta)}); hotspots created: ${s.hotspots.created.length}, resolved: ${s.hotspots.resolved.length}.`,
-  ];
-  if (f.added + f.modified + f.removed === 0) lines.push("No source file changed.");
-  for (const c of s.biggest.slice(0, 5))
-    lines.push(`  ${c.status.padEnd(8)} ${c.path}  lines ${signed(c.rloc)}, complexity ${signed(c.mcc)}`);
-  return lines.join("\n");
-}
+export { diffText } from "./diff-text.js";

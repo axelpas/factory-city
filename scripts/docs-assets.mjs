@@ -108,8 +108,20 @@ const OPEN_TAB = (tab) => `
 /** The film as a looping GIF (a palette per film keeps the colors); skipped, with a note, without ffmpeg. */
 function filmToGif(film, gif) {
   const filter = "fps=12,scale=720:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse";
-  const result = spawnSync("ffmpeg", ["-y", "-loglevel", "error", "-i", film, "-vf", filter, "-loop", "0", gif]);
-  if (result.error || result.status !== 0) say("ffmpeg not available: docs/assets/timelapse.gif was not updated");
+  const result = spawnSync("ffmpeg", [
+    "-y",
+    "-loglevel",
+    "error",
+    "-i",
+    film,
+    "-vf",
+    filter,
+    "-loop",
+    "0",
+    gif,
+  ]);
+  if (result.error || result.status !== 0)
+    say("ffmpeg not available: docs/assets/timelapse.gif was not updated");
 }
 
 const twentyOnly = args.includes("--twenty-only");
@@ -118,7 +130,6 @@ if (!twentyOnly) {
   rmSync(self, { recursive: true, force: true });
   say("analyzing this repository (per-issue timeline)");
   factory(["timeline", root, "--by", "issue", "--offline", "-o", self]);
-  const frames = frameCount(self, "issue");
 
   picture(self, "hero", { preset: "hotspots" });
   picture(self, "preset-three-cs", { preset: "three-cs" });

@@ -93,6 +93,24 @@ function ignoredReason(
   return isGeneratedName(path) ? "generated_or_vendored" : undefined;
 }
 
+type Verdict = { warning: string } | { ignored: string } | { candidate: Candidate };
+
+/** What becomes of an entry: counted as a warning, ignored for a reason, or kept as a candidate. */
+function classify(
+  entry: SourceEntry,
+  options: SelectOptions,
+  includes: RegExp[],
+  excludes: RegExp[],
+): Verdict {
+  if (entry.kind !== "file") return { warning: entry.kind === "submodule" ? "submodule" : "symlink" };
+  const forced = includes.length > 0 && matchesAny(entry.path, includes);
+  const reason = ignoredReason(entry.path, forced, options, excludes);
+  if (reason) return { ignored: reason };
+  const language = languageForPath(entry.path);
+  if (!language && !options.all && !forced) return { ignored: "not_source_code" };
+  return { candidate: { entry, language, isTest: isTestPath(entry.path) } };
+}
+
 /** Decides which entries are analyzed. File content checks (binary, generated marker) happen later. */
 export function selectEntries(
   entries: SourceEntry[],
@@ -106,22 +124,10 @@ export function selectEntries(
 
   for (const entry of entries) {
     if (sub && !entry.path.startsWith(sub)) continue;
-    if (entry.kind !== "file") {
-      bump(summary.warnings, entry.kind === "submodule" ? "submodule" : "symlink");
-      continue;
-    }
-    const forced = includes.length > 0 && matchesAny(entry.path, includes);
-    const reason = ignoredReason(entry.path, forced, options, excludes);
-    if (reason) {
-      bump(summary.files, reason);
-      continue;
-    }
-    const language = languageForPath(entry.path);
-    if (!language && !options.all && !forced) {
-      bump(summary.files, "not_source_code");
-      continue;
-    }
-    candidates.push({ entry, language, isTest: isTestPath(entry.path) });
+    const verdict = classify(entry, options, includes, excludes);
+    if ("warning" in verdict) bump(summary.warnings, verdict.warning);
+    else if ("ignored" in verdict) bump(summary.files, verdict.ignored);
+    else candidates.push(verdict.candidate);
   }
   return options.all ? candidates : dropMostlyNonSourceFolders(entries, candidates, sub, summary);
 }
