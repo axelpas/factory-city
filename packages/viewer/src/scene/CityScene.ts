@@ -1,5 +1,6 @@
 import type { Layout } from "@factory-city/layout";
 import * as THREE from "three";
+import { configureControls } from "./camera-controls";
 import { CameraRig } from "./camera-rig";
 import { CityContent } from "./city-content";
 import { Environment } from "./environment";
@@ -62,7 +63,7 @@ export class CityScene extends SceneFacade {
       },
       theme.camera.fov,
     );
-    this.watchCamera();
+    configureControls(this.rig, () => this.requestRender());
     this.picker = new Picker({
       renderer: this.renderer,
       camera: () => this.rig.camera,
@@ -98,28 +99,6 @@ export class CityScene extends SceneFacade {
     this.applyTheme(theme);
     this.resize();
     this.loop.start();
-  }
-
-  /** The orbit controls: damped, kept above the ground, and a camera moved by hand is left alone. */
-  private watchCamera(): void {
-    const controls = this.rig.controls;
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.12;
-    controls.maxPolarAngle = Math.PI * 0.495;
-    controls.autoRotateSpeed = 0.6;
-    controls.addEventListener("change", () => this.requestRender());
-    // no automatic framing until Reset or Top view; a plain click starts and ends an interaction without
-    // changing the view: it does not count
-    let byHand = false;
-    controls.addEventListener("start", () => {
-      byHand = true;
-    });
-    controls.addEventListener("end", () => {
-      byHand = false;
-    });
-    controls.addEventListener("change", () => {
-      if (byHand) this.rig.framed = null;
-    });
   }
 
   get canvas(): HTMLCanvasElement {
