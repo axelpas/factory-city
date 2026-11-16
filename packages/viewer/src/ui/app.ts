@@ -45,9 +45,10 @@ import { AppearanceMenu, type MotionSetting } from "./appearance-menu";
 import { renderFileDetails } from "./details-view";
 import { DistrictLabelLayer } from "./district-labels";
 import { ExportMenu } from "./export-menu";
-import { Exporter } from "./exporter";
+import { Exporter, type ExporterHost } from "./exporter";
 import { renderFactoryPanel } from "./factory-panel";
 import { FileFinder } from "./file-finder";
+import { Film } from "./film";
 import { renderHealthPanel } from "./health-panel";
 import { fillHelp } from "./help";
 import { HoverCard } from "./hover-card";
@@ -195,7 +196,7 @@ export class App {
   /** The Export menu, which also keeps the options of the film. */
   private readonly exportMenu = new ExportMenu({
     onPicture: (size, overlay) => this.exporter.exportPng(size, overlay),
-    onVideo: () => void this.exporter.exportVideo(),
+    onVideo: () => void this.film.exportVideo(),
     frameCount: () => this.state?.data.frames.length ?? 1,
   });
   /** The Appearance menu, which also keeps the theme-independent settings. */
@@ -241,6 +242,7 @@ export class App {
   private districtLabels!: DistrictLabelLayer;
   /** Pictures and films of the city. */
   private exporter!: Exporter;
+  private film!: Film;
   /** The building the details show, outlined in the city until another one is selected. */
   private selectedUnion: number | null = null;
 
@@ -318,7 +320,7 @@ export class App {
       closeDetails: () => this.closeDetails(),
       frameDistrict: (path) => this.frameDistrict(path),
     });
-    this.exporter = new Exporter({
+    const exporterHost: ExporterHost = {
       state: () => this.state,
       animator: () => this.animator,
       scene: this.scene,
@@ -330,7 +332,9 @@ export class App {
       exportMenu: this.exportMenu,
       stateOf: (frame) => this.stateOf(frame),
       updateFrameViews: (force) => this.updateFrameViews(force),
-    });
+    };
+    this.exporter = new Exporter(exporterHost);
+    this.film = new Film(exporterHost, this.exporter);
     this.scene.onTick = (dt) => this.tick(dt);
     this.scene.readState = () => this.onScreen();
     this.reducedQuery.addEventListener("change", () => this.applyMotion());
@@ -1284,11 +1288,11 @@ export class App {
     options: VideoOptions,
     onProgress?: (done: number, total: number) => void,
   ): Promise<EncodedVideo | undefined> {
-    return this.exporter.video(options, onProgress);
+    return this.film.video(options, onProgress);
   }
 
   /** Fingerprints of the images at some playhead positions, to compare two renders image for image. */
   imageHashes(positions: number[], width: number, height: number): string[] {
-    return this.exporter.imageHashes(positions, width, height);
+    return this.film.imageHashes(positions, width, height);
   }
 }
