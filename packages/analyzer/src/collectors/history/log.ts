@@ -20,6 +20,26 @@ export interface RawCommit {
   changes: Array<{ path: string; oldPath?: string; added: number; deleted: number }>;
 }
 
+/** The changed paths of one commit, from its numstat tokens; a rename takes the next two tokens (old, new). */
+function parseChanges(tokens: string[]): RawCommit["changes"] {
+  const changes: RawCommit["changes"] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const m = /^(\d+|-)\t(\d+|-)\t([\s\S]*)$/.exec(tokens[i] as string);
+    if (!m) continue;
+    const added = m[1] === "-" ? 0 : Number(m[1]);
+    const deleted = m[2] === "-" ? 0 : Number(m[2]);
+    if (m[3] !== "") {
+      changes.push({ path: m[3] as string, added, deleted });
+      continue;
+    }
+    const oldPath = tokens[i + 1] as string;
+    const path = tokens[i + 2] as string;
+    i += 2;
+    if (path) changes.push({ path, oldPath, added, deleted });
+  }
+  return changes;
+}
+
 /** Parses `git log --numstat -z -M` output written with our record separators. */
 export function parseLog(output: string): RawCommit[] {
   const commits: RawCommit[] = [];
@@ -33,22 +53,7 @@ export function parseLog(output: string): RawCommit[] {
       .slice(end + 1)
       .split("\0")
       .map((t) => t.replace(/^\n+/, ""));
-    const changes: RawCommit["changes"] = [];
-    for (let i = 0; i < tokens.length; i++) {
-      const m = /^(\d+|-)\t(\d+|-)\t([\s\S]*)$/.exec(tokens[i] as string);
-      if (!m) continue;
-      const added = m[1] === "-" ? 0 : Number(m[1]);
-      const deleted = m[2] === "-" ? 0 : Number(m[2]);
-      if (m[3] === "") {
-        // rename: the next two tokens are the old and the new path
-        const oldPath = tokens[i + 1] as string;
-        const path = tokens[i + 2] as string;
-        i += 2;
-        if (path) changes.push({ path, oldPath, added, deleted });
-      } else {
-        changes.push({ path: m[3] as string, added, deleted });
-      }
-    }
+    const changes = parseChanges(tokens);
     commits.push({ hash, time: Number(time), author: author.toLowerCase(), subject, changes });
   }
   return commits;
