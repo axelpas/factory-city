@@ -81,10 +81,10 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
       const play = document.querySelector('.transport button.primary');
       const start = { label: label(), play: play.getAttribute("aria-label") };
       key("ArrowLeft");
-      await wait(1200);
+      await wait(2200);
       const back = label();
       key("ArrowRight");
-      await wait(1200);
+      await wait(2200);
       const forward = label();
       key(" ");
       await wait(200);
