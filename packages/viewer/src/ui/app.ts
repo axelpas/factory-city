@@ -54,6 +54,7 @@ import { fillHelp } from "./help";
 import { HoverCard } from "./hover-card";
 import { type IconName, icon } from "./icons";
 import { Inspector, type InspectorTab } from "./inspector";
+import { handleKey, type KeyActions } from "./keyboard";
 import { renderLegendBox } from "./legend-box";
 import { lensGroups, renderLensButton, renderLensList } from "./lens";
 import { PointerController } from "./pointer";
@@ -900,7 +901,7 @@ export class App {
 
   private wireEvents(): void {
     this.pointerController.attach();
-    window.addEventListener("keydown", (e) => this.onKey(e));
+    window.addEventListener("keydown", (e) => handleKey(e, this.keyActions));
     watchPopovers(document);
     window.addEventListener("dragover", (e) => {
       e.preventDefault();
@@ -1066,68 +1067,30 @@ export class App {
 
   // -------------------------------------------------------------- keyboard
 
-  private onKey(e: KeyboardEvent): void {
-    const target = e.target as HTMLElement | null;
-    if (target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName) && e.key !== "Escape") return;
-    if (e.metaKey || e.ctrlKey || e.altKey) return;
-    switch (e.key) {
-      case " ":
-        e.preventDefault();
-        this.togglePlay();
-        break;
-      case "ArrowLeft":
-        this.step(-1);
-        break;
-      case "ArrowRight":
-        this.step(1);
-        break;
-      case "r":
-      case "R":
-        this.scene.resetCamera();
-        break;
-      case "v":
-      case "V":
-        this.scene.topView();
-        break;
-      case "t":
-      case "T":
-        this.setTheme(THEMES[(THEMES.indexOf(this.theme) + 1) % THEMES.length] ?? DEFAULT_THEME);
-        break;
-      case "p":
-      case "P":
-        this.nextPreset();
-        break;
-      case "e":
-      case "E":
-        this.exporter.exportPng(2, true);
-        break;
-      case "h":
-      case "H":
-        this.toggleHealth();
-        break;
-      case "f":
-      case "F":
-        this.toggleFactory();
-        break;
-      case "/":
-        e.preventDefault();
-        this.finder.open();
-        break;
-      case "?":
-        this.toggleHelp();
-        break;
-      case "Escape":
-        // a menu or a help popover closes first; the panels stay
-        if (closePopovers(document)) break;
-        this.healthPanel.hidden = true;
-        this.factoryPanel.hidden = true;
-        this.closeDetails();
-        // an open view panel overlays the stage in a medium window: it folds the same way
-        if (this.medium.matches) this.viewPanel.fold();
-        if (!this.helpDialog.hidden) this.hideHelp();
-        break;
-      default:
-    }
+  private readonly keyActions: KeyActions = {
+    togglePlay: () => this.togglePlay(),
+    step: (delta) => this.step(delta),
+    resetCamera: () => this.scene.resetCamera(),
+    topView: () => this.scene.topView(),
+    nextTheme: () => this.setTheme(THEMES[(THEMES.indexOf(this.theme) + 1) % THEMES.length] ?? DEFAULT_THEME),
+    nextPreset: () => this.nextPreset(),
+    exportPicture: () => this.exporter.exportPng(2, true),
+    toggleHealth: () => this.toggleHealth(),
+    toggleFactory: () => this.toggleFactory(),
+    openFinder: () => this.finder.open(),
+    toggleHelp: () => this.toggleHelp(),
+    escape: () => this.escape(),
+  };
+
+  /** Escape: a menu or a help popover closes first; then the panels and the details. */
+  private escape(): void {
+    if (closePopovers(document)) return;
+    this.healthPanel.hidden = true;
+    this.factoryPanel.hidden = true;
+    this.closeDetails();
+    // an open view panel overlays the stage in a medium window: it folds the same way
+    if (this.medium.matches) this.viewPanel.fold();
+    if (!this.helpDialog.hidden) this.hideHelp();
   }
 
   /** Switches theme at runtime: same data, same mapping, another look. Buildings move from the current view. */
