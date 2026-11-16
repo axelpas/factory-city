@@ -187,6 +187,26 @@ function signed(value: number, fmt: Formatter): string {
   return `${value > 0 ? "+" : value < 0 ? "−" : "±"}${fmt.number(Math.abs(value))}`;
 }
 
+/** The change of each mapped metric of a file since the previous frame, for the numbers that moved. */
+function mappedChanges(
+  model: Model,
+  before: Record<string, number>,
+  now: Record<string, number>,
+  mapping: Mapping,
+  fmt: Formatter,
+): CardRow[] {
+  const rows: CardRow[] = [];
+  for (const id of new Set([mapping.area, mapping.height, mapping.color, mapping.marker?.metric])) {
+    if (!id) continue;
+    const metric = model.metrics.get(id);
+    const a = before[id];
+    const b = now[id];
+    if (!metric || metric.kind === "category" || a === undefined || b === undefined || a === b) continue;
+    rows.push({ label: `${metric.label}, this frame`, value: signed(b - a, fmt) });
+  }
+  return rows;
+}
+
 /** What the current frame did to a file: change of the mapped values, lines added and deleted, first appearance. */
 export function frameChangeRows(
   data: TimelineData,
@@ -203,16 +223,7 @@ export function frameChangeRows(
   const previous = frame > 0 ? data.frames[frame - 1] : undefined;
   const before = previous ? previous.model.files[previous.modelIndex[union] as number] : undefined;
   if (now && previous && !before) rows.push({ label: "This frame", value: "added the file" });
-  if (now && before) {
-    for (const id of new Set([mapping.area, mapping.height, mapping.color, mapping.marker?.metric])) {
-      if (!id) continue;
-      const metric = current.model.metrics.get(id);
-      const a = before.values[id];
-      const b = now.values[id];
-      if (!metric || metric.kind === "category" || a === undefined || b === undefined || a === b) continue;
-      rows.push({ label: `${metric.label}, this frame`, value: signed(b - a, fmt) });
-    }
-  }
+  if (now && before) rows.push(...mappedChanges(current.model, before.values, now.values, mapping, fmt));
   const lines = current.info?.lines[path];
   if (lines && (lines[0] > 0 || lines[1] > 0)) {
     rows.push({ label: "Lines, this frame", value: `+${fmt.integer(lines[0])} −${fmt.integer(lines[1])}` });
@@ -222,26 +233,21 @@ export function frameChangeRows(
   return rows;
 }
 
+/** The nearest frame after (1) or before (-1) `from` in which the file exists, or -1. */
+function nearestFrameWith(data: TimelineData, union: number, from: number, step: 1 | -1): number {
+  for (let f = from + step; f >= 0 && f < data.frames.length; f += step)
+    if ((data.frames[f]?.modelIndex[union] as number) >= 0) return f;
+  return -1;
+}
+
 /** Card of an empty parcel: which file will stand there, or stood there, and at which frame. */
 export function lotCard(data: TimelineData, frame: number, union: number): LotCard {
   const path = data.paths[union] as string;
   const cut = path.lastIndexOf("/");
   const first = data.firstFrame[union] as number;
   const last = data.lastFrame[union] as number;
-  let next = -1;
-  for (let f = frame + 1; f < data.frames.length; f++) {
-    if ((data.frames[f]?.modelIndex[union] as number) >= 0) {
-      next = f;
-      break;
-    }
-  }
-  let previous = -1;
-  for (let f = frame - 1; f >= 0; f--) {
-    if ((data.frames[f]?.modelIndex[union] as number) >= 0) {
-      previous = f;
-      break;
-    }
-  }
+  const next = nearestFrameWith(data, union, frame, 1);
+  const previous = nearestFrameWith(data, union, frame, -1);
   let text: string;
   if (frame < first) text = `This file will stand here from ${frameName(data, first)}.`;
   else if (frame > last) text = `This file stood here until ${frameName(data, last)}.`;
