@@ -22,12 +22,12 @@ import type { Theme } from "../themes/index";
 import { parseHex, type Rgb } from "../view/color";
 import type { Insets } from "../view/framing";
 import { pickBuilding } from "../view/picking";
-import { folderDepth, PLINTH_THICKNESS, plinthTop } from "../view/placements";
+import { folderDepth, plinthTop } from "../view/placements";
 import { edgeWidth, REST_DELAY_MS, restRatio } from "../view/resolution";
-import { fadeStep, selectionBox } from "../view/scene-logic";
 import { CameraRig, type CameraState } from "./camera-rig";
 import { buildLots } from "./lots";
 import { buildingMaterials, roofMaterials } from "./materials";
+import { Outlines } from "./outlines";
 import { pyramidGeometry } from "./patches";
 import { MAX_RAMP } from "./shaders";
 
@@ -39,14 +39,13 @@ export type Pick =
   | { kind: "folder"; path: string }
   | null;
 
-/** Time the other buildings take to fade when one is pointed at. */
-const HOVER_FADE_MS = 140;
-
 /** The 3D city: buildings interpolated on the GPU, plinths, lots, camera, picking and offscreen rendering. */
 export class CityScene {
   private readonly renderer: THREE.WebGLRenderer;
   /** The cameras and everything that moves them. */
   private readonly rig: CameraRig;
+  /** The outlines of what is pointed at and what is selected. */
+  private readonly outlines: Outlines;
 
   private get camera() {
     return this.rig.camera;
@@ -66,15 +65,8 @@ export class CityScene {
   private glowOn = true;
   private readonly raycaster = new THREE.Raycaster();
   private readonly unitBox = new THREE.BoxGeometry(1, 1, 1);
-  private readonly unitEdges = new THREE.EdgesGeometry(this.unitBox);
   private readonly sun: THREE.DirectionalLight;
   private readonly ground: THREE.Mesh;
-  private readonly hoverBuilding: THREE.LineSegments;
-  private readonly hoverFolder: THREE.LineSegments;
-  /** The outline of the selected building: it stays until another is selected or the details close. */
-  private readonly selection = new THREE.Group();
-  private readonly selectionMaterial = new THREE.LineBasicMaterial({ depthTest: false });
-  private selected: number | null = null;
   private readonly uniforms = {
     uProgress: { value: 1 },
     uRamp: { value: Array.from({ length: MAX_RAMP }, () => new THREE.Vector3()) },
@@ -92,10 +84,6 @@ export class CityScene {
     uHoverDim: { value: 0 },
     uDimColor: { value: new THREE.Vector3() },
   };
-  /** Share of the fade of the other buildings reached, and the one wanted: 1 while a building is pointed at. */
-  private hoverDim = 0;
-  private hoverDimTarget = 0;
-  private readonly hoverBuildingHalo: THREE.LineSegments;
   private buildings: THREE.Mesh | undefined;
   /** The roofs of the marked buildings. */
   private roofs: THREE.Mesh | undefined;
@@ -185,31 +173,12 @@ export class CityScene {
     this.ground.receiveShadow = true;
     this.scene.add(this.ground);
 
-    this.hoverBuilding = new THREE.LineSegments(
-      this.unitEdges,
-      new THREE.LineBasicMaterial({ depthTest: false }),
-    );
-    this.hoverFolder = new THREE.LineSegments(
-      this.unitEdges,
-      new THREE.LineBasicMaterial({ depthTest: false }),
-    );
-    // a second, larger outline reads as one heavier line
-    this.hoverBuildingHalo = new THREE.LineSegments(this.unitEdges, this.hoverBuilding.material);
-    for (const o of [this.hoverBuilding, this.hoverBuildingHalo, this.hoverFolder]) {
-      o.visible = false;
-      o.renderOrder = 10;
-      this.scene.add(o);
-    }
-    // two nested outlines read as one heavier line
-    for (const grow of [1, 1.03]) {
-      const outline = new THREE.LineSegments(this.unitEdges, this.selectionMaterial);
-      outline.scale.setScalar(grow);
-      outline.renderOrder = 11;
-      this.selection.add(outline);
-    }
-    this.selection.visible = false;
-    this.scene.add(this.selection);
-
+    this.outlines = new Outlines(this.scene, {
+      state: () => this.readState?.(),
+      parcels: () => this.parcels,
+      uniforms: this.uniforms,
+      requestRender: () => this.requestRender(),
+    });
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     this.applyTheme(theme);
@@ -219,7 +188,7 @@ export class CityScene {
       const dt = this.lastTime ? Math.min(time - this.lastTime, 100) : 0;
       this.lastTime = time;
       const animating = this.onTick?.(dt) ?? false;
-      const flying = this.rig.stepFly(dt) || this.stepHoverDim(dt);
+      const flying = this.rig.stepFly(dt) || this.outlines.step(dt);
       const moved = this.controls.update();
       const moving = moved || animating || flying;
       if (moving) {
@@ -232,7 +201,7 @@ export class CityScene {
       }
       if (this.dirty || moving) {
         this.dirty = false;
-        this.syncSelection();
+        this.outlines.sync();
         this.renderer.render(this.scene, this.camera);
         this.onRendered?.();
         this.fpsFrames++;
@@ -303,9 +272,7 @@ export class CityScene {
     const v = (key: string) => new THREE.Vector3(...parseHex(theme.colors[key] ?? ""));
     this.scene.background = c("background");
     (this.ground.material as THREE.MeshLambertMaterial).color = c("ground");
-    (this.hoverBuilding.material as THREE.LineBasicMaterial).color = c("hover");
-    (this.hoverFolder.material as THREE.LineBasicMaterial).color = c("folderHover");
-    this.selectionMaterial.color = c("accent");
+    this.outlines.setColors(c("hover"), c("folderHover"), c("accent"));
     this.uniforms.uEdgeColor.value = v("buildingEdge");
     this.uniforms.uDimColor.value = v("dim");
     this.uniforms.uTouchColor.value = v("accent");
@@ -476,8 +443,7 @@ export class CityScene {
     this.controls.maxDistance = s * 3;
     this.perspective.far = s * 12;
     this.perspective.updateProjectionMatrix();
-    this.hoverBuilding.visible = false;
-    this.hoverFolder.visible = false;
+    this.outlines.clearHover();
     if (!keepCamera) this.resetCamera();
     this.renderer.shadowMap.needsUpdate = true;
     this.requestRender();
@@ -607,81 +573,12 @@ export class CityScene {
     pick: Pick,
     folder?: { path: string; rect: { x: number; y: number; w: number; h: number } },
   ): void {
-    this.hoverBuilding.visible = false;
-    this.hoverBuildingHalo.visible = false;
-    this.hoverFolder.visible = false;
-    // pointing at a building fades the others, so that it stands out
-    if (pick?.kind === "file") this.uniforms.uHover.value = pick.index;
-    this.hoverDimTarget = pick?.kind === "file" ? 1 : 0;
-    const state = this.readState?.();
-    if (pick?.kind === "file" && state) {
-      const o = pick.index * STRIDE;
-      const h = state[o + H] as number;
-      this.hoverBuilding.position.set(
-        state[o + X] as number,
-        (state[o + Y] as number) + h / 2,
-        state[o + Z] as number,
-      );
-      this.hoverBuilding.scale.set(
-        (state[o + W] as number) * 1.01,
-        h * 1.01,
-        (state[o + D] as number) * 1.01,
-      );
-      this.hoverBuilding.visible = true;
-      this.hoverBuildingHalo.position.copy(this.hoverBuilding.position);
-      this.hoverBuildingHalo.scale.set(
-        (state[o + W] as number) * 1.04,
-        h * 1.04,
-        (state[o + D] as number) * 1.04,
-      );
-      this.hoverBuildingHalo.visible = true;
-    } else if (pick?.kind === "lot") {
-      const p = this.parcels[pick.index];
-      if (p && state) {
-        this.hoverBuilding.position.set(
-          p.x + p.w / 2,
-          (state[pick.index * STRIDE + Y] as number) + 0.1,
-          p.y + p.h / 2,
-        );
-        this.hoverBuilding.scale.set(p.w * 0.9, 0.2, p.h * 0.9);
-        this.hoverBuilding.rotation.y = 0;
-        this.hoverBuilding.visible = true;
-      }
-    }
-    if (folder) {
-      const top = plinthTop(folderDepth(folder.path));
-      const r = folder.rect;
-      this.hoverFolder.position.set(r.x + r.w / 2, top / 2, r.y + r.h / 2);
-      this.hoverFolder.scale.set(r.w, top + PLINTH_THICKNESS * 0.2, r.h);
-      this.hoverFolder.visible = true;
-    }
-    this.requestRender();
-  }
-
-  /** Fades the other buildings in and out with the pointer; true while it changes. */
-  private stepHoverDim(dtMs: number): boolean {
-    const next = fadeStep(this.hoverDim, this.hoverDimTarget, dtMs, HOVER_FADE_MS);
-    if (!next.changed) return false;
-    this.hoverDim = next.value;
-    this.uniforms.uHoverDim.value = this.hoverDim;
-    // once the others are back, nothing is pointed at any more
-    if (this.hoverDim === 0) this.uniforms.uHover.value = -1;
-    return true;
+    this.outlines.setHover(pick, folder);
   }
 
   /** Outlines a building until another is selected, or null. The outline follows the building as it moves. */
   setSelection(index: number | null): void {
-    this.selected = index;
-    this.syncSelection();
-    this.requestRender();
-  }
-
-  private syncSelection(): void {
-    const box = selectionBox(this.readState?.(), this.selected);
-    this.selection.visible = box !== undefined;
-    if (!box) return;
-    this.selection.position.set(box.x, box.y, box.z);
-    this.selection.scale.set(box.w, box.h, box.d);
+    this.outlines.setSelection(index);
   }
 
   /** Where a point of the world lands on the picture, in pixels from its top left corner. */
