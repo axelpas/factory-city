@@ -41,6 +41,13 @@ function mappedChanges(
   return rows;
 }
 
+/** The lines the frame added and deleted in the file, when it changed any. */
+function linesRow(current: TimelineData["frames"][number], path: string, fmt: Formatter) {
+  const lines = current.info?.lines[path];
+  if (!lines || (lines[0] <= 0 && lines[1] <= 0)) return [];
+  return [{ label: "Lines, this frame", value: `+${fmt.integer(lines[0])} −${fmt.integer(lines[1])}` }];
+}
+
 /** What the current frame did to a file: change of the mapped values, lines added and deleted, first appearance. */
 export function frameChangeRows(
   data: TimelineData,
@@ -51,20 +58,16 @@ export function frameChangeRows(
 ): CardRow[] {
   const current = data.frames[frame];
   if (!current || data.frames.length < 2) return [];
-  const path = data.paths[union] as string;
-  const rows: CardRow[] = [];
   const now = current.model.files[current.modelIndex[union] as number];
   const previous = frame > 0 ? data.frames[frame - 1] : undefined;
   const before = previous ? previous.model.files[previous.modelIndex[union] as number] : undefined;
-  if (now && previous && !before) rows.push({ label: "This frame", value: "added the file" });
-  if (now && before) rows.push(...mappedChanges(current.model, before.values, now.values, mapping, fmt));
-  const lines = current.info?.lines[path];
-  if (lines && (lines[0] > 0 || lines[1] > 0)) {
-    rows.push({ label: "Lines, this frame", value: `+${fmt.integer(lines[0])} −${fmt.integer(lines[1])}` });
-  }
   const first = data.firstFrame[union] as number;
-  if (first >= 0) rows.push({ label: "Appeared at", value: frameName(data, first) });
-  return rows;
+  return [
+    ...(now && previous && !before ? [{ label: "This frame", value: "added the file" }] : []),
+    ...(now && before ? mappedChanges(current.model, before.values, now.values, mapping, fmt) : []),
+    ...linesRow(current, data.paths[union] as string, fmt),
+    ...(first >= 0 ? [{ label: "Appeared at", value: frameName(data, first) }] : []),
+  ];
 }
 
 /** The nearest frame after (1) or before (-1) `from` in which the file exists, or -1. */

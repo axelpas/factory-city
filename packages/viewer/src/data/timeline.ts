@@ -60,6 +60,53 @@ class LazyMap<V> extends Map<string, V> {
   }
 }
 
+/** The snapshot manifest the models are built with: the one given, or one made from a timeline's manifest. */
+function snapshotManifest(
+  manifest: AnalysisManifest | TimelineManifest | undefined,
+): AnalysisManifest | undefined {
+  if (!manifest || manifest.kind === "snapshot") return manifest;
+  return {
+    kind: "snapshot",
+    schemaVersion: 1,
+    analyzerVersion: manifest.analyzerVersion,
+    createdAt: manifest.createdAt,
+    project: manifest.project,
+    source: { kind: "git" },
+    dataLevel: manifest.dataLevel,
+    git: manifest.git,
+    metrics: manifest.metrics,
+    categories: manifest.categories,
+    selected: 0,
+    analyzed: 0,
+    ignored: manifest.ignored,
+    warnings: manifest.warnings,
+    snapshot: "",
+  };
+}
+
+/** Statistics over all frames at once, computed when asked, so that scales stay fixed while the timeline plays. */
+function shareStatistics(models: Model[], metrics: Map<string, MetricDefinition>): void {
+  const fileIds = new Set(models.flatMap((m) => [...m.stats.keys()]));
+  const folderIds = new Set(models.flatMap((m) => [...m.folderStats.keys()]));
+  const stats = new LazyMap<MetricStats>(fileIds, (id) =>
+    statsOf(models.flatMap((m) => m.files.map((f) => f.values[id]).filter((v) => v !== undefined))),
+  );
+  const folderStats = new LazyMap<MetricStats>(folderIds, (id) =>
+    statsOf(
+      models.flatMap((m) =>
+        [...m.folders.values()]
+          .filter((f) => f.depth > 0 && f.values[id] !== undefined)
+          .map((f) => f.values[id] as number),
+      ),
+    ),
+  );
+  for (const m of models) {
+    m.stats = stats;
+    m.folderStats = folderStats;
+    m.metrics = metrics;
+  }
+}
+
 /**
  * Builds the viewer's data. Statistics are computed over all frames, so that scales stay fixed while the
  * timeline plays.
@@ -69,33 +116,9 @@ export function buildTimelineData(
   manifest?: AnalysisManifest | TimelineManifest,
 ): TimelineData {
   const frameInfos = manifest?.kind === "timeline" ? manifest.frames : undefined;
-  const shared: AnalysisManifest | undefined =
-    manifest?.kind === "snapshot"
-      ? manifest
-      : manifest
-        ? {
-            kind: "snapshot",
-            schemaVersion: 1,
-            analyzerVersion: manifest.analyzerVersion,
-            createdAt: manifest.createdAt,
-            project: manifest.project,
-            source: { kind: "git" },
-            dataLevel: manifest.dataLevel,
-            git: manifest.git,
-            metrics: manifest.metrics,
-            categories: manifest.categories,
-            selected: 0,
-            analyzed: 0,
-            ignored: manifest.ignored,
-            warnings: manifest.warnings,
-            snapshot: "",
-          }
-        : undefined;
+  const shared = snapshotManifest(manifest);
   const models = snapshots.map((cc) => buildModel(cc, shared));
-
-  const pathSet = new Set<string>();
-  for (const m of models) for (const f of m.files) pathSet.add(f.path);
-  const paths = [...pathSet].sort();
+  const paths = [...new Set(models.flatMap((m) => m.files.map((f) => f.path)))].sort();
   const pathIndex = new Map(paths.map((p, i) => [p, i]));
   const firstFrame = new Int32Array(paths.length).fill(-1);
   const lastFrame = new Int32Array(paths.length).fill(-1);
@@ -116,34 +139,7 @@ export function buildTimelineData(
   });
 
   if (models.length > 1) {
-    const fileIds = new Set<string>();
-    const folderIds = new Set<string>();
-    for (const m of models) {
-      for (const id of m.stats.keys()) fileIds.add(id);
-      for (const id of m.folderStats.keys()) folderIds.add(id);
-    }
-    const stats = new LazyMap<MetricStats>(fileIds, (id) => {
-      const values: number[] = [];
-      for (const m of models)
-        for (const f of m.files) if (f.values[id] !== undefined) values.push(f.values[id] as number);
-      return statsOf(values);
-    });
-    const folderStats = new LazyMap<MetricStats>(folderIds, (id) => {
-      const values: number[] = [];
-      for (const m of models) {
-        for (const folder of m.folders.values())
-          if (folder.depth > 0 && folder.values[id] !== undefined) values.push(folder.values[id] as number);
-      }
-      return statsOf(values);
-    });
-    for (const m of models) {
-      m.stats = stats;
-      m.folderStats = folderStats;
-      m.metrics = metrics;
-    }
-  }
-
-  if (models.length > 1) {
+    shareStatistics(models, metrics);
     // the Change preset colors by what each frame did: available as soon as there is a previous frame
     metrics.set(CHANGE_METRIC.id, CHANGE_METRIC);
     for (const m of models) m.coverage.set(CHANGE_METRIC.id, 1);

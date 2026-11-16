@@ -40,39 +40,8 @@ function thresholds(d: RiskDimension): string {
   return `Low up to ${a}, moderate up to ${b}, high up to ${c}.${scope} Source: ${d.source}.`;
 }
 
-/** Everything the Health panel shows for the frame under the playhead. */
-export function healthView(
-  data: TimelineData,
-  frame: number,
-  report: Report | undefined,
-  fmt: Formatter,
-): HealthView {
-  const empty: HealthView = {
-    available: false,
-    score: 0,
-    scoreText: "",
-    notice: "",
-    trend: [],
-    frame,
-    profile: [],
-    unavailable: [],
-    hotspots: [],
-    hotspotPaths: [],
-    hotspotsFromLatest: false,
-    hiddenLinks: [],
-  };
-  if (!report)
-    return {
-      ...empty,
-      reason:
-        "No report was found next to this data. Run factory-city analyze or timeline again to write one.",
-    };
-  const frames = data.frames.map((f) => f.info?.health);
-  const isTimeline = data.frames.length > 1;
-  const current: FrameHealth | undefined = isTimeline ? frames[frame] : undefined;
-  const isLatest = !isTimeline || frame === data.frames.length - 1;
-  const profile = current?.profile ?? report.health.profile;
-  const score = current?.score ?? report.health.score;
+/** The profile of the frame as rows, one per dimension that has a value, and the labels of those that do not. */
+function profileRows(report: Report, profile: Report["health"]["profile"], fmt: Formatter) {
   const rows: ProfileRow[] = [];
   const unavailable: string[] = [];
   for (const d of report.dimensions) {
@@ -81,16 +50,68 @@ export function healthView(
       unavailable.push(d.label);
       continue;
     }
+    const rated = share.rated < 0.995 ? `, rated on ${fmt.percent(share.rated)} of the code` : "";
     rows.push({
       id: d.id,
       label: d.label,
       share,
-      text: `${fmt.percent(share.high + share.veryHigh)} high or very high${share.rated < 0.995 ? `, rated on ${fmt.percent(share.rated)} of the code` : ""}`,
+      text: `${fmt.percent(share.high + share.veryHigh)} high or very high${rated}`,
       thresholds: thresholds(d),
     });
   }
-  const view: HealthView = {
-    ...empty,
+  return { rows, unavailable };
+}
+
+/** What the frame did to the score and to the hotspots, against the frame before it. */
+function movementOf(current: FrameHealth | undefined, previous: FrameHealth | undefined, fmt: Formatter) {
+  if (!current || !previous) return undefined;
+  const delta = Math.round((current.score - previous.score) * 10) / 10;
+  const sign = delta > 0 ? "+" : "−";
+  return {
+    qualityDelta: delta === 0 ? "unchanged" : `${sign}${fmt.number(Math.abs(delta), 1)}`,
+    created: current.hotspots.filter((p) => !previous.hotspots.includes(p)),
+    resolved: previous.hotspots.filter((p) => !current.hotspots.includes(p)),
+  };
+}
+
+const EMPTY: Omit<HealthView, "frame"> = {
+  available: false,
+  score: 0,
+  scoreText: "",
+  notice: "",
+  trend: [],
+  profile: [],
+  unavailable: [],
+  hotspots: [],
+  hotspotPaths: [],
+  hotspotsFromLatest: false,
+  hiddenLinks: [],
+};
+
+/** Everything the Health panel shows for the frame under the playhead. */
+export function healthView(
+  data: TimelineData,
+  frame: number,
+  report: Report | undefined,
+  fmt: Formatter,
+): HealthView {
+  if (!report)
+    return {
+      ...EMPTY,
+      frame,
+      reason:
+        "No report was found next to this data. Run factory-city analyze or timeline again to write one.",
+    };
+  const frames = data.frames.map((f) => f.info?.health);
+  const isTimeline = data.frames.length > 1;
+  const current: FrameHealth | undefined = isTimeline ? frames[frame] : undefined;
+  const isLatest = !isTimeline || frame === data.frames.length - 1;
+  const score = current?.score ?? report.health.score;
+  const { rows, unavailable } = profileRows(report, current?.profile ?? report.health.profile, fmt);
+  const movement = movementOf(current, frame > 0 ? frames[frame - 1] : undefined, fmt);
+  return {
+    ...EMPTY,
+    frame,
     available: true,
     score,
     scoreText: fmt.score(score),
@@ -102,17 +123,8 @@ export function healthView(
     hotspotPaths: current?.hotspots ?? report.hotspots.slice(0, 5).map((h) => h.path),
     hotspotsFromLatest: !isLatest,
     hiddenLinks: isLatest ? report.hiddenLinks : [],
+    ...(movement ? { movement } : {}),
   };
-  const previous = frame > 0 ? frames[frame - 1] : undefined;
-  if (current && previous) {
-    const delta = Math.round((current.score - previous.score) * 10) / 10;
-    view.movement = {
-      qualityDelta: delta === 0 ? "unchanged" : `${delta > 0 ? "+" : "−"}${fmt.number(Math.abs(delta), 1)}`,
-      created: current.hotspots.filter((p) => !previous.hotspots.includes(p)),
-      resolved: previous.hotspots.filter((p) => !current.hotspots.includes(p)),
-    };
-  }
-  return view;
 }
 
 /**
