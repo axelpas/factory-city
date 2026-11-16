@@ -18,22 +18,33 @@ function factFor(frame: Frame, facts: Facts | undefined): Fact | undefined {
   );
 }
 
+/** Facts copied as they are when they are set (not empty): the fact's field, then the metric's name. */
+const TEXT_FIELDS = [
+  ["agent", "agent"],
+  ["model", "model"],
+  ["outcome", "outcome"],
+  ["currency", "currency"],
+] as const;
+
+/** Facts copied when they are known, zero included. */
+const NUMBER_FIELDS = [
+  ["review_blockers", "review_blockers"],
+  ["review_majors", "review_majors"],
+  ["rework_rounds", "rework_rounds"],
+  ["minutes", "agent_minutes"],
+  ["cost", "cost"],
+  ["human_interventions", "human_interventions"],
+] as const;
+
 /** Level 3: what only the facts file knows. */
 function addFacts(m: Frame["metrics"], fact: Fact): void {
-  if (fact.agent) m.agent = fact.agent;
-  if (fact.model) m.model = fact.model;
-  if (fact.outcome) m.outcome = fact.outcome;
+  const target = m as Record<string, unknown>;
+  for (const [field, metric] of TEXT_FIELDS) if (fact[field]) target[metric] = fact[field];
+  for (const [field, metric] of NUMBER_FIELDS) if (fact[field] !== undefined) target[metric] = fact[field];
   if (fact.attempts > 0) {
     m.attempts = fact.attempts;
     m.succeeded_attempts = fact.succeeded_attempts;
   }
-  if (fact.review_blockers !== undefined) m.review_blockers = fact.review_blockers;
-  if (fact.review_majors !== undefined) m.review_majors = fact.review_majors;
-  if (fact.rework_rounds !== undefined) m.rework_rounds = fact.rework_rounds;
-  if (fact.minutes !== undefined) m.agent_minutes = fact.minutes;
-  if (fact.cost !== undefined) m.cost = fact.cost;
-  if (fact.currency) m.currency = fact.currency;
-  if (fact.human_interventions !== undefined) m.human_interventions = fact.human_interventions;
   if (Object.keys(fact.tags).length > 0) m.tags = fact.tags;
 }
 

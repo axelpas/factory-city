@@ -27,6 +27,24 @@ export class DiskSource implements Source {
     return out;
   }
 
+  /** Adds the `.gitignore` of a folder to the stack, when there is one and it is respected. */
+  private async pushGitignore(dir: string, rel: string, names: string[], ignores: GitIgnoreStack) {
+    if (!this.respectGitignore || !names.includes(".gitignore")) return;
+    try {
+      ignores.push(new GitIgnore(await readFile(join(dir, ".gitignore"), "utf8"), rel));
+    } catch {
+      // unreadable .gitignore: ignore it
+    }
+  }
+
+  /** Why a folder is skipped, if it is. */
+  private skipReason(path: string, name: string, ignores: GitIgnoreStack, options: ListOptions) {
+    return (
+      options.skipDir?.(path, name) ??
+      (this.respectGitignore && ignores.isIgnored(path, true) ? "gitignored" : undefined)
+    );
+  }
+
   private async walk(
     rel: string,
     ignores: GitIgnoreStack,
@@ -35,34 +53,21 @@ export class DiskSource implements Source {
   ): Promise<void> {
     const dir = rel ? join(this.root, rel) : this.root;
     const names = (await readdir(dir)).sort();
-    if (this.respectGitignore && names.includes(".gitignore")) {
-      try {
-        ignores.push(new GitIgnore(await readFile(join(dir, ".gitignore"), "utf8"), rel));
-      } catch {
-        // unreadable .gitignore: ignore it
-      }
-    }
+    await this.pushGitignore(dir, rel, names, ignores);
     for (const name of names) {
       if (name === ".git") continue;
       const path = rel ? `${rel}/${name}` : name;
       const info = await lstat(join(dir, name));
       if (info.isDirectory()) {
-        const reason =
-          options.skipDir?.(path, name) ??
-          (this.respectGitignore && ignores.isIgnored(path, true) ? "gitignored" : undefined);
-        if (reason) {
-          options.onSkippedDir?.(reason);
-          continue;
-        }
-        await this.walk(path, ignores, options, out);
+        const reason = this.skipReason(path, name, ignores, options);
+        if (reason) options.onSkippedDir?.(reason);
+        else await this.walk(path, ignores, options, out);
       } else if (info.isSymbolicLink()) {
         out.push({ path, size: 0, kind: "symlink" });
       } else if (info.isFile()) {
-        if (this.respectGitignore && ignores.isIgnored(path, false)) {
+        if (this.respectGitignore && ignores.isIgnored(path, false))
           options.onSkippedDir?.("gitignored-file");
-          continue;
-        }
-        out.push({ path, size: info.size, kind: "file" });
+        else out.push({ path, size: info.size, kind: "file" });
       }
     }
   }
