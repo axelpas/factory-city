@@ -43,6 +43,7 @@ import { renderFactoryPanel } from "./factory-panel";
 import { FileFinder } from "./file-finder";
 import { Film } from "./film";
 import { FrameNotes } from "./frame-notes";
+import { measureFreeArea } from "./free-area";
 import { renderHealthPanel } from "./health-panel";
 import { fillHelp } from "./help";
 import { HoverCard } from "./hover-card";
@@ -299,7 +300,7 @@ export class App {
       this.bar.element,
       this.notes.status,
       this.notes.legendBox,
-      ...this.rightPanels(),
+      this.inspector.element,
     ])
       covering.observe(node);
     // the picture is described to those who cannot see it
@@ -966,46 +967,27 @@ export class App {
       .map((r) => ({ x: r.left - stage.left, y: r.top - stage.top, w: r.width, h: r.height }));
   }
 
-  private rightPanels(): HTMLElement[] {
-    return [this.inspector.element];
-  }
-
   /** Measures what covers the stage on each side and tells the scene. */
   private updateFreeArea(): void {
-    const stage = this.stage.getBoundingClientRect();
-    const shown = (node: HTMLElement) => {
-      const r = node.getBoundingClientRect();
-      return r.width > 0 && r.height > 0 ? r : undefined;
-    };
-    const header = shown(this.header);
-    const left = shown(this.panel);
-    const bottom = shown(this.bar.element) ?? shown(this.notes.status);
-    const status = shown(this.notes.status);
-    // folded, the inspector is a small summary laid over the stage: it takes no room from the city
-    const right = (this.inspector.isFolded ? [] : this.rightPanels())
-      .map(shown)
-      .filter((r) => r !== undefined);
-    // in a medium window the panels overlay the stage: the city keeps the whole width
-    const overlay = this.medium.matches;
-    const insets = {
-      top: header ? header.bottom - stage.top : 0,
-      left: left && !overlay ? left.right - stage.left : 0,
-      right: right.length && !overlay ? stage.right - Math.min(...right.map((r) => r.left)) : 0,
-      bottom: bottom ? stage.bottom - bottom.top : 0,
-    };
+    const { insets, bottomStack } = measureFreeArea(
+      {
+        stage: this.stage,
+        header: this.header,
+        panel: this.panel,
+        timeline: this.bar.element,
+        status: this.notes.status,
+        legend: this.notes.legendBox,
+        // folded, the inspector is a small summary laid over the stage: it takes no room from the city
+        right: this.inspector.isFolded ? [] : [this.inspector.element],
+      },
+      this.medium.matches,
+    );
     // what sits on the stage (the legend) places itself in the free area through these
     this.insets = insets;
-    // the tallest thing pinned at the bottom: a panel stops above it
-    const legend = shown(this.notes.legendBox);
-    const stack = Math.max(
-      legend ? stage.bottom - legend.top : 0,
-      bottom ? stage.bottom - bottom.top : 0,
-      status ? stage.bottom - status.top : 0,
-    );
-    this.stage.parentElement?.style.setProperty("--bottom-stack", `${Math.round(stack)}px`);
-
+    const page = this.stage.parentElement;
+    page?.style.setProperty("--bottom-stack", `${Math.round(bottomStack)}px`);
     for (const [side, value] of Object.entries(insets))
-      this.stage.parentElement?.style.setProperty(`--free-${side}`, `${Math.round(value)}px`);
+      page?.style.setProperty(`--free-${side}`, `${Math.round(value)}px`);
     this.scene.setFreeArea(insets);
   }
 
