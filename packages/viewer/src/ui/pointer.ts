@@ -113,6 +113,20 @@ export class PointerController {
     this.host.card.show(pick, x, y);
   }
 
+  /** A tap on a touch screen: the first shows the card, a second on the same building opens the details. */
+  private onTap(s: NonNullable<ReturnType<PointerHost["state"]>>, pick: Pick, e: PointerEvent): void {
+    const same = pick?.kind === "file" && s.pinned?.kind === "file" && pick.index === s.pinned.index;
+    s.pinned = pick;
+    if (same && pick?.kind === "file") {
+      this.host.openDetails(pick.index);
+      return;
+    }
+    s.hover = pick;
+    this.host.scene.setHover(pick, pick ? this.folderOf(pick) : undefined);
+    if (pick) this.host.card.show(pick, e.clientX, e.clientY);
+    else this.host.card.hide();
+  }
+
   private onClick(e: PointerEvent): void {
     const s = this.host.state();
     if (!s) return;
@@ -123,21 +137,8 @@ export class PointerController {
       return;
     }
     const pick = this.host.scene.pick(e.clientX, e.clientY);
-    if (e.pointerType === "touch") {
-      // first tap shows the card, a second tap on the same building opens the details
-      const same = pick?.kind === "file" && s.pinned?.kind === "file" && pick.index === s.pinned.index;
-      s.pinned = pick;
-      if (same && pick?.kind === "file") {
-        this.host.openDetails(pick.index);
-        return;
-      }
-      s.hover = pick;
-      this.host.scene.setHover(pick, pick ? this.folderOf(pick) : undefined);
-      if (pick) this.host.card.show(pick, e.clientX, e.clientY);
-      else this.host.card.hide();
-      return;
-    }
-    if (pick?.kind === "file") this.host.openDetails(pick.index);
+    if (e.pointerType === "touch") this.onTap(s, pick, e);
+    else if (pick?.kind === "file") this.host.openDetails(pick.index);
     else this.host.closeDetails();
   }
 }

@@ -78,24 +78,22 @@ function covered(model: Model, id: string): boolean {
   return (model.coverage.get(id) ?? 0) >= MIN_COVERAGE;
 }
 
+const NOT_AVAILABLE = "is not available for at least half of the code.";
+
+/** Why a preset cannot be offered, or nothing when its area, height and marker are all known. */
+function missingChannel(model: Model, preset: Preset): string | undefined {
+  const id = [preset.area, preset.height, preset.marker].find((m) => m && !covered(model, m));
+  return id ? `"${id}" ${NOT_AVAILABLE}` : undefined;
+}
+
 /** A preset is offered only when its metrics exist for at least half of the code. */
 export function presetStatus(
   model: Model,
   preset: Preset,
   dimensions: readonly Bounded[] = [],
 ): PresetStatus {
-  for (const id of [preset.area, preset.height]) {
-    if (!covered(model, id)) {
-      return { preset, available: false, reason: `"${id}" is not available for at least half of the code.` };
-    }
-  }
-  if (preset.marker && !covered(model, preset.marker)) {
-    return {
-      preset,
-      available: false,
-      reason: `"${preset.marker}" is not available for at least half of the code.`,
-    };
-  }
+  const reason = missingChannel(model, preset);
+  if (reason) return { preset, available: false, reason };
   const color = preset.color.find((id) => covered(model, id));
   if (!color) {
     const missing = `None of ${preset.color.map((c) => `"${c}"`).join(", ")} is available for at least half of the code.`;

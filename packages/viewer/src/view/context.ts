@@ -11,6 +11,17 @@ export interface ProjectContext {
 
 const SHORT = 7;
 
+type Snapshot = Exclude<AnalysisManifest | TimelineManifest, { kind: "timeline" }>;
+
+/** The revision of a snapshot, as it is said: the working tree, a folder, or a revision with its short hash. */
+function revisionOf(manifest: Snapshot): string {
+  const { source } = manifest;
+  const short = source.commit?.slice(0, SHORT);
+  if (source.kind === "disk") return manifest.git.available ? "working tree" : "folder, no git";
+  if (source.rev && short) return `${source.rev} · ${short}`;
+  return short ? `HEAD · ${short}` : (source.rev ?? "HEAD");
+}
+
 /** The project and the branch (or revision) shown at the top of the page. */
 export function projectContext(
   manifest: AnalysisManifest | TimelineManifest | undefined,
@@ -18,17 +29,9 @@ export function projectContext(
 ): ProjectContext {
   if (!manifest) return { name: project, ref: "no manifest" };
   if (manifest.kind === "timeline") {
-    const mode = manifest.source.mode;
-    return {
-      name: manifest.project,
-      ref: mode === "diff" ? `${manifest.source.branch} (diff)` : manifest.source.branch,
-    };
+    const { mode, branch } = manifest.source;
+    return { name: manifest.project, ref: mode === "diff" ? `${branch} (diff)` : branch };
   }
-  const { source } = manifest;
-  const short = source.commit?.slice(0, SHORT);
-  let ref: string;
-  if (source.kind === "disk") ref = manifest.git.available ? "working tree" : "folder, no git";
-  else if (source.rev && short) ref = `${source.rev} · ${short}`;
-  else ref = short ? `HEAD · ${short}` : (source.rev ?? "HEAD");
-  return { name: manifest.project, ref, ...(source.path ? { path: source.path } : {}) };
+  const path = manifest.source.path;
+  return { name: manifest.project, ref: revisionOf(manifest), ...(path ? { path } : {}) };
 }

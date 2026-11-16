@@ -124,15 +124,17 @@ export class Inspector {
     this.sync(undefined);
   }
 
-  /** One pane at most is shown: the one just revealed wins. */
-  private sync(justShown: HTMLElement | undefined): void {
+  /** One pane at most is shown: the one just revealed wins, and the others are hidden. */
+  private showOnly(justShown: HTMLElement | undefined): InspectorTab | undefined {
     const entries = Object.entries(this.options.panes) as Array<[InspectorTab, HTMLElement]>;
     const winner = justShown ?? entries.find(([, pane]) => !pane.hidden)?.[1];
-    let tab: InspectorTab | undefined;
-    for (const [name, pane] of entries) {
-      if (pane === winner) tab = name;
-      else if (!pane.hidden) pane.hidden = true;
-    }
+    // only a pane that is shown is touched: setting `hidden` again would wake the observer for nothing
+    for (const [, pane] of entries) if (pane !== winner && !pane.hidden) pane.hidden = true;
+    return entries.find(([, pane]) => pane === winner)?.[0];
+  }
+
+  private sync(justShown: HTMLElement | undefined): void {
+    const tab = this.showOnly(justShown);
     // folded, the health tab is the one that speaks
     for (const [name, button] of this.tabs)
       button.setAttribute("aria-selected", String(name === (tab ?? "health")));
