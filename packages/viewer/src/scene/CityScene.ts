@@ -170,6 +170,48 @@ vec3 fcToLinear(vec3 c) {
 }
 `;
 
+/**
+ * The roof of a marked building: a pyramid standing on its top, as wide as the building. It rises with the
+ * marker (the marker value is its height) and follows the building through the same instance data.
+ */
+function patchRoofVertex(shader: { vertexShader: string }): void {
+  shader.vertexShader = shader.vertexShader
+    .replace("#include <common>", `#include <common>\n${VERTEX_COMMON}`)
+    .replace(
+      "#include <begin_vertex>",
+      /* glsl */ `
+      float roofE = fcLocal();
+      vec3 roofSize = mix(aSizeA, aSizeB, roofE);
+      vec3 roofBase = mix(aPosA, aPosB, roofE);
+      float marked = mix(aMiscA.x, aMiscB.x, roofE);
+      float roofH = min(0.4 * min(roofSize.x, roofSize.z), 0.6 * roofSize.y) * marked;
+      float roofShown = step(0.001, roofSize.y) * step(0.02, marked);
+      vec3 transformed = roofBase + vec3(position.x * roofSize.x, roofSize.y + position.y * roofH, position.z * roofSize.z) * roofShown;
+      vIsHover = float(gl_InstanceID) == uHover ? 1.0 : 0.0;`,
+    );
+}
+
+/** A square pyramid with its base on the ground, one unit wide and one unit high, with flat faces. */
+function pyramidGeometry(): THREE.BufferGeometry {
+  const apex = [0, 1, 0];
+  const corners = [
+    [-0.5, 0, -0.5],
+    [0.5, 0, -0.5],
+    [0.5, 0, 0.5],
+    [-0.5, 0, 0.5],
+  ];
+  const positions: number[] = [];
+  for (let i = 0; i < 4; i++) {
+    const a = corners[i] as number[];
+    const b = corners[(i + 1) % 4] as number[];
+    positions.push(...a, ...apex, ...b);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 function patchVertex(shader: { vertexShader: string }): void {
   shader.vertexShader = shader.vertexShader
     .replace("#include <common>", `#include <common>\n${VERTEX_COMMON}`)
@@ -244,6 +286,8 @@ export class CityScene {
   private hoverDimTarget = 0;
   private readonly hoverBuildingHalo: THREE.LineSegments;
   private buildings: THREE.Mesh | undefined;
+  /** The roofs of the marked buildings. */
+  private roofs: THREE.Mesh | undefined;
   private lots: THREE.LineSegments | undefined;
   private plinths: THREE.InstancedMesh | undefined;
   private plinthPaths: string[] = [];
@@ -496,7 +540,7 @@ export class CityScene {
     this.count = paths.length;
     const theme = this.theme;
     const c = (key: string) => new THREE.Color(theme.colors[key] ?? "");
-    for (const m of [this.plinths, this.buildings, this.lots]) {
+    for (const m of [this.plinths, this.buildings, this.roofs, this.lots]) {
       if (!m) continue;
       this.scene.remove(m);
       m.geometry.dispose();
@@ -593,18 +637,6 @@ export class CityScene {
             float onRoof = step(0.999, vBox.y) * step(0.001, roof);
             float half_ = 0.125 + 0.275 * roof;
             float mark = onRoof * step(top.x, half_) * step(top.y, half_);
-            // marker: a ring on the roof of the files above the threshold, outlined so that its shape
-            // reads on any roof color
-            float marked = mix(vMiscA.x, vMiscB.x, vEase) * step(0.999, vBox.y);
-            float reach = max(top.x, top.y);
-            float ring = marked * step(0.3, reach) * step(reach, 0.42);
-            float ringWidth = fwidth(reach) * 1.2;
-            float ringLine =
-              marked *
-              max(
-                1.0 - smoothstep(0.0, ringWidth, abs(reach - 0.3)),
-                1.0 - smoothstep(0.0, ringWidth, abs(reach - 0.42))
-              );
             if (uMode > 0.5 && uMode < 1.5) {
               // blocks: seams between the cubes of the stack, and a small shade per cube, both procedural
               vec3 p = (vBox + vec3(0.5, 0.0, 0.5)) * max(vSize, vec3(0.0001)) / uBlock;
@@ -622,11 +654,10 @@ export class CityScene {
               // wireframe: luminous edges, faint faces, an optional capped glow around the edges
               float halo = (1.0 - smoothstep(0.0, fwidth(mid) * 10.0, mid)) * uGlow;
               float alpha = max(max(edge, touchEdge), max(halo * 0.55, uFaceAlpha));
-              vec3 wire = mix(mix(col, uTouchColor, touchEdge), uMarkColor, ring);
-              fcWire = vec4(wire, max(alpha, ring * 0.9));
+              vec3 wire = mix(col, uTouchColor, touchEdge);
+              fcWire = vec4(wire, alpha);
             }
-            col = mix(col, uMarkColor, ring * 0.92);
-            col = mix(col, uEdgeColor, max(max(edge, ringLine) * 0.85, mark * 0.7));
+            col = mix(col, uEdgeColor, max(edge * 0.85, mark * 0.7));
             col = mix(col, uTouchColor, touchEdge * 0.9);
             float others = uHoverDim * (1.0 - vIsHover);
             col = mix(col, uDimColor, others * 0.7);
@@ -653,6 +684,47 @@ export class CityScene {
     this.buildings.castShadow = true;
     this.buildings.receiveShadow = true;
     this.buildings.frustumCulled = false;
+
+    // roofs: a pyramid on every marked building, driven by the same instance data
+    const roofGeometry = new THREE.InstancedBufferGeometry();
+    const pyramid = pyramidGeometry();
+    roofGeometry.setAttribute("position", pyramid.getAttribute("position"));
+    roofGeometry.setAttribute("normal", pyramid.getAttribute("normal"));
+    for (const name of ["aPosA", "aPosB", "aSizeA", "aSizeB", "aMiscA", "aMiscB", "aDelay"])
+      roofGeometry.setAttribute(name, geometry.getAttribute(name));
+    roofGeometry.instanceCount = this.count;
+    const roofMaterial = new THREE.MeshLambertMaterial();
+    if (theme.renderer === "wireframe") {
+      // luminous edges, as the buildings are
+      roofMaterial.wireframe = true;
+      roofMaterial.transparent = true;
+      roofMaterial.blending = THREE.AdditiveBlending;
+      roofMaterial.depthWrite = false;
+    }
+    roofMaterial.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, uniforms);
+      patchRoofVertex(shader);
+      shader.fragmentShader = shader.fragmentShader
+        .replace("#include <common>", `#include <common>\n${FRAGMENT_COMMON}`)
+        .replace(
+          "#include <color_fragment>",
+          /* glsl */ `
+          {
+            vec3 col = mix(uMarkColor, uDimColor, uHoverDim * (1.0 - vIsHover) * 0.7);
+            diffuseColor.rgb = fcToLinear(col);
+          }`,
+        );
+    };
+    const roofDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+    roofDepth.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, uniforms);
+      patchRoofVertex(shader);
+    };
+    this.roofs = new THREE.Mesh(roofGeometry, roofMaterial);
+    this.roofs.customDepthMaterial = roofDepth;
+    this.roofs.castShadow = true;
+    this.roofs.receiveShadow = true;
+    this.roofs.frustumCulled = false;
 
     // lots: the outline of every parcel; it fades in when the parcel is empty
     this.parcels = paths.map((path) => layout.files.get(path));
@@ -711,7 +783,7 @@ export class CityScene {
     this.lots = new THREE.LineSegments(lotGeometry, lotMaterial);
     this.lots.frustumCulled = false;
     this.lots.raycast = () => {};
-    this.scene.add(this.plinths, this.buildings, this.lots);
+    this.scene.add(this.plinths, this.buildings, this.roofs, this.lots);
     this.uniforms.uBlock.value = this.size * (theme.effects?.blockSize ?? 0.008);
     if (this.grid) {
       this.scene.remove(this.grid);

@@ -243,7 +243,7 @@ describe("cards and legend for design metrics", () => {
 
   it("explains the marker and the tint in plain language", () => {
     const text = legendLines(model, { ...m, tint: "folder_cohesion" }).map((l) => l.text);
-    expect(text).toContain("ring on the roof = above 2 (high risk) · 1 file");
+    expect(text).toContain("pyramid roof = above 2 (high risk) · 1 file");
     expect(text).toContain("darker ground = more self-contained");
   });
 });

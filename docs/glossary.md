@@ -7,7 +7,7 @@
 - **Frame**: one step of a timeline: a commit, an issue or a day. Each frame points to one snapshot.
 - **Image**: one rendered picture. A timelapse shows many images per frame.
 - **Preset**: a declarative set of channels (area, height, color, extra channel) that answers one question.
-- **Marker**: optional ring on the roof of the files that are above a threshold on a chosen metric (by default the bound where the metric's risk dimension turns high). It replaced the twist of a building on 2026-11-15 (`decisions/2026-11-15-marker-replaces-twist.md`).
+- **Marker**: optional pyramid roof on the files that are above a threshold on a chosen metric (by default the bound where the metric's risk dimension turns high). It replaced the twist of a building on 2026-11-15 (`decisions/2026-11-15-marker-replaces-twist.md`).
 - **Data level**: what a source unlocks: 0 files, 1 git history, 2 forge (`gh`), 3 facts.
 - **Collector**: an analyzer component that produces the metrics of one data level.
 - **Facts**: what neither the code nor the forge knows (agent, model, outcome, cost), provided as a file.

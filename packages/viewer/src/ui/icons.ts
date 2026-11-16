@@ -21,11 +21,11 @@ const PATHS = {
   sliders: ["M2.5 5h11", "M2.5 11h11", "M6 3.3v3.4", "M10 9.3v3.4"],
   /** Fold a side panel away. */
   fold: ["M9.5 4.5L6 8l3.5 3.5", "M12.5 3v10"],
-  /** Channels of the legend: the ground a building takes, its height, its color, the ring on its roof, its district. */
+  /** Channels of the legend: the ground a building takes, its height, its color, the roof on top of it, its district. */
   area: ["M2.5 9.5h11v3h-11z"],
   height: ["M6 13.5v-11h4v11z"],
   color: ["M8 2.5c2.5 3 4 4.8 4 6.7a4 4 0 0 1-8 0c0-1.9 1.5-3.7 4-6.7z"],
-  marker: ["M3 3h10v10H3z", "M5.8 5.8h4.4v4.4H5.8z"],
+  marker: ["M2.5 7.5L8 2.5l5.5 5z", "M4 7.5v6h8v-6"],
   tint: ["M2 11l6-2.5 6 2.5-6 2.5z", "M2 7.5l6-2.5 6 2.5"],
   close: ["M4 4l8 8", "M12 4l-8 8"],
   /** A magnifying glass. */

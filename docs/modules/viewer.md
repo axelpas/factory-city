@@ -21,7 +21,7 @@ The static web app (Vite, three.js, no UI framework). It reads `snapshot.cc.json
 The analyzer's `view` command serves the built viewer from `packages/viewer/dist`, located by path (`FACTORY_CITY_VIEWER` overrides it). It is never imported.
 
 
-The marker (`view/marker.ts`) puts a ring on the roof of the files above a threshold on a metric: the threshold typed by the user, else the bound where the metric's risk dimension turns high, else the top tenth. It replaced the twist channel (`decisions/2026-11-15-marker-replaces-twist.md`). District tint colors plinths from a folder-scope metric.
+The marker (`view/marker.ts`) puts a pyramid roof on the files above a threshold on a metric: the threshold typed by the user, else the bound where the metric's risk dimension turns high, else the top tenth. It replaced the twist channel (`decisions/2026-11-15-marker-replaces-twist.md`). District tint colors plinths from a folder-scope metric.
 
 ## Timeline and animation
 - `data/timeline.ts`: a snapshot is a timeline of one frame. All frames share one sorted set of file paths (the union); statistics are computed over all frames so scales stay fixed. The layout is computed once, each file weighted by its largest ground-area value over time, so a parcel never moves.
@@ -64,3 +64,5 @@ Decisions in `decisions/2026-11-16-viewer-ux-followups.md`.
 - `ui/district-labels.ts`, `view/district-labels.ts`: district names, switchable in the Appearance menu (remembered). The selected building keeps an outline (`CityScene.setSelection`); the inspector shows the path as a breadcrumb that frames a district (`CityScene.frameDistrict`), as does a double click.
 - `ui/file-finder.ts`, `view/finder.ts`, `view/describe.ts`: the finder (`/`), and the canvas description a screen reader gets.
 - `ui/popovers.ts`, `ui/inspector.ts`: focus moves in when something opens and comes back when it closes.
+
+> **2026-11-16:** the marker is a real roof, not a ring (`decisions/2026-11-16-roof-marker.md`). `CityScene` draws a second instanced mesh, a pyramid per file, from the same instance data as the buildings: its height is the marker value, so it rises and sinks with the animation.
