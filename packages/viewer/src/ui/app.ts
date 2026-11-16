@@ -18,7 +18,17 @@ import {
 import type { Model } from "../data/model";
 import { syntheticSnapshots } from "../data/synthetic";
 import { buildTimelineData, layoutWeights, type TimelineData } from "../data/timeline";
-import { type EncodedVideo, encodeVideo, pixelHash, planVideo, type VideoOptions } from "../export/video";
+import {
+  durationText,
+  type EncodedVideo,
+  encodeVideo,
+  pixelHash,
+  planVideo,
+  secondsPerFrameAt,
+  VIDEO_SPEEDS,
+  type VideoOptions,
+  videoSeconds,
+} from "../export/video";
 import { clear, el } from "../lib/dom";
 import { format } from "../lib/format";
 import { makePathFilter } from "../lib/glob";
@@ -209,6 +219,8 @@ export class App {
   private glow = true;
   private exporting = false;
   private videoFps = 30;
+  /** How fast the film runs: a multiple of the base pace of 1.4 s per frame. */
+  private videoSpeed = 1;
   private videoOrbit = false;
   private scaleBeforeTheme: ScaleKind | undefined;
   private readonly bar: TimelineBar;
@@ -538,6 +550,31 @@ export class App {
     fps.addEventListener("change", () => {
       this.videoFps = Number(fps.value);
     });
+    const speed = el("select", {
+      title: "How fast the film runs through the frames",
+      attrs: { "aria-label": "Video speed" },
+    });
+    for (const v of VIDEO_SPEEDS) {
+      const label = v < 1 ? "slow" : v === 1 ? "normal" : "fast";
+      const o = el("option", {
+        text: `Video speed ${format.number(v)}× (${label})`,
+        attrs: { value: String(v) },
+      });
+      if (v === this.videoSpeed) o.selected = true;
+      speed.append(o);
+    }
+    const length = el("p", { class: "muted video-length" });
+    const showLength = () => {
+      const frames = this.state?.data.frames.length ?? 1;
+      length.textContent = `Film length: about ${durationText(videoSeconds(frames, secondsPerFrameAt(this.videoSpeed)))}`;
+    };
+    speed.addEventListener("change", () => {
+      this.videoSpeed = Number(speed.value);
+      showLength();
+    });
+    exportMenu.addEventListener("toggle", () => {
+      if (exportMenu.open) showLength();
+    });
     const orbit = el("input", { attrs: { type: "checkbox" } });
     orbit.addEventListener("change", () => {
       this.videoOrbit = orbit.checked;
@@ -552,6 +589,8 @@ export class App {
         },
       ),
       fps,
+      speed,
+      length,
       el("label", { class: "check" }, orbit, " slow orbit in the video"),
     );
     exportMenu.append(list);
@@ -2341,7 +2380,7 @@ export class App {
           width: 1920,
           height: 1080,
           fps: this.videoFps,
-          secondsPerFrame: this.animator?.secondsPerFrame ?? 1.4,
+          secondsPerFrame: secondsPerFrameAt(this.videoSpeed),
           overlay: true,
           orbit: this.videoOrbit,
         },

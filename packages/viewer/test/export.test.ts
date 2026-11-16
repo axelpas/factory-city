@@ -1,7 +1,15 @@
 import { gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { DATA_ELEMENT, readEmbedded } from "../src/data/embedded";
-import { pixelHash, planVideo } from "../src/export/video";
+import {
+  BASE_SECONDS_PER_FRAME,
+  durationText,
+  pixelHash,
+  planVideo,
+  secondsPerFrameAt,
+  VIDEO_SPEEDS,
+  videoSeconds,
+} from "../src/export/video";
 
 describe("video plan: a virtual clock", () => {
   const plan = planVideo(5, { fps: 30, secondsPerFrame: 1, orbit: false });
@@ -86,5 +94,31 @@ describe("data embedded in a standalone file", () => {
   it("is absent from a page served by the local server", async () => {
     expect(await readEmbedded(doc(undefined))).toBeUndefined();
     expect(await readEmbedded(doc("  "))).toBeUndefined();
+  });
+});
+
+describe("video speed", () => {
+  it("runs through the frames faster at a higher speed", () => {
+    expect(secondsPerFrameAt(1)).toBe(BASE_SECONDS_PER_FRAME);
+    expect(secondsPerFrameAt(2)).toBeCloseTo(BASE_SECONDS_PER_FRAME / 2, 10);
+    expect(secondsPerFrameAt(0.5)).toBeCloseTo(BASE_SECONDS_PER_FRAME * 2, 10);
+    expect(VIDEO_SPEEDS).toContain(1);
+  });
+
+  it("tells how long the film lasts, with a hold on the last frame, and plans as many images", () => {
+    // 11 frames: 10 steps at 1.4 s and a hold of 1 s
+    expect(videoSeconds(11, 1.4)).toBeCloseTo(15, 10);
+    expect(videoSeconds(1, 1.4)).toBe(1);
+    expect(planVideo(11, { fps: 30, secondsPerFrame: 1.4, orbit: false }).images).toBe(450);
+    // twice as fast: half the steps, the same hold
+    expect(planVideo(11, { fps: 30, secondsPerFrame: secondsPerFrameAt(2), orbit: false }).images).toBe(
+      Math.round(videoSeconds(11, secondsPerFrameAt(2)) * 30),
+    );
+  });
+
+  it("writes a duration as people read it", () => {
+    expect(durationText(38.4)).toBe("38 s");
+    expect(durationText(125)).toBe("2 min 05 s");
+    expect(durationText(60)).toBe("1 min 00 s");
   });
 });

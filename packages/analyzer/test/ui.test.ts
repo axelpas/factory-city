@@ -615,4 +615,33 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
     expect(r.unfolded).toEqual({ folded: false, panes: ["Code health"], summaryHidden: true });
     expect(r.foldedAgain).toBe(true);
   });
+
+  it("lets the user choose the speed of the exported film and tells how long it will last", async () => {
+    const r = await inPage<Record<string, unknown>>(`
+      await wait(300);
+      const menu = document.querySelector("details.export-menu");
+      menu.querySelector("summary").click();
+      await wait(100);
+      const select = menu.querySelector('select[aria-label="Video speed"]');
+      const length = () => menu.querySelector(".video-length").textContent;
+      const normal = length();
+      select.value = "2";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      const fast = length();
+      select.value = "0.5";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      return { options: [...select.options].map((o) => o.value), normal, fast, slow: length() };
+    `);
+    expect(r.options).toEqual(["0.5", "1", "2", "4"]);
+    const seconds = (t: unknown) =>
+      Number(
+        /(\d+)(?: min (\d+))? s/
+          .exec(String(t))
+          ?.slice(1)
+          .reduce((a, b, i) => a + Number(b ?? 0) * (i === 0 ? (String(t).includes("min") ? 60 : 1) : 1), 0),
+      );
+    expect(String(r.normal)).toMatch(/^Film length: about /);
+    expect(seconds(r.fast)).toBeLessThan(seconds(r.normal));
+    expect(seconds(r.slow)).toBeGreaterThan(seconds(r.normal));
+  });
 });
