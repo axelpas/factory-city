@@ -14,7 +14,8 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "test": "pnpm build && vitest run",
-    "licenses:check": "node scripts/licenses-check.mjs"
+    "licenses:check": "node scripts/licenses-check.mjs",
+    "docs:assets": "node scripts/docs-assets.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.7",
