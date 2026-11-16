@@ -1156,6 +1156,47 @@ button[aria-pressed="true"] {
   clip-path: inset(50%);
 }
 
+/* ---------------------------------------------------------------- score box */
+
+/* always in view at the top right of the bar: the number, its change, and a body that opens under it */
+.score-box > summary {
+  gap: var(--s-8);
+  font-variant-numeric: tabular-nums;
+}
+.score-label {
+  color: var(--c-text-muted);
+}
+.score-value {
+  min-width: 4ch;
+  text-align: right;
+}
+.score-delta {
+  font-size: var(--text-sm);
+}
+.score-body {
+  width: var(--legend-w);
+  gap: var(--s-8);
+}
+.score-trend {
+  width: 100%;
+  height: auto;
+}
+.score-trend polyline {
+  fill: none;
+  stroke: var(--c-accent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.score-trend .now {
+  stroke: var(--c-text-muted);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.score-caption {
+  margin: 0;
+  font-size: var(--text-xs);
+}
+
 /* ---------------------------------------------------------------- district names */
 
 .district-labels {

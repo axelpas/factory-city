@@ -2,7 +2,7 @@ import type { Frame, Report, TimelineManifest } from "@factory-city/schema";
 import { describe, expect, it } from "vitest";
 import { buildTimelineData } from "../src/data/timeline";
 import { createFormat } from "../src/lib/format";
-import { healthView, trendPoints } from "../src/view/health";
+import { healthView, scoreAt, trendPoints } from "../src/view/health";
 import { FRAMES, snapshot } from "./timeline-helpers";
 
 const fmt = createFormat(["en-US"]);
@@ -165,5 +165,33 @@ describe("health panel", () => {
     expect(trendPoints([10, Number.NaN, 20], 100, 10)).toBe("0.0,10.0 100.0,0.0");
     expect(trendPoints([5], 100, 10)).toBe("");
     expect(trendPoints([7, 7], 100, 10)).toBe("0.0,10.0 100.0,10.0");
+  });
+});
+
+describe("score at the playhead", () => {
+  const three = () =>
+    buildTimelineData(
+      FRAMES.slice(0, 3).map((f) => snapshot(f as never)),
+      manifest([80, 60, 70], [[], [], []]),
+    );
+
+  it("is the score of a frame on that frame, and moves between two frames with the playhead", () => {
+    const data = three();
+    expect(scoreAt(data, report, 0)).toBe(80);
+    expect(scoreAt(data, report, 1)).toBe(60);
+    expect(scoreAt(data, report, 0.5)).toBe(70);
+    expect(scoreAt(data, report, 1.25)).toBeCloseTo(62.5, 10);
+    expect(scoreAt(data, report, 2)).toBe(70);
+  });
+
+  it("stays inside the timeline, and without a report there is no score", () => {
+    const data = three();
+    expect(scoreAt(data, report, -3)).toBe(80);
+    expect(scoreAt(data, report, 50)).toBe(70);
+    expect(scoreAt(data, undefined, 1)).toBeUndefined();
+  });
+
+  it("is the reported score for a single snapshot", () => {
+    expect(scoreAt(buildTimelineData([snapshot(FRAMES[0] as never)]), report, 0)).toBe(62.5);
   });
 });

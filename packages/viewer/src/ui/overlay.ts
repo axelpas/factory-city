@@ -11,6 +11,8 @@ export interface OverlayInput {
   legend: LegendModel;
   /** Label of the frame shown, for a timeline. */
   frame?: string;
+  /** The code-health score at this image, as text ("20.8"), when there is a report. */
+  health?: string;
 }
 
 /** Draws the title and the legend on top of an exported picture. Sizes scale with the picture. */
@@ -37,6 +39,17 @@ export function drawOverlay(
     ctx.fillStyle = text;
     ctx.font = `${17 * k}px ${theme.font}`;
     ctx.fillText(input.frame, pad, pad + 62 * k);
+  }
+  if (input.health) {
+    // top right, as on the page: the label, then the score and its scale
+    ctx.textAlign = "right";
+    ctx.fillStyle = muted;
+    ctx.font = `${16 * k}px ${theme.font}`;
+    ctx.fillText("Code health", width - pad, pad + 36 * k);
+    ctx.fillStyle = text;
+    ctx.font = `600 ${28 * k}px ${theme.font}`;
+    ctx.fillText(`${input.health} / 100`, width - pad, pad);
+    ctx.textAlign = "left";
   }
   const lineHeight = 22 * k;
   const texts = [

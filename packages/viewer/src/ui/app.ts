@@ -50,7 +50,7 @@ import { describeCity } from "../view/describe";
 import { type DetailRow, fileDetails } from "../view/details";
 import { factoryView } from "../view/factory";
 import { freeRect, type Insets, NO_INSETS } from "../view/framing";
-import { healthView, trendPoints } from "../view/health";
+import { healthView, scoreAt, trendPoints } from "../view/health";
 import { type LegendModel, legendModel } from "../view/legend";
 import { hiddenLensesLine } from "../view/lenses";
 import { resolveMarker } from "../view/marker";
@@ -67,6 +67,7 @@ import { renderLegendBox } from "./legend-box";
 import { lensGroups, renderLensButton, renderLensList } from "./lens";
 import { drawOverlay } from "./overlay";
 import { closePopovers, watchPopovers } from "./popovers";
+import { ScoreBox } from "./score-box";
 import { renderStatusChip } from "./status-chip";
 import { TimelineBar } from "./timeline-bar";
 
@@ -199,11 +200,13 @@ export class App {
     this.lensList,
   );
   private readonly appearanceList = el("div", { class: "menu-list" });
+  /** Opens the full report; it sits in the score box. */
   private readonly healthButton = el("button", {
-    text: "Health",
+    text: "Open the full report",
     title: "Score, risk profile and hotspots (H)",
     attrs: { type: "button", "aria-pressed": "false" },
   });
+  private readonly scoreBox = new ScoreBox(this.healthButton);
   private readonly factoryButton = el("button", {
     text: "Factory",
     title: "Factory KPIs and the issues to look at (F)",
@@ -578,7 +581,7 @@ export class App {
       this.presetQuestion,
       el("span", { class: "spacer" }),
       // panels
-      this.healthButton,
+      this.scoreBox.element,
       this.factoryButton,
       el("span", { class: "bar-rule" }),
       // view and page actions
@@ -1074,6 +1077,15 @@ export class App {
     this.renderLegend();
     this.renderStatus();
     if (!this.healthPanel.hidden) this.renderHealth();
+    this.renderScore();
+  }
+
+  /** The score box for the frame shown. */
+  private renderScore(): void {
+    const s = this.state;
+    if (!s) return;
+    const frame = this.animator?.frame ?? 0;
+    this.scoreBox.render(healthView(s.data, frame, this.report, format), frame);
   }
 
   /** One animation frame: advance the animator, follow the playhead. */
@@ -1082,6 +1094,8 @@ export class App {
     if (!a) return false;
     const moving = a.tick(dtMs);
     this.bar.update(a.playhead, a.playing, dtMs);
+    const s = this.state;
+    if (s) this.scoreBox.setScore(scoreAt(s.data, this.report, a.playhead));
     this.updateFrameViews();
     if (this.fpsBox)
       this.fpsBox.textContent = `${format.integer(Math.round(this.scene.fps))} images per second`;
@@ -2237,6 +2251,13 @@ export class App {
   }
 
   /** Label of the frame under the playhead, for exported pictures; undefined for a single snapshot. */
+  /** The score at the playhead, for the overlay of an exported picture or film. */
+  private exportScore(): { health?: string } {
+    const s = this.state;
+    const score = s ? scoreAt(s.data, this.report, this.animator?.playhead ?? 0) : undefined;
+    return score === undefined ? {} : { health: format.number(score, 1) };
+  }
+
   private frameText(): string | undefined {
     const s = this.state;
     const info = s?.data.frames[this.animator?.frame ?? 0]?.info;
@@ -2387,6 +2408,7 @@ export class App {
           preset: s.preset?.label ?? "Custom",
           legend,
           frame: this.frameText(),
+          ...this.exportScore(),
         });
     }
     return canvas;

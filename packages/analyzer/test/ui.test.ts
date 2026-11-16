@@ -197,7 +197,7 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
     `);
     expect(r).toEqual({
       closed: true,
-      health: { panes: ["Code health"], tab: ["Health"], pressed: "Health" },
+      health: { panes: ["Code health"], tab: ["Health"], pressed: "Open the full report" },
       fits: true,
       headStays: true,
       scrolls: true,
@@ -466,7 +466,7 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
       await wait(80);
       const menuBack = document.activeElement === appearance;
 
-      const health = [...document.querySelectorAll(".bar button")].find((b) => b.textContent === "Health");
+      const health = [...document.querySelectorAll(".bar button")].find((b) => b.textContent === "Factory");
       health.focus();
       health.click();
       await wait(80);
@@ -572,5 +572,34 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
     `);
     expect(r.onBuilding).toEqual({ over: true, cursor: "pointer" });
     expect((r.away as { cursor: string }).cursor).not.toBe("pointer");
+  });
+
+  it("keeps the code-health score in view at the top right, follows the playhead, and opens on the report", async () => {
+    const r = await inPage<Record<string, unknown>>(`
+      await wait(300);
+      const score = document.querySelector(".score-box");
+      const bar = document.querySelector(".bar");
+      const value = () => score.querySelector(".score-value").textContent;
+      const first = value();
+      const rightEdge = score.querySelector("summary").getBoundingClientRect().right;
+      // the box is on the right of the bar, right of the indicator selector
+      const onRight = rightEdge > bar.getBoundingClientRect().width / 2;
+      score.querySelector("summary").click();
+      await wait(120);
+      const body = { open: score.open, trend: !!score.querySelector(".score-trend"), risks: score.querySelectorAll(".score-risks .kv").length };
+      score.querySelector("button").click();
+      await wait(150);
+      const report = { panes: [...document.querySelectorAll(".inspector .pane")].filter((p) => !p.hidden).map((p) => p.getAttribute("aria-label")) };
+      // moving the playhead to the first frame changes the number
+      document.querySelector('[aria-label="Previous frame (left arrow)"]').click();
+      document.querySelector('[aria-label="Previous frame (left arrow)"]').click();
+      await wait(1200);
+      return { first, last: value(), onRight, body, report, hasButtonInBar: !![...bar.children].find((c) => c.tagName === "BUTTON" && c.textContent === "Health") };
+    `);
+    expect(r.first).toMatch(/\d/);
+    expect(r.onRight).toBe(true);
+    expect(r.body).toMatchObject({ trend: true });
+    expect(r.report).toEqual({ panes: ["Code health"] });
+    expect(r.hasButtonInBar).toBe(false);
   });
 });
