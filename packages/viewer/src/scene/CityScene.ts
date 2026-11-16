@@ -21,7 +21,6 @@ import {
 import type { Theme } from "../themes/index";
 import { parseHex, type Rgb } from "../view/color";
 import type { Insets } from "../view/framing";
-import { pickBuilding } from "../view/picking";
 import { folderDepth, plinthTop } from "../view/placements";
 import { edgeWidth, REST_DELAY_MS, restRatio } from "../view/resolution";
 import { CameraRig, type CameraState } from "./camera-rig";
@@ -29,6 +28,7 @@ import { buildLots } from "./lots";
 import { buildingMaterials, roofMaterials } from "./materials";
 import { Outlines } from "./outlines";
 import { pyramidGeometry } from "./patches";
+import { Picker } from "./picker";
 import { ResolutionGovernor } from "./resolution-governor";
 import { MAX_RAMP } from "./shaders";
 
@@ -47,6 +47,8 @@ export class CityScene {
   private readonly rig: CameraRig;
   /** The outlines of what is pointed at and what is selected. */
   private readonly outlines: Outlines;
+  /** What is under a pixel of the picture. */
+  private readonly picker: Picker;
 
   private get camera() {
     return this.rig.camera;
@@ -64,7 +66,6 @@ export class CityScene {
   private readonly ambient = new THREE.AmbientLight();
   private grid: THREE.GridHelper | undefined;
   private glowOn = true;
-  private readonly raycaster = new THREE.Raycaster();
   private readonly unitBox = new THREE.BoxGeometry(1, 1, 1);
   private readonly sun: THREE.DirectionalLight;
   private readonly ground: THREE.Mesh;
@@ -170,6 +171,14 @@ export class CityScene {
     this.ground.receiveShadow = true;
     this.scene.add(this.ground);
 
+    this.picker = new Picker({
+      renderer: this.renderer,
+      camera: () => this.camera,
+      plinths: () => this.plinths,
+      plinthPaths: () => this.plinthPaths,
+      parcels: () => this.parcels,
+      state: () => this.readState?.(),
+    });
     this.outlines = new Outlines(this.scene, {
       state: () => this.readState?.(),
       parcels: () => this.parcels,
@@ -512,37 +521,7 @@ export class CityScene {
 
   /** What is under the pointer: a building as drawn right now, else an empty lot, else the district. */
   pick(clientX: number, clientY: number): Pick {
-    if (!this.plinths) return null;
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      -((clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    this.raycaster.setFromCamera(ndc, this.camera);
-    const { origin, direction } = this.raycaster.ray;
-    const state = this.readState?.();
-    const plinthHit = this.raycaster.intersectObject(this.plinths, false)[0];
-    if (state) {
-      const hit = pickBuilding(
-        [origin.x, origin.y, origin.z],
-        [direction.x, direction.y, direction.z],
-        state,
-      );
-      if (hit && (!plinthHit || hit.distance <= plinthHit.distance + 1e-3))
-        return { kind: "file", index: hit.index };
-    }
-    if (!plinthHit || plinthHit.instanceId === undefined) return null;
-    if (state) {
-      const { x, z } = plinthHit.point;
-      for (let i = 0; i < this.parcels.length; i++) {
-        const p = this.parcels[i];
-        if (!p || x < p.x || x > p.x + p.w || z < p.y || z > p.y + p.h) continue;
-        if ((state[i * STRIDE + PRESENCE] as number) < 0.5) return { kind: "lot", index: i };
-        break;
-      }
-    }
-    const path = this.plinthPaths[plinthHit.instanceId];
-    return path === undefined ? null : { kind: "folder", path };
+    return this.picker.pick(clientX, clientY);
   }
 
   /** Outlines the building or lot under the pointer, and its district. */
@@ -568,18 +547,7 @@ export class CityScene {
 
   /** True when a building, as drawn right now, is under a pixel of the picture. */
   blocked(px: number, py: number): boolean {
-    const state = this.readState?.();
-    if (!state) return false;
-    const size = this.renderer.getSize(new THREE.Vector2());
-    this.raycaster.setFromCamera(
-      new THREE.Vector2((px / size.x) * 2 - 1, -(py / size.y) * 2 + 1),
-      this.camera,
-    );
-    const { origin, direction } = this.raycaster.ray;
-    return (
-      pickBuilding([origin.x, origin.y, origin.z], [direction.x, direction.y, direction.z], state) !==
-      undefined
-    );
+    return this.picker.blocked(px, py);
   }
 
   /** Brings a district to the middle of the free area; `ms` is the duration of the move, 0 is a cut. */
