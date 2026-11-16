@@ -3,7 +3,7 @@
 // this repository (its own per-issue timeline) and one pinned module of an open-source project.
 // Run `pnpm build` first. Options: --skip-twenty (this repository only), --twenty-only, --work <dir> (scratch folder).
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
