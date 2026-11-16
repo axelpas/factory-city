@@ -4,7 +4,7 @@ import { defaultSource, selectableSources } from "../src/data/load";
 import { syntheticSnapshots } from "../src/data/synthetic";
 import { buildTimelineData, layoutWeights } from "../src/data/timeline";
 import { createFormat } from "../src/lib/format";
-import { frameChangeRows, lastChangeRow, lotCard } from "../src/view/card";
+import { frameChangeRows, lastChangeRow, lotCard } from "../src/view/frame-cards";
 import { FRAMES, MAPPING, snapshot } from "./timeline-helpers";
 
 const fmt = createFormat(["en-US"]);

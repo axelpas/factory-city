@@ -7,8 +7,8 @@ import { clear, el } from "../lib/dom";
 import { format } from "../lib/format";
 import type { Mapping } from "../presets/index";
 import type { CityScene } from "../scene/CityScene";
-import { frameChangeRows } from "../view/card";
 import { fileDetails } from "../view/details";
+import { frameChangeRows } from "../view/frame-cards";
 import { renderFileDetails } from "./details-view";
 
 /** What the details read of the page. */

@@ -5,8 +5,9 @@ import { clear, el } from "../lib/dom";
 import { format } from "../lib/format";
 import type { Mapping } from "../presets/index";
 import type { Pick } from "../scene/CityScene";
-import { fileCard, folderCard, lastChangeRow, lotCard } from "../view/card";
+import { fileCard, folderCard } from "../view/card";
 import { placeCard } from "../view/card-place";
+import { lastChangeRow, lotCard } from "../view/frame-cards";
 import { freeRect, type Insets } from "../view/framing";
 import { fileCardView, folderCardView } from "./card-view";
 
