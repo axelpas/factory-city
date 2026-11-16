@@ -143,7 +143,7 @@ export async function branchLabel(topLevel: string, branch: string): Promise<str
   }
 }
 
-async function listRevs(topLevel: string, opts: TimelineOptions, branch: string): Promise<Rev[]> {
+async function listRevs(topLevel: string, opts: TimelineOptions, branch: string, scope = ""): Promise<Rev[]> {
   const format = "--format=%x01%H%x02%ct%x02%s";
   if (opts.revs?.length) {
     const out: Rev[] = [];
@@ -157,6 +157,8 @@ async function listRevs(topLevel: string, opts: TimelineOptions, branch: string)
   if (opts.since) args.push(`--since=${opts.since}`);
   if (opts.until) args.push(`--until=${opts.until}`);
   args.push(opts.range ?? branch);
+  // a folder keeps the frames that changed it: a frame that touched nothing there shows the same city
+  if (scope) args.push("--", scope);
   return parseRevs(await git(topLevel, args));
 }
 
@@ -213,11 +215,13 @@ async function planIssueFrames(
   branch: string,
   forge: ForgeData | undefined,
   patterns: readonly string[],
+  scope = "",
 ): Promise<{ revs: Rev[]; coverage: CoverageReport }> {
   const args = ["log", "--first-parent", "--reverse", MESSAGE_FORMAT];
   if (opts.since) args.push(`--since=${opts.since}`);
   if (opts.until) args.push(`--until=${opts.until}`);
   args.push(opts.range ?? branch);
+  if (scope) args.push("--", scope);
   const chain = parseMessages(await git(topLevel, args));
   const coverage = emptyCoverage(forge !== undefined);
   const byIssue = new Map<number, { index: number; rev: Rev }>();
@@ -308,6 +312,8 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
   // what the manifest says: the name of the branch checked out, not the word HEAD
   const branchName = await branchLabel(repo.topLevel, branch);
   const mode: TimelineMode = opts.mode ?? (opts.revs?.length ? "revs" : opts.by);
+  // the folder this timeline is about, from the root of the repository: "" for all of it
+  const scope = scopeOf(repo.prefix, opts.path);
   const config = await loadConfig(folder);
   const planWarnings: string[] = [];
   let coverage: CoverageReport | undefined;
@@ -323,11 +329,11 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
         );
       }
     }
-    const plan = await planIssueFrames(repo.topLevel, opts, branch, forge, config.issuePatterns);
+    const plan = await planIssueFrames(repo.topLevel, opts, branch, forge, config.issuePatterns, scope);
     revs = plan.revs;
     coverage = plan.coverage;
   } else {
-    revs = await listRevs(repo.topLevel, opts, branch);
+    revs = await listRevs(repo.topLevel, opts, branch, scope);
     if (mode === "day") revs = lastOfEachDay(revs);
   }
   if (revs.length === 0) throw new Error("No commit matches the given branch, range or dates.");
@@ -335,7 +341,6 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
   revs = sample(revs, opts.maxFrames);
 
   const tip = revs[revs.length - 1] as Rev;
-  const scope = scopeOf(repo.prefix, opts.path);
   const log = await loadHistoryLog(repo.topLevel, opts.revs?.length ? "--all" : tip.hash, scope);
   const byHash = new Map(log.commits.map((c) => [c.hash, c]));
   const cachePath = join(dataDir, "cache", "files.json");
