@@ -189,7 +189,7 @@ export class App {
   /** The preset picker: the main control of the bar. Each preset is listed with the question it answers. */
   private readonly lensButton = el("summary", {
     title: "Presets set all channels at once and answer one question (P: next preset)",
-    attrs: { "aria-label": "Preset" },
+    attrs: { "aria-label": "Indicator" },
   });
   private readonly lensList = el("div", { class: "menu-list lens-list" });
   private readonly lensMenu = el(
@@ -568,10 +568,12 @@ export class App {
     return el(
       "header",
       { class: "bar" },
-      el("strong", { class: "brand", text: "Indicator" }),
+      // what is shown: the project and its branch
       this.projectSelect,
       this.context,
-      // what is asked of the city: the preset and its question
+      el("span", { class: "bar-rule" }),
+      // what is asked of the city: the indicator (a preset) and the question it answers
+      el("span", { class: "bar-label", text: "Indicator", attrs: { "aria-hidden": "true" } }),
       this.lensMenu,
       this.presetQuestion,
       el("span", { class: "spacer" }),

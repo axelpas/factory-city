@@ -225,6 +225,10 @@ button.icon,
 .brand {
   letter-spacing: 0.02em;
 }
+.bar-label {
+  font-weight: 600;
+  color: var(--c-text-muted);
+}
 /* the project and its branch: always in view, so that nobody wonders what is drawn */
 .context {
   display: inline-flex;
@@ -270,6 +274,7 @@ button.icon,
 }
 .bar > button,
 .bar > .menu,
+.bar > .bar-label,
 .bar > .brand {
   flex: none;
 }

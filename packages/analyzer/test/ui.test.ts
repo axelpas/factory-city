@@ -524,20 +524,27 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
     expect(r.selected).toBe(true);
   });
 
-  it("names the project and its branch in the top bar, under the brand", async () => {
+  it("names the project and its branch in the top bar, apart from the indicator it is read through", async () => {
     const r = await inPage<Record<string, unknown>>(`
       await wait(300);
       const bar = document.querySelector(".bar");
-      const brand = bar.querySelector(".brand").textContent;
       const context = bar.querySelector(".context");
+      const label = bar.querySelector(".bar-label");
+      const rule = bar.querySelector(".bar-rule");
+      const lens = bar.querySelector(".lens-menu");
       return {
-        brand,
+        label: label.textContent,
+        // reading order: project and branch, a rule, the label, then the selector, side by side
+        order: box(context).right <= box(rule).x && box(rule).right <= box(label).x && box(label).right <= box(lens).x,
+        sideBySide: box(lens).x - box(label).right <= 16,
         name: context.querySelector(".context-name")?.textContent ?? bar.querySelector("select").selectedOptions[0]?.textContent ?? "",
         ref: context.querySelector(".context-ref")?.textContent ?? "",
         inBar: box(context).right <= box(bar).right && box(context).bottom <= box(bar).bottom,
       };
     `);
-    expect(r.brand).toBe("Indicator");
+    expect(r.label).toBe("Indicator");
+    expect(r.order).toBe(true);
+    expect(r.sideBySide).toBe(true);
     expect(r.name).not.toBe("");
     expect(r.ref).not.toBe("");
     expect(r.inBar).toBe(true);
