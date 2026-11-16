@@ -7,7 +7,6 @@ import {
   G,
   H,
   MARK,
-  MAX_DELAY,
   MODE,
   PRESENCE,
   R,
@@ -34,6 +33,10 @@ import {
 import { pickBuilding } from "../view/picking";
 import { folderDepth, PLINTH_THICKNESS, plinthTop } from "../view/placements";
 import { edgeWidth, REST_DELAY_MS, restRatio } from "../view/resolution";
+import { districtView, easeInOut, fadeStep, moveProgress, selectionBox } from "../view/scene-logic";
+import { buildLots } from "./lots";
+import { buildingMaterials, roofMaterials } from "./materials";
+import { MAX_RAMP, pyramidGeometry } from "./shaders";
 
 /** A camera view that can be saved and restored. */
 export interface CameraState {
@@ -56,182 +59,8 @@ export type Pick =
   | { kind: "folder"; path: string }
   | null;
 
-const MAX_RAMP = 8;
 /** Time the other buildings take to fade when one is pointed at. */
 const HOVER_FADE_MS = 140;
-
-/** Shared by the color and the depth material: where a vertex of a building is, right now. */
-const VERTEX_COMMON = /* glsl */ `
-attribute vec3 aPosA;
-attribute vec3 aPosB;
-attribute vec3 aSizeA;
-attribute vec3 aSizeB;
-attribute vec4 aMiscA; // marker, ramp, mode, roof
-attribute vec4 aMiscB;
-attribute vec3 aColA;
-attribute vec3 aColB;
-attribute vec4 aFx; // touched A, presence A, touched B, presence B
-attribute float aDelay;
-uniform float uProgress;
-varying vec3 vBox;
-varying vec3 vSize;
-varying vec4 vMiscA;
-varying vec4 vMiscB;
-varying vec2 vFx;
-varying float vEase;
-varying vec3 vColor;
-varying float vIsHover;
-uniform float uHover;
-uniform vec3 uRamp[${MAX_RAMP}];
-uniform float uRampCount;
-
-vec3 fcToLinear(vec3 c) {
-  return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
-}
-vec3 fcToSrgb(vec3 c) {
-  vec3 x = clamp(c, 0.0, 1.0);
-  return mix(x * 12.92, 1.055 * pow(x, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, x));
-}
-vec3 fcRampAt(float t) {
-  float pos = clamp(t, 0.0, 1.0) * (uRampCount - 1.0);
-  int i = int(min(floor(pos), uRampCount - 2.0));
-  return mix(uRamp[i], uRamp[i + 1], pos - float(i));
-}
-vec3 fcOklab(vec3 srgb) {
-  vec3 c = fcToLinear(srgb);
-  vec3 lms = pow(vec3(
-    0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b,
-    0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b,
-    0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b), vec3(1.0 / 3.0));
-  return vec3(
-    0.2104542553 * lms.x + 0.7936177850 * lms.y - 0.0040720468 * lms.z,
-    1.9779984951 * lms.x - 2.4285922050 * lms.y + 0.4505937099 * lms.z,
-    0.0259040371 * lms.x + 0.7827717662 * lms.y - 0.8086757660 * lms.z);
-}
-vec3 fcFromOklab(vec3 lab) {
-  vec3 lms = pow(vec3(
-    lab.x + 0.3963377774 * lab.y + 0.2158037573 * lab.z,
-    lab.x - 0.1055613458 * lab.y - 0.0638541728 * lab.z,
-    lab.x - 0.0894841775 * lab.y - 1.2914855480 * lab.z), vec3(3.0));
-  return fcToSrgb(vec3(
-    4.0767416621 * lms.x - 3.3077115913 * lms.y + 0.2309699292 * lms.z,
-    -1.2684380046 * lms.x + 2.6097574011 * lms.y - 0.3413193965 * lms.z,
-    -0.0041960863 * lms.x - 0.7034186147 * lms.y + 1.7076147010 * lms.z));
-}
-/** The building's color in sRGB: the ramp read at the interpolated value, or a perceptual cross-fade. */
-vec3 fcColor(float e) {
-  if (aMiscA.z < 0.5 && aMiscB.z < 0.5) return fcRampAt(mix(aMiscA.y, aMiscB.y, e));
-  if (e <= 0.0) return aColA;
-  if (e >= 1.0) return aColB;
-  return fcFromOklab(mix(fcOklab(aColA), fcOklab(aColB), e));
-}
-
-float fcEase(float t) {
-  return t < 0.5 ? 4.0 * t * t * t : 1.0 - pow(-2.0 * t + 2.0, 3.0) / 2.0;
-}
-float fcLocal() {
-  return fcEase(clamp((uProgress - aDelay) / (1.0 - ${MAX_DELAY.toFixed(4)}), 0.0, 1.0));
-}
-vec3 fcPosition(vec3 p) {
-  float e = fcLocal();
-  vec3 size = mix(aSizeA, aSizeB, e);
-  vec3 base = mix(aPosA, aPosB, e);
-  float shown = step(0.001, size.y);
-  return base + p * size * shown;
-}
-`;
-
-const FRAGMENT_COMMON = /* glsl */ `
-uniform vec3 uEdgeColor;
-uniform vec3 uTouchColor;
-uniform vec3 uMarkColor;
-// thickness of the building edges, in rendered pixels
-uniform float uEdgeWidth;
-// 0 solid, 1 blocks, 2 wireframe
-uniform float uMode;
-uniform float uBlock;
-uniform float uGlow;
-uniform float uFaceAlpha;
-// the others fade while one building is pointed at
-uniform float uHoverDim;
-uniform vec3 uDimColor;
-varying float vIsHover;
-vec4 fcWire;
-varying vec3 vBox;
-varying vec3 vSize;
-varying vec4 vMiscA;
-varying vec4 vMiscB;
-varying vec2 vFx;
-varying float vEase;
-varying vec3 vColor;
-
-vec3 fcToLinear(vec3 c) {
-  return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
-}
-`;
-
-/**
- * The roof of a marked building: a pyramid standing on its top, as wide as the building. It rises with the
- * marker (the marker value is its height) and follows the building through the same instance data.
- */
-function patchRoofVertex(shader: { vertexShader: string }): void {
-  shader.vertexShader = shader.vertexShader
-    .replace("#include <common>", `#include <common>\n${VERTEX_COMMON}`)
-    .replace(
-      "#include <begin_vertex>",
-      /* glsl */ `
-      float roofE = fcLocal();
-      vec3 roofSize = mix(aSizeA, aSizeB, roofE);
-      vec3 roofBase = mix(aPosA, aPosB, roofE);
-      float marked = mix(aMiscA.x, aMiscB.x, roofE);
-      float roofH = min(0.4 * min(roofSize.x, roofSize.z), 0.6 * roofSize.y) * marked;
-      float roofShown = step(0.001, roofSize.y) * step(0.02, marked);
-      vec3 transformed = roofBase + vec3(position.x * roofSize.x, roofSize.y + position.y * roofH, position.z * roofSize.z) * roofShown;
-      vIsHover = float(gl_InstanceID) == uHover ? 1.0 : 0.0;`,
-    );
-}
-
-/** A square pyramid with its base on the ground, one unit wide and one unit high, with flat faces. */
-function pyramidGeometry(): THREE.BufferGeometry {
-  const apex = [0, 1, 0];
-  const corners = [
-    [-0.5, 0, -0.5],
-    [0.5, 0, -0.5],
-    [0.5, 0, 0.5],
-    [-0.5, 0, 0.5],
-  ];
-  const positions: number[] = [];
-  for (let i = 0; i < 4; i++) {
-    const a = corners[i] as number[];
-    const b = corners[(i + 1) % 4] as number[];
-    positions.push(...a, ...apex, ...b);
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geometry.computeVertexNormals();
-  return geometry;
-}
-
-function patchVertex(shader: { vertexShader: string }): void {
-  shader.vertexShader = shader.vertexShader
-    .replace("#include <common>", `#include <common>\n${VERTEX_COMMON}`)
-    .replace(
-      "#include <begin_vertex>",
-      /* glsl */ `
-      vec3 transformed = fcPosition(position);
-      {
-        float e = fcLocal();
-        vEase = e;
-        vBox = position;
-        vSize = mix(aSizeA, aSizeB, e);
-        vMiscA = aMiscA;
-        vMiscB = aMiscB;
-        vColor = fcColor(e);
-        vIsHover = float(gl_InstanceID) == uHover ? 1.0 : 0.0;
-        vFx = vec2(mix(aFx.x, aFx.z, e), mix(aFx.y, aFx.w, e));
-      }`,
-    );
-}
 
 /** The 3D city: buildings interpolated on the GPU, plinths, lots, camera, picking and offscreen rendering. */
 export class CityScene {
@@ -600,85 +429,7 @@ export class CityScene {
     attr("aDelay", 1, delayArray);
 
     const uniforms = this.uniforms;
-    const material = new THREE.MeshLambertMaterial();
-    if (theme.renderer === "wireframe") {
-      // light adds up, so the picture does not depend on the order buildings are drawn in
-      material.transparent = true;
-      material.blending = THREE.AdditiveBlending;
-      material.depthWrite = false;
-    }
-    material.onBeforeCompile = (shader) => {
-      Object.assign(shader.uniforms, uniforms);
-      patchVertex(shader);
-      shader.vertexShader = shader.vertexShader.replace(
-        "#include <beginnormal_vertex>",
-        /* glsl */ `vec3 objectNormal = vec3(normal);`,
-      );
-      shader.fragmentShader = shader.fragmentShader
-        .replace("#include <common>", `#include <common>\n${FRAGMENT_COMMON}`)
-        .replace(
-          "#include <color_fragment>",
-          /* glsl */ `
-          {
-            vec3 col = vColor;
-            // distance to the nearest edge of the box, in world units, on the face being drawn
-            vec3 dist = (0.5 - abs(vBox - vec3(0.0, 0.5, 0.0))) * max(vSize, vec3(0.0001));
-            float lo = min(dist.x, min(dist.y, dist.z));
-            float hi = max(dist.x, max(dist.y, dist.z));
-            float mid = dist.x + dist.y + dist.z - lo - hi;
-            float width = fwidth(mid) * uEdgeWidth;
-            float edge = 1.0 - smoothstep(width * 0.5, width, mid);
-            float touched = vFx.x;
-            float touchWidth = fwidth(mid) * uEdgeWidth;
-            float touchEdge = (1.0 - smoothstep(touchWidth * 0.6, touchWidth, mid)) * touched;
-            // roof mark: a darker patch on the roof whose size repeats the category
-            float roof = mix(vMiscA.w, vMiscB.w, vEase);
-            vec2 top = abs(vBox.xz);
-            float onRoof = step(0.999, vBox.y) * step(0.001, roof);
-            float half_ = 0.125 + 0.275 * roof;
-            float mark = onRoof * step(top.x, half_) * step(top.y, half_);
-            if (uMode > 0.5 && uMode < 1.5) {
-              // blocks: seams between the cubes of the stack, and a small shade per cube, both procedural
-              vec3 p = (vBox + vec3(0.5, 0.0, 0.5)) * max(vSize, vec3(0.0001)) / uBlock;
-              vec3 onFace = vec3(step(dist.x, lo + 0.0001), step(dist.y, lo + 0.0001), step(dist.z, lo + 0.0001));
-              vec3 seam = min(fract(p), 1.0 - fract(p)) + onFace;
-              float s = min(seam.x, min(seam.y, seam.z));
-              float sw = fwidth(s) * 1.2 + 0.015;
-              float seamLine = 1.0 - smoothstep(sw * 0.5, sw, s);
-              vec3 cube = floor(p + 0.0001) * (1.0 - onFace);
-              float shade = fract(sin(dot(cube, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
-              col *= 0.93 + 0.1 * shade;
-              col = mix(col, uEdgeColor, seamLine * 0.5);
-            }
-            if (uMode > 1.5) {
-              // wireframe: luminous edges, faint faces, an optional capped glow around the edges
-              float halo = (1.0 - smoothstep(0.0, fwidth(mid) * 10.0, mid)) * uGlow;
-              float alpha = max(max(edge, touchEdge), max(halo * 0.55, uFaceAlpha));
-              vec3 wire = mix(col, uTouchColor, touchEdge);
-              fcWire = vec4(wire, alpha);
-            }
-            col = mix(col, uEdgeColor, max(edge * 0.85, mark * 0.7));
-            col = mix(col, uTouchColor, touchEdge * 0.9);
-            float others = uHoverDim * (1.0 - vIsHover);
-            col = mix(col, uDimColor, others * 0.7);
-            if (uMode > 1.5) {
-              fcWire.rgb = mix(fcWire.rgb, uDimColor, others * 0.5);
-              fcWire.a *= 1.0 - others * 0.65;
-            }
-            diffuseColor.rgb = fcToLinear(col);
-          }`,
-        )
-        .replace(
-          "#include <opaque_fragment>",
-          /* glsl */ `#include <opaque_fragment>
-          if (uMode > 1.5) gl_FragColor = vec4(fcToLinear(fcWire.rgb), fcWire.a);`,
-        );
-    };
-    const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
-    depth.onBeforeCompile = (shader) => {
-      Object.assign(shader.uniforms, uniforms);
-      patchVertex(shader);
-    };
+    const { material, depth } = buildingMaterials(theme, this.uniforms);
     this.buildings = new THREE.Mesh(geometry, material);
     this.buildings.customDepthMaterial = depth;
     this.buildings.castShadow = true;
@@ -693,33 +444,7 @@ export class CityScene {
     for (const name of ["aPosA", "aPosB", "aSizeA", "aSizeB", "aMiscA", "aMiscB", "aDelay"])
       roofGeometry.setAttribute(name, geometry.getAttribute(name));
     roofGeometry.instanceCount = this.count;
-    const roofMaterial = new THREE.MeshLambertMaterial();
-    if (theme.renderer === "wireframe") {
-      // luminous edges, as the buildings are
-      roofMaterial.wireframe = true;
-      roofMaterial.transparent = true;
-      roofMaterial.blending = THREE.AdditiveBlending;
-      roofMaterial.depthWrite = false;
-    }
-    roofMaterial.onBeforeCompile = (shader) => {
-      Object.assign(shader.uniforms, uniforms);
-      patchRoofVertex(shader);
-      shader.fragmentShader = shader.fragmentShader
-        .replace("#include <common>", `#include <common>\n${FRAGMENT_COMMON}`)
-        .replace(
-          "#include <color_fragment>",
-          /* glsl */ `
-          {
-            vec3 col = mix(uMarkColor, uDimColor, uHoverDim * (1.0 - vIsHover) * 0.7);
-            diffuseColor.rgb = fcToLinear(col);
-          }`,
-        );
-    };
-    const roofDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
-    roofDepth.onBeforeCompile = (shader) => {
-      Object.assign(shader.uniforms, uniforms);
-      patchRoofVertex(shader);
-    };
+    const { material: roofMaterial, depth: roofDepth } = roofMaterials(theme, this.uniforms);
     this.roofs = new THREE.Mesh(roofGeometry, roofMaterial);
     this.roofs.customDepthMaterial = roofDepth;
     this.roofs.castShadow = true;
@@ -728,61 +453,7 @@ export class CityScene {
 
     // lots: the outline of every parcel; it fades in when the parcel is empty
     this.parcels = paths.map((path) => layout.files.get(path));
-    const lotPositions = new Float32Array(n * 8 * 3);
-    const lotIndex = new Float32Array(n * 8);
-    paths.forEach((path, i) => {
-      const r = layout.files.get(path);
-      if (!r) return;
-      const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
-      const y = plinthTop(folderDepth(dir)) + 0.06;
-      const inset = Math.min(r.w, r.h) * 0.06;
-      const x0 = r.x + inset;
-      const x1 = r.x + r.w - inset;
-      const z0 = r.y + inset;
-      const z1 = r.y + r.h - inset;
-      const corners = [x0, z0, x1, z0, x1, z0, x1, z1, x1, z1, x0, z1, x0, z1, x0, z0];
-      for (let k = 0; k < 8; k++) {
-        lotPositions[(i * 8 + k) * 3] = corners[k * 2] as number;
-        lotPositions[(i * 8 + k) * 3 + 1] = y;
-        lotPositions[(i * 8 + k) * 3 + 2] = corners[k * 2 + 1] as number;
-        lotIndex[i * 8 + k] = i;
-      }
-    });
-    const lotGeometry = new THREE.BufferGeometry();
-    lotGeometry.setAttribute("position", new THREE.BufferAttribute(lotPositions, 3));
-    const lotFx = new THREE.BufferAttribute(new Float32Array(n * 8 * 2), 2);
-    lotFx.setUsage(THREE.DynamicDrawUsage);
-    lotGeometry.setAttribute("aPresence", lotFx);
-    const lotDelay = new Float32Array(n * 8);
-    for (let k = 0; k < lotDelay.length; k++) lotDelay[k] = delays[lotIndex[k] as number] ?? 0;
-    lotGeometry.setAttribute("aDelay", new THREE.BufferAttribute(lotDelay, 1));
-    const lotMaterial = new THREE.ShaderMaterial({
-      uniforms,
-      transparent: true,
-      depthWrite: false,
-      vertexShader: /* glsl */ `
-        attribute vec2 aPresence;
-        attribute float aDelay;
-        uniform float uProgress;
-        varying float vEmpty;
-        float fcEase(float t) { return t < 0.5 ? 4.0 * t * t * t : 1.0 - pow(-2.0 * t + 2.0, 3.0) / 2.0; }
-        void main() {
-          float e = fcEase(clamp((uProgress - aDelay) / (1.0 - ${MAX_DELAY.toFixed(4)}), 0.0, 1.0));
-          vEmpty = 1.0 - mix(aPresence.x, aPresence.y, e);
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }`,
-      fragmentShader: /* glsl */ `
-        uniform vec3 uLotColor;
-        varying float vEmpty;
-        vec3 fcToLinear(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
-        void main() {
-          gl_FragColor = vec4(fcToLinear(uLotColor), mix(0.12, 0.95, vEmpty));
-          #include <colorspace_fragment>
-        }`,
-    });
-    this.lots = new THREE.LineSegments(lotGeometry, lotMaterial);
-    this.lots.frustumCulled = false;
-    this.lots.raycast = () => {};
+    this.lots = buildLots(layout, paths, delays, uniforms);
     this.scene.add(this.plinths, this.buildings, this.roofs, this.lots);
     this.uniforms.uBlock.value = this.size * (theme.effects?.blockSize ?? 0.008);
     if (this.grid) {
@@ -1004,18 +675,12 @@ export class CityScene {
 
   /** Fades the other buildings in and out with the pointer; true while it changes. */
   private stepHoverDim(dtMs: number): boolean {
-    const gap = this.hoverDimTarget - this.hoverDim;
-    if (Math.abs(gap) < 0.002) {
-      if (gap !== 0) {
-        this.hoverDim = this.hoverDimTarget;
-        this.uniforms.uHoverDim.value = this.hoverDim;
-        if (this.hoverDim === 0) this.uniforms.uHover.value = -1;
-        return true;
-      }
-      return false;
-    }
-    this.hoverDim += Math.sign(gap) * Math.min(Math.abs(gap), dtMs / HOVER_FADE_MS);
+    const next = fadeStep(this.hoverDim, this.hoverDimTarget, dtMs, HOVER_FADE_MS);
+    if (!next.changed) return false;
+    this.hoverDim = next.value;
     this.uniforms.uHoverDim.value = this.hoverDim;
+    // once the others are back, nothing is pointed at any more
+    if (this.hoverDim === 0) this.uniforms.uHover.value = -1;
     return true;
   }
 
@@ -1027,26 +692,11 @@ export class CityScene {
   }
 
   private syncSelection(): void {
-    const state = this.readState?.();
-    const i = this.selected;
-    if (i === null || !state) {
-      this.selection.visible = false;
-      return;
-    }
-    const o = i * STRIDE;
-    const h = state[o + H] as number;
-    // a building that is not there in this frame has no outline
-    if ((state[o + PRESENCE] as number) < 0.5 || h < 1e-3) {
-      this.selection.visible = false;
-      return;
-    }
-    this.selection.position.set(
-      state[o + X] as number,
-      (state[o + Y] as number) + h / 2,
-      state[o + Z] as number,
-    );
-    this.selection.scale.set((state[o + W] as number) * 1.01, h * 1.01, (state[o + D] as number) * 1.01);
-    this.selection.visible = true;
+    const box = selectionBox(this.readState?.(), this.selected);
+    this.selection.visible = box !== undefined;
+    if (!box) return;
+    this.selection.position.set(box.x, box.y, box.z);
+    this.selection.scale.set(box.w, box.h, box.d);
   }
 
   /** Where a point of the world lands on the picture, in pixels from its top left corner. */
@@ -1084,25 +734,23 @@ export class CityScene {
    * direction. `ms` is the duration of the move; 0 is a cut.
    */
   frameDistrict(rect: { x: number; y: number; w: number; h: number }, ms: number): void {
-    const target = new THREE.Vector3(rect.x + rect.w / 2, 0, rect.y + rect.h / 2);
     const offset = this.camera.position.clone().sub(this.controls.target);
-    const diag = Math.hypot(rect.w, rect.h) * 1.3;
-    let zoom = this.camera.zoom;
-    let distance = offset.length();
-    if (this.camera === this.perspective) {
-      const free = this.freeArea();
-      const aspect = Math.min(free.w / Math.max(free.h, 1), 1);
-      distance = Math.max(
-        diag / 2 / Math.tan(THREE.MathUtils.degToRad(this.perspective.fov) / 2) / aspect,
-        this.size * 0.06,
-      );
-    } else {
-      zoom = (this.size * ORTHO_HEIGHT) / Math.max(diag, this.size * 0.05);
-    }
+    const free = this.freeArea();
+    const view = districtView({
+      rect,
+      size: this.size,
+      perspective: this.camera === this.perspective,
+      fovDeg: this.perspective.fov,
+      freeAspect: free.w / Math.max(free.h, 1),
+      distance: offset.length(),
+      zoom: this.camera.zoom,
+      orthoHeight: ORTHO_HEIGHT,
+    });
+    const target = new THREE.Vector3(view.target.x, 0, view.target.z);
     const to = {
-      position: target.clone().add(offset.setLength(distance)),
+      position: target.clone().add(offset.setLength(view.distance)),
       target,
-      zoom,
+      zoom: view.zoom,
     };
     this.framed = null;
     if (ms <= 0) {
@@ -1132,8 +780,8 @@ export class CityScene {
     const f = this.fly;
     if (!f) return false;
     f.elapsed += dtMs;
-    const t = Math.min(f.elapsed / f.ms, 1);
-    const e = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+    const t = moveProgress(f.elapsed, f.ms);
+    const e = easeInOut(t);
     this.controls.target.lerpVectors(f.from.target, f.to.target, e);
     this.camera.position.lerpVectors(f.from.position, f.to.position, e);
     this.camera.zoom = f.from.zoom + (f.to.zoom - f.from.zoom) * e;
