@@ -301,11 +301,44 @@ export class CityScene {
   }
 
   /** Builds the plinths, the lots and the building buffers for a layout. States come with `setStates`. */
+  /** The ground grid of the themes that have one, sized to the city. */
+  private rebuildGrid(): void {
+    if (this.grid) {
+      this.scene.remove(this.grid);
+      this.grid.geometry.dispose();
+      this.grid = undefined;
+    }
+    if (!this.theme.effects?.grid) return;
+    const line = new THREE.Color(this.theme.colors.gridLine ?? "");
+    this.grid = new THREE.GridHelper(this.size * 3, 150, line, line);
+    this.grid.position.set(this.size / 2, 0.01, this.size / 2);
+    this.grid.raycast = () => {};
+    this.scene.add(this.grid);
+  }
+
+  /** The sun and its shadow camera, over the whole city of side `s`. */
+  private placeSun(s: number): void {
+    const sun = this.theme.light.sunPosition;
+    this.sun.position.set(s / 2 + (sun[0] ?? 0) * s, (sun[1] ?? 1) * s, s / 2 + (sun[2] ?? 0) * s);
+    this.sun.target.position.set(s / 2, 0, s / 2);
+    this.sun.castShadow = this.theme.light.shadows;
+    const cam = this.sun.shadow.camera;
+    cam.left = -s * 0.85;
+    cam.right = s * 0.85;
+    cam.top = s * 0.85;
+    cam.bottom = -s * 0.85;
+    cam.near = 1;
+    cam.far = s * 4;
+    cam.updateProjectionMatrix();
+    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.normalBias = 0.6;
+  }
+
   setCity(layout: Layout, paths: readonly string[], delays: Float32Array, keepCamera = false): void {
     this.size = Math.max(layout.width, layout.height);
     this.count = paths.length;
     const theme = this.theme;
-    const c = (key: string) => new THREE.Color(theme.colors[key] ?? "");
     for (const m of [this.plinths, this.buildings, this.roofs, this.lots]) {
       if (!m) continue;
       this.scene.remove(m);
@@ -325,37 +358,11 @@ export class CityScene {
     this.lots = buildLots(layout, paths, delays, this.uniforms);
     this.scene.add(this.plinths, this.buildings, this.roofs, this.lots);
     this.uniforms.uBlock.value = this.size * (theme.effects?.blockSize ?? 0.008);
-    if (this.grid) {
-      this.scene.remove(this.grid);
-      this.grid.geometry.dispose();
-      this.grid = undefined;
-    }
-    if (theme.effects?.grid) {
-      const line = c("gridLine");
-      this.grid = new THREE.GridHelper(this.size * 3, 150, line, line);
-      this.grid.position.set(this.size / 2, 0.01, this.size / 2);
-      this.grid.raycast = () => {};
-      this.scene.add(this.grid);
-    }
-
+    this.rebuildGrid();
     this.ground.scale.set(this.size * 6, this.size * 6, 1);
     this.ground.position.set(this.size / 2, -0.02, this.size / 2);
     const s = this.size;
-    const sun = theme.light.sunPosition;
-    this.sun.position.set(s / 2 + (sun[0] ?? 0) * s, (sun[1] ?? 1) * s, s / 2 + (sun[2] ?? 0) * s);
-    this.sun.target.position.set(s / 2, 0, s / 2);
-    this.sun.castShadow = theme.light.shadows;
-    const cam = this.sun.shadow.camera;
-    cam.left = -s * 0.85;
-    cam.right = s * 0.85;
-    cam.top = s * 0.85;
-    cam.bottom = -s * 0.85;
-    cam.near = 1;
-    cam.far = s * 4;
-    cam.updateProjectionMatrix();
-    this.sun.shadow.mapSize.set(2048, 2048);
-    this.sun.shadow.bias = -0.0004;
-    this.sun.shadow.normalBias = 0.6;
+    this.placeSun(s);
     this.controls.minDistance = s * 0.03;
     this.controls.maxDistance = s * 3;
     this.perspective.far = s * 12;
