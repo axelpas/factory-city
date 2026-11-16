@@ -28,6 +28,8 @@ const PATHS = {
   marker: ["M3 3h10v10H3z", "M5.8 5.8h4.4v4.4H5.8z"],
   tint: ["M2 11l6-2.5 6 2.5-6 2.5z", "M2 7.5l6-2.5 6 2.5"],
   close: ["M4 4l8 8", "M12 4l-8 8"],
+  /** A magnifying glass. */
+  search: ["M7 2.5a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0-9z", "M10.4 10.4L13.5 13.5"],
   /** Transport: back one frame, play, pause, forward one frame. */
   prev: ["M11.5 3.5L6 8l5.5 4.5z", "M4 3v10"],
   next: ["M4.5 3.5L10 8l-5.5 4.5z", "M12 3v10"],

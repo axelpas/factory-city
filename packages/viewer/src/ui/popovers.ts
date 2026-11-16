@@ -26,8 +26,21 @@ export function watchPopovers(doc: Document): void {
     "toggle",
     (e) => {
       const target = e.target;
-      if (target instanceof HTMLDetailsElement && target.open && target.classList.contains(POPOVER_CLASS))
+      if (!(target instanceof HTMLDetailsElement) || !target.classList.contains(POPOVER_CLASS)) return;
+      const summary = target.querySelector<HTMLElement>(":scope > summary");
+      if (target.open) {
         closePopovers(doc, target);
+        // opening moves focus into the popover, unless something in it already took it
+        if (!target.contains(doc.activeElement) || doc.activeElement === summary) {
+          const first = target.querySelector<HTMLElement>(
+            ":scope > :not(summary) :is(input, select, button, [href], [tabindex]:not([tabindex='-1']))",
+          );
+          first?.focus();
+        }
+      } else if (summary && (target.contains(doc.activeElement) || doc.activeElement === doc.body)) {
+        // closing gives focus back to the button that opened it
+        summary.focus();
+      }
     },
     true,
   );

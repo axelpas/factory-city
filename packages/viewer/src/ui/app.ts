@@ -43,6 +43,7 @@ import {
 import { placeCard } from "../view/card-place";
 import { biggestChanges, CHANGE, changePlacements, type FileChange } from "../view/change";
 import { parseHex } from "../view/color";
+import { describeCity } from "../view/describe";
 import { type DetailRow, fileDetails } from "../view/details";
 import { factoryView } from "../view/factory";
 import { freeRect, type Insets, NO_INSETS } from "../view/framing";
@@ -56,6 +57,7 @@ import { buildDelays, buildState } from "../view/state";
 import { statusChip, statusDetails } from "../view/status";
 import { blockLegend, blockSize, voxelize } from "../view/voxel";
 import { DistrictLabelLayer } from "./district-labels";
+import { FileFinder } from "./file-finder";
 import { type IconName, icon } from "./icons";
 import { Inspector, type InspectorTab } from "./inspector";
 import { renderLegendBox } from "./legend-box";
@@ -127,7 +129,7 @@ export class App {
   private readonly details = el("section", { attrs: { "aria-label": "File details", hidden: "" } });
   private readonly helpDialog = el("div", {
     class: "help",
-    attrs: { role: "dialog", "aria-label": "How to read this city", hidden: "" },
+    attrs: { role: "dialog", "aria-label": "How to read this city", hidden: "", tabindex: "-1" },
   });
   private readonly dropZone = el("div", { class: "drop" });
   private readonly panel = el("aside", { class: "panel", attrs: { "aria-label": "View settings" } });
@@ -229,6 +231,14 @@ export class App {
   private readonly fpsBox = new URLSearchParams(location.search).has("fps")
     ? el("span", { class: "fps" })
     : undefined;
+  /** What a screen reader is told about the picture; the canvas points at it. */
+  private readonly cityDescription = el("p", { class: "sr-only", attrs: { id: "city-description" } });
+  private readonly finder = new FileFinder({
+    files: () => this.finderFiles(),
+    onChoose: (entry) => this.openDetails(entry.union),
+  });
+  /** What had the focus when the help opened. */
+  private helpOpener: HTMLElement | null = null;
   private districtLabels!: DistrictLabelLayer;
   private labelsOn = safeStorage(() => localStorage.getItem(LABELS_KEY)) !== "off";
   /** The building the details show, outlined in the city until another one is selected. */
@@ -268,6 +278,7 @@ export class App {
       this.inspector.element,
       this.helpDialog,
       this.dropZone,
+      this.cityDescription,
     );
     this.scene = new CityScene(this.stage, this.theme);
     // the city is framed in what the bar, the panels and the timeline leave free
@@ -281,6 +292,10 @@ export class App {
       ...this.rightPanels(),
     ])
       covering.observe(node);
+    // the picture is described to those who cannot see it
+    this.scene.canvas.setAttribute("role", "img");
+    this.scene.canvas.setAttribute("aria-label", "City: every building is a file, every district a folder");
+    this.scene.canvas.setAttribute("aria-describedby", "city-description");
     this.districtLabels = new DistrictLabelLayer(this.scene);
     this.districtLabels.setEnabled(this.labelsOn);
     this.stage.append(this.districtLabels.element);
@@ -555,6 +570,7 @@ export class App {
       this.factoryButton,
       el("span", { class: "bar-rule" }),
       // view and page actions
+      this.finder.element,
       iconButton("top", "Top view", "Top view: look straight down (V)", () => this.scene.topView()),
       iconButton("reset", "Reset the view", "Reset the view (R)", () => this.scene.resetCamera()),
       appearance,
@@ -1141,12 +1157,44 @@ export class App {
     if (s && legend) renderLegendBox(this.legendBox, legend, s.model, this.theme);
   }
 
+  /** The text a screen reader gets for the picture: the question asked, the counts and the frame. */
+  private describe(): void {
+    const s = this.state;
+    if (!s) return;
+    const frames = s.data.frames;
+    const index = this.animator?.frame ?? 0;
+    const frame = frames.length > 1 ? frames[index]?.info : undefined;
+    this.cityDescription.textContent = describeCity(
+      {
+        project: s.model.project,
+        preset: s.preset?.label ?? "Custom view",
+        ...(s.preset?.question ? { question: s.preset.question } : {}),
+        files: s.model.files.length,
+        districts: [...s.layout.folders.keys()].filter((p) => p !== "" && !p.includes("/")).length,
+        ...(frame ? { frame: { index, count: frames.length, label: frame.label } } : {}),
+      },
+      format.integer,
+    );
+    this.scene.canvas.setAttribute("aria-label", `City of ${s.model.project}: every building is a file`);
+  }
+
+  /** The files of the frame shown, for the file finder. */
+  private finderFiles(): Array<{ path: string; union: number }> {
+    const s = this.state;
+    if (!s) return [];
+    const out: Array<{ path: string; union: number }> = [];
+    for (let union = 0; union < s.data.paths.length; union++)
+      if (this.modelIndex(union) >= 0) out.push({ path: s.data.paths[union] ?? "", union });
+    return out;
+  }
+
   private renderStatus(): void {
     const s = this.state;
     if (!s) return;
     const manifest = s.data.manifest;
     const coverage = manifest?.kind === "timeline" ? manifest.coverage : undefined;
     const by = coverage?.byStrategy;
+    this.describe();
     renderStatusChip(
       this.status,
       statusChip(s.model, format.integer),
@@ -1624,6 +1672,7 @@ export class App {
       ["H", "code health: score, risk profile, hotspots"],
       ["F", "factory: KPIs and the issues to look at"],
       ["E", "export a PNG"],
+      ["/", "find a file by name and open its details"],
       ["?", "this help"],
       ["Esc", "close panels"],
     ];
@@ -1648,11 +1697,16 @@ export class App {
       ),
       close,
     );
+    const active = document.activeElement;
+    this.helpOpener = active instanceof HTMLElement && active !== document.body ? active : null;
     this.helpDialog.hidden = false;
+    this.helpDialog.focus({ preventScroll: true });
   }
 
   private hideHelp(): void {
     this.helpDialog.hidden = true;
+    if (this.helpOpener?.isConnected) this.helpOpener.focus({ preventScroll: true });
+    this.helpOpener = null;
     safeStorage(() => localStorage.setItem(HELP_KEY, "1"));
   }
 
@@ -1713,6 +1767,10 @@ export class App {
       case "f":
       case "F":
         this.toggleFactory();
+        break;
+      case "/":
+        e.preventDefault();
+        this.finder.open();
         break;
       case "?":
         this.toggleHelp();

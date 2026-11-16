@@ -39,9 +39,14 @@ export interface InspectorOptions {
  * the others; hiding them all closes it.
  */
 export class Inspector {
-  readonly element = el("aside", { class: "inspector", attrs: { "aria-label": "Inspector", hidden: "" } });
+  readonly element = el("aside", {
+    class: "inspector",
+    attrs: { "aria-label": "Inspector", hidden: "", tabindex: "-1" },
+  });
   private readonly tabs = new Map<InspectorTab, HTMLButtonElement>();
   private current: InspectorTab | undefined;
+  /** What had the focus when the inspector opened: it gets it back when the inspector closes. */
+  private opener: HTMLElement | null = null;
 
   constructor(private readonly options: InspectorOptions) {
     const tablist = el("div", { class: "tabs", attrs: { role: "tablist", "aria-label": "Inspector" } });
@@ -113,11 +118,29 @@ export class Inspector {
       else if (!pane.hidden) pane.hidden = true;
     }
     for (const [name, button] of this.tabs) button.setAttribute("aria-selected", String(name === tab));
+    const wasOpen = !this.element.hidden;
     this.element.hidden = tab === undefined;
+    if (wasOpen && tab === undefined) this.giveFocusBack();
+    else if (!wasOpen && tab !== undefined) this.takeFocus();
     if (tab !== this.current) {
       this.current = tab;
       this.options.onChange(tab);
     }
+  }
+
+  /** Opening moves focus into the inspector; the control that had it is remembered. */
+  private takeFocus(): void {
+    const active = document.activeElement;
+    this.opener = active instanceof HTMLElement && active !== document.body ? active : null;
+    this.element.focus({ preventScroll: true });
+  }
+
+  /** Closing gives focus back to what had it, unless the user has moved on to something else. */
+  private giveFocusBack(): void {
+    const active = document.activeElement;
+    const lost = active === document.body || active === null || this.element.contains(active);
+    if (lost && this.opener?.isConnected) this.opener.focus({ preventScroll: true });
+    this.opener = null;
   }
 
   private watchGrip(grip: HTMLElement): void {

@@ -115,6 +115,24 @@ describe("contrast and color vision checks, on each theme's background", () => {
       expect(contrastRatio(hex(theme, "accent"), hex(theme, "panel"))).toBeGreaterThanOrEqual(4.5);
     });
 
+    it(`${theme.label}: every text color the style sheet uses passes WCAG AA where it is drawn, small text included`, () => {
+      // muted text also sits on the bare stage (district names, the chip) and on a panel
+      expect(contrastRatio(hex(theme, "textMuted"), hex(theme, "background"))).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(hex(theme, "text"), hex(theme, "background"))).toBeGreaterThanOrEqual(4.5);
+      // warnings: the red as text, and the panel color as text on a red disc
+      expect(contrastRatio(hex(theme, "riskVeryHigh"), hex(theme, "panel"))).toBeGreaterThanOrEqual(4.5);
+      // the focus ring and the borders of controls are non-text: 3:1 against what they sit on
+      expect(contrastRatio(hex(theme, "accent"), hex(theme, "background"))).toBeGreaterThanOrEqual(3);
+    });
+
+    it(`${theme.label}: the edge of a control stands out from its panel by 3:1`, () => {
+      // --control-edge is the muted text color mixed 75/25 into the panel color, in sRGB
+      const muted = hex(theme, "textMuted");
+      const panel = hex(theme, "panel");
+      const edge = muted.map((c, i) => 0.75 * c + 0.25 * (panel[i] as number)) as unknown as typeof muted;
+      expect(contrastRatio(edge, panel)).toBeGreaterThanOrEqual(3);
+    });
+
     it(`${theme.label}: the sequential ramp gets steadily ${theme.mode === "dark" ? "lighter" : "darker"}, so it reads without hue`, () => {
       const l = theme.ramps.sequential.map((c) => luminance(parseHex(c)));
       for (let i = 1; i < l.length; i++) {
