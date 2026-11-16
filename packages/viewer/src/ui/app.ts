@@ -45,7 +45,7 @@ import { biggestChanges, CHANGE, changePlacements, type FileChange } from "../vi
 import { parseHex } from "../view/color";
 import { projectContext } from "../view/context";
 import { describeCity } from "../view/describe";
-import { type DetailRow, fileDetails } from "../view/details";
+import { fileDetails } from "../view/details";
 import { factoryView } from "../view/factory";
 import { freeRect, type Insets, NO_INSETS } from "../view/framing";
 import { healthView, scoreAt } from "../view/health";
@@ -57,7 +57,8 @@ import { SCALE_KINDS, type ScaleKind } from "../view/scales";
 import { buildDelays, buildState } from "../view/state";
 import { statusChip, statusDetails } from "../view/status";
 import { blockLegend, blockSize, voxelize } from "../view/voxel";
-import { fileCardView, folderCardView, rowView } from "./card-view";
+import { fileCardView, folderCardView } from "./card-view";
+import { renderFileDetails } from "./details-view";
 import { DistrictLabelLayer } from "./district-labels";
 import { ExportMenu } from "./export-menu";
 import { FileFinder } from "./file-finder";
@@ -1370,110 +1371,21 @@ export class App {
     this.selectedUnion = union;
     this.scene.setSelection(union);
 
-    const copy = el("button", {
-      class: "quiet copy",
-      text: "Copy path",
-      title: "Copy the path of the file",
-      attrs: { type: "button" },
-    });
-    copy.addEventListener("click", () => {
-      void navigator.clipboard?.writeText(d.path).then(() => {
-        copy.textContent = "Copied";
-        setTimeout(() => {
-          copy.textContent = "Copy path";
-        }, 1500);
-      });
-    });
-    const detailRow = (r: DetailRow) =>
-      el(
-        "div",
-        { class: "kv", title: r.title, attrs: { "data-metric": r.id } },
-        el("span", { class: "k", text: r.label }),
-        el("span", { class: "v", text: r.value }),
-        r.rank !== undefined
-          ? el(
-              "span",
-              { class: "rank", title: `Higher than ${format.percent(r.rank)} of the files` },
-              el("i", { style: { width: `${Math.round(r.rank * 100)}%` } }),
-            )
-          : undefined,
-      );
-    this.details.append(
-      el("h2", { class: "pane-title", text: d.title }),
-      el("div", { class: "pane-path" }, this.breadcrumb(d.path), copy),
-      el("div", { class: "muted", text: `${d.language}${d.isTest ? " · test file" : ""}` }),
-      ...(d.risks.length ? [el("p", { class: "risks", text: d.risks.join(" · ") })] : []),
-      el("h3", { text: "Shown in the city" }),
-      ...d.channels.map((r) => rowView(r)),
-    );
     const changes = frameChangeRows(s.data, frame, union, s.mapping, format);
-    if (changes.length) {
-      this.details.append(el("h3", { text: "This frame" }), ...changes.map((r) => rowView(r)));
-    }
-    for (const group of d.groups) {
-      if (group.allZero) {
-        // a list of zeros says one thing: say it once, and keep the list one click away
-        this.details.append(
-          el(
-            "details",
-            { class: "zero-group", attrs: { "data-group": group.name } },
-            el(
-              "summary",
-              {},
-              el("b", { class: "zero-name", text: group.name }),
-              el("span", { class: "muted", text: group.zeroText }),
-            ),
-            ...group.rows.map(detailRow),
-          ),
-        );
-      } else {
-        this.details.append(
-          el("h3", { text: group.name, attrs: { "data-group": group.name } }),
-          ...group.rows.map(detailRow),
-        );
-      }
-    }
-    if (d.unavailable.length) {
-      this.details.append(
-        el("h3", { text: "Not available for this file" }),
-        ...d.unavailable.map((u) =>
-          el(
-            "div",
-            { class: "kv" },
-            el("span", { class: "k", text: u.label }),
-            el("span", { class: "v na", text: "n/a" }),
-            el("span", { class: "note", text: u.note }),
-          ),
-        ),
+    const touching = s.data.frames
+      .map((f) => f.info)
+      .filter(
+        (i): i is NonNullable<typeof i> =>
+          i !== undefined && (i.added.includes(file.path) || i.modified.includes(file.path)),
       );
-    }
-
-    const history = el("div", { class: "kvs" });
-    const touching = s.data.frames.filter(
-      (f) => f.info && (f.info.added.includes(file.path) || f.info.modified.includes(file.path)),
-    );
-    for (const f of touching.slice(-30).reverse()) {
-      if (!f.info) continue;
-      const jump = el("button", {
-        class: "link",
-        text: f.info.label,
-        title: "Go to this frame",
-        attrs: { type: "button" },
-      });
-      const target = f.info.index;
-      jump.addEventListener("click", () => this.animator?.goTo(target));
-      history.append(
-        el("div", { class: "kv" }, jump, el("span", { class: "muted", text: format.date(f.info.date) })),
-      );
-    }
-    if (s.data.frames.length >= 2) {
-      this.details.append(
-        el("h3", { text: "Frames that changed it" }),
-        touching.length === 0
-          ? el("p", { class: "muted", text: "No frame of this timeline changed this file." })
-          : history,
-      );
-    }
+    renderFileDetails(this.details, {
+      details: d,
+      trail: this.breadcrumb(d.path),
+      changes,
+      touching,
+      timeline: s.data.frames.length >= 2,
+      onGoToFrame: (target) => this.animator?.goTo(target),
+    });
     this.details.hidden = false;
   }
 
