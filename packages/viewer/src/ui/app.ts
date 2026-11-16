@@ -25,20 +25,17 @@ import { makePathFilter } from "../lib/glob";
 import { defaultMapping, type Mapping, type Preset, presetStatuses } from "../presets/index";
 import { CityScene, type Pick } from "../scene/CityScene";
 import { applyTheme, DEFAULT_THEME, THEMES, type Theme, themeById } from "../themes/index";
-import { biggestChanges, CHANGE, changePlacements, type FileChange } from "../view/change";
+import { biggestChanges, CHANGE, changePlacements } from "../view/change";
 import { parseHex } from "../view/color";
 import { projectContext } from "../view/context";
-import { describeCity } from "../view/describe";
 import { factoryView } from "../view/factory";
 import { type Insets, NO_INSETS } from "../view/framing";
 import { healthView, scoreAt } from "../view/health";
-import { type LegendModel, legendModel } from "../view/legend";
 import { hiddenLensesLine } from "../view/lenses";
 import { type ColorLegend, computePlacements, computeTints } from "../view/placements";
 import type { ScaleKind } from "../view/scales";
 import { buildDelays, buildState } from "../view/state";
-import { statusChip, statusDetails } from "../view/status";
-import { blockLegend, blockSize, voxelize } from "../view/voxel";
+import { blockSize, voxelize } from "../view/voxel";
 import { AppearanceMenu, type MotionSetting } from "./appearance-menu";
 import { DistrictLabelLayer } from "./district-labels";
 import { ExportMenu } from "./export-menu";
@@ -46,19 +43,18 @@ import { Exporter, type ExporterHost } from "./exporter";
 import { renderFactoryPanel } from "./factory-panel";
 import { FileFinder } from "./file-finder";
 import { Film } from "./film";
+import { FrameNotes } from "./frame-notes";
 import { renderHealthPanel } from "./health-panel";
 import { fillHelp } from "./help";
 import { HoverCard } from "./hover-card";
 import { type IconName, icon } from "./icons";
 import { Inspector, type InspectorTab } from "./inspector";
 import { handleKey, type KeyActions } from "./keyboard";
-import { renderLegendBox } from "./legend-box";
 import { lensGroups, renderLensButton, renderLensList } from "./lens";
 import { PointerController } from "./pointer";
 import { closePopovers, watchPopovers } from "./popovers";
 import { ScoreBox } from "./score-box";
 import { Selection } from "./selection";
-import { renderStatusChip } from "./status-chip";
 import { TimelineBar } from "./timeline-bar";
 import { type TestsMode, ViewPanel } from "./view-panel";
 
@@ -122,9 +118,18 @@ export class App {
   private insets: Insets = NO_INSETS;
   /** Under this width the panels overlay the stage instead of taking room from the city. */
   private readonly medium = window.matchMedia(MEDIUM_QUERY);
-  private readonly changesBox = el("section", { class: "changes", attrs: { hidden: "" } });
   /** The preset in force before a channel was changed by hand: the way back. */
   private lastPreset: string | undefined;
+  /** What the page says about the frame in words: legend, status, description, biggest changes. */
+  private readonly notes = new FrameNotes({
+    scene: () => this.scene,
+    stage: () => this.stage,
+    state: () => this.state,
+    animator: () => this.animator,
+    theme: () => this.theme,
+    modelIndex: (union) => this.modelIndex(union),
+    openDetails: (union) => this.selection.open(union),
+  });
   /** The view panel: the channels, the marker, the scale and the filter. */
   private readonly viewPanel = new ViewPanel(
     this.panel,
@@ -132,7 +137,7 @@ export class App {
       state: () => this.state,
       report: () => this.report,
       lastPreset: () => this.lastPreset,
-      changesBox: this.changesBox,
+      changesBox: this.notes.changesBox,
       setMapping: (patch) => this.setMapping(patch),
       choosePreset: (id) => this.choosePreset(id),
       refresh: () => this.refresh(),
@@ -140,10 +145,6 @@ export class App {
     },
     safeStorage(() => localStorage.getItem(PANEL_KEY)) === "open" && !window.matchMedia(MEDIUM_QUERY).matches,
   );
-  private readonly legendBox = el("section", {
-    class: "legend",
-    attrs: { "aria-label": "Legend", hidden: "" },
-  });
   /** The building the details are about. */
   private readonly selection = new Selection({
     scene: () => this.scene,
@@ -178,7 +179,6 @@ export class App {
   });
   private factory: Factory | undefined;
   private factoryPeriod: "last30" | "all" = "last30";
-  private readonly status = el("footer", { class: "status" });
   /** What was analyzed: the project, its branch or revision, the subfolder when only one was taken. */
   private readonly context = el("span", {
     class: "context",
@@ -234,12 +234,6 @@ export class App {
   private slug: string | undefined;
   private available: Available = {};
   private readonly reducedQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-  /** Shown with `?fps` in the address: images per second, for performance checks. */
-  private readonly fpsBox = new URLSearchParams(location.search).has("fps")
-    ? el("span", { class: "fps" })
-    : undefined;
-  /** What a screen reader is told about the picture; the canvas points at it. */
-  private readonly cityDescription = el("p", { class: "sr-only", attrs: { id: "city-description" } });
   private readonly finder = new FileFinder({
     files: () => this.finderFiles(),
     onChoose: (entry) => this.selection.open(entry.union),
@@ -288,13 +282,13 @@ export class App {
       this.header,
       this.panel,
       this.bar.element,
-      this.legendBox,
-      this.status,
+      this.notes.legendBox,
+      this.notes.status,
       this.card.element,
       this.inspector.element,
       this.helpDialog,
       this.dropZone,
-      this.cityDescription,
+      this.notes.description,
     );
     this.scene = new CityScene(this.stage, this.theme);
     // the city is framed in what the bar, the panels and the timeline leave free
@@ -304,8 +298,8 @@ export class App {
       this.header,
       this.panel,
       this.bar.element,
-      this.status,
-      this.legendBox,
+      this.notes.status,
+      this.notes.legendBox,
       ...this.rightPanels(),
     ])
       covering.observe(node);
@@ -332,7 +326,7 @@ export class App {
       stage: this.stage,
       theme: () => this.theme,
       report: () => this.report,
-      legend: () => this.legend(),
+      legend: () => this.notes.legend(),
       districtLabels: this.districtLabels,
       exportMenu: this.exportMenu,
       stateOf: (frame) => this.stateOf(frame),
@@ -348,7 +342,7 @@ export class App {
       if (this.medium.matches) this.viewPanel.fold();
       this.updateFreeArea();
     });
-    if (this.fpsBox) {
+    if (this.notes.fpsBox) {
       // performance check from the console: milliseconds per image during a move
       (
         window as unknown as { factoryCityBenchmark?: (images?: number, options?: object) => number }
@@ -709,11 +703,11 @@ export class App {
         ? changePlacements(s.data, a.frame, s.layout, s.mapping, this.theme)
         : undefined;
     s.legend = compared?.legend ?? computePlacements(s.model, s.layout, s.mapping, this.theme).legend;
-    this.renderChanges(compared ? biggestChanges(compared.changes) : []);
+    this.notes.renderChanges(compared ? biggestChanges(compared.changes) : []);
     this.scene.setPlinthTints(computeTints(s.model, s.mapping, this.theme));
     this.bar.showFrame(a.frame, this.animator?.reducedMotion ?? false);
-    this.renderLegend();
-    this.renderStatus();
+    this.notes.renderLegend();
+    this.notes.renderStatus();
     if (!this.healthPanel.hidden) this.renderHealth();
     this.renderScore();
   }
@@ -735,8 +729,8 @@ export class App {
     const s = this.state;
     if (s) this.scoreBox.setScore(scoreAt(s.data, this.report, a.playhead));
     this.updateFrameViews();
-    if (this.fpsBox)
-      this.fpsBox.textContent = `${format.integer(Math.round(this.scene.fps))} images per second`;
+    if (this.notes.fpsBox)
+      this.notes.fpsBox.textContent = `${format.integer(Math.round(this.scene.fps))} images per second`;
     return moving;
   }
 
@@ -774,97 +768,6 @@ export class App {
     canvas.classList.add("fade");
   }
 
-  /** Compare view: the largest changes of the frame; a click flies to the building. */
-  private renderChanges(changes: FileChange[]): void {
-    const s = this.state;
-    clear(this.changesBox);
-    this.changesBox.hidden = changes.length === 0;
-    if (!s || changes.length === 0) return;
-    const metric = s.model.metrics.get(s.mapping.area)?.label.toLowerCase() ?? s.mapping.area;
-    this.changesBox.append(el("h2", { text: "Biggest changes" }));
-    for (const c of changes) {
-      const path = s.data.paths[c.union] ?? "";
-      const go = el("button", {
-        class: "link",
-        text: path,
-        title: `Go to ${path}`,
-        attrs: { type: "button" },
-      });
-      go.addEventListener("click", () => {
-        const rect = s.layout.files.get(path);
-        if (rect) this.scene.focus(rect.x + rect.w / 2, rect.y + rect.h / 2);
-        if (this.modelIndex(c.union) >= 0) this.selection.open(c.union);
-      });
-      const sign = c.delta > 0 ? "+" : "−";
-      this.changesBox.append(
-        el(
-          "div",
-          { class: "kv" },
-          go,
-          el("span", {
-            class: "muted",
-            text: `${c.status}, ${sign}${format.integer(Math.abs(c.delta))} ${metric}`,
-          }),
-        ),
-      );
-    }
-  }
-
-  /** For a theme made of blocks: what one block is worth. */
-  private blockNote(): string | undefined {
-    const s = this.state;
-    const block = s ? blockSize(this.theme, s.layout.width) : undefined;
-    if (!s || block === undefined) return undefined;
-    return blockLegend(
-      s.model.metrics.get(s.mapping.height)?.label ?? s.mapping.height,
-      s.model.stats.get(s.mapping.height),
-      s.mapping.scale,
-      s.mapping.clampP99,
-      this.theme.heightScale * s.layout.width,
-      block,
-      (n) => format.number(n, 1),
-    );
-  }
-
-  private legend(): LegendModel | undefined {
-    const s = this.state;
-    if (!s) return undefined;
-    return legendModel(s.model, s.mapping, s.legend, this.theme.mode, format.number, this.blockNote());
-  }
-
-  private renderLegend(): void {
-    const s = this.state;
-    const legend = this.legend();
-    this.legendBox.hidden = !s || !legend;
-    if (s && legend) renderLegendBox(this.legendBox, legend, s.model, this.theme);
-    // the legend is pinned at the bottom left: the timeline and the chip start to its right
-    this.stage.parentElement?.style.setProperty(
-      "--legend-room",
-      this.legendBox.hidden ? "0px" : "calc(var(--legend-w) + var(--gutter))",
-    );
-  }
-
-  /** The text a screen reader gets for the picture: the question asked, the counts and the frame. */
-  private describe(): void {
-    const s = this.state;
-    if (!s) return;
-    const frames = s.data.frames;
-    const index = this.animator?.frame ?? 0;
-    const frame = frames.length > 1 ? frames[index]?.info : undefined;
-    this.cityDescription.textContent = describeCity(
-      {
-        project: s.model.project,
-        preset: s.preset?.label ?? "Custom view",
-        ...(s.preset?.question ? { question: s.preset.question } : {}),
-        files: s.model.files.length,
-        districts: [...s.layout.folders.keys()].filter((p) => p !== "" && !p.includes("/")).length,
-        ...(frame ? { frame: { index, count: frames.length, label: frame.label } } : {}),
-      },
-      format.integer,
-    );
-    this.scene.canvas.setAttribute("aria-label", `City of ${s.model.project}: every building is a file`);
-  }
-
   /** The files of the frame shown, for the file finder. */
   private finderFiles(): Array<{ path: string; union: number }> {
     const s = this.state;
@@ -873,32 +776,6 @@ export class App {
     for (let union = 0; union < s.data.paths.length; union++)
       if (this.modelIndex(union) >= 0) out.push({ path: s.data.paths[union] ?? "", union });
     return out;
-  }
-
-  private renderStatus(): void {
-    const s = this.state;
-    if (!s) return;
-    const manifest = s.data.manifest;
-    const coverage = manifest?.kind === "timeline" ? manifest.coverage : undefined;
-    const by = coverage?.byStrategy;
-    this.describe();
-    renderStatusChip(
-      this.status,
-      statusChip(s.model, format.integer),
-      statusDetails(
-        s.model,
-        format.integer,
-        coverage && by
-          ? {
-              linked: coverage.linked,
-              commits: coverage.commits,
-              issues: coverage.issues,
-              detail: `By closing keyword: ${by["closing-keyword"]}, by pull request: ${by["pull-request"]}, by reference: ${by.reference}, by branch name: ${by.branch}, unlinked: ${by.unlinked}`,
-            }
-          : undefined,
-      ),
-      ...(this.fpsBox ? [this.fpsBox] : []),
-    );
   }
 
   // ------------------------------------------------------------ hover card
@@ -1119,7 +996,7 @@ export class App {
   /** What sits on the stage and hides the city, relative to the stage: district names keep clear of it. */
   private coveredBoxes(): Array<{ x: number; y: number; w: number; h: number }> {
     const stage = this.stage.getBoundingClientRect();
-    return [this.legendBox, this.inspector.element, this.status]
+    return [this.notes.legendBox, this.inspector.element, this.notes.status]
       .filter((n) => !n.hidden)
       .map((n) => n.getBoundingClientRect())
       .filter((r) => r.width > 0)
@@ -1139,8 +1016,8 @@ export class App {
     };
     const header = shown(this.header);
     const left = shown(this.panel);
-    const bottom = shown(this.bar.element) ?? shown(this.status);
-    const status = shown(this.status);
+    const bottom = shown(this.bar.element) ?? shown(this.notes.status);
+    const status = shown(this.notes.status);
     // folded, the inspector is a small summary laid over the stage: it takes no room from the city
     const right = (this.inspector.isFolded ? [] : this.rightPanels())
       .map(shown)
@@ -1156,7 +1033,7 @@ export class App {
     // what sits on the stage (the legend) places itself in the free area through these
     this.insets = insets;
     // the tallest thing pinned at the bottom: a panel stops above it
-    const legend = shown(this.legendBox);
+    const legend = shown(this.notes.legendBox);
     const stack = Math.max(
       legend ? stage.bottom - legend.top : 0,
       bottom ? stage.bottom - bottom.top : 0,
