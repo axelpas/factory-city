@@ -24,6 +24,8 @@ export function createUniforms() {
   };
 }
 
+export type { Rgb, Theme };
+
 export type SceneUniforms = ReturnType<typeof createUniforms>;
 
 /** The look of the buildings: the colors, the render mode, the ramp and the glow, all from the theme. */

@@ -1,18 +1,13 @@
 import type { Layout } from "@factory-city/layout";
 import * as THREE from "three";
-import type { Theme } from "../themes/index";
-import type { Rgb } from "../view/color";
-import type { Insets } from "../view/framing";
-import { CameraRig, type CameraState } from "./camera-rig";
-import { benchmark, type CaptureHost, renderToCanvas } from "./capture";
+import { CameraRig } from "./camera-rig";
 import { CityContent } from "./city-content";
 import { Environment } from "./environment";
-import { Look } from "./look";
+import { Look, type Rgb, type Theme } from "./look";
 import { Outlines } from "./outlines";
 import { Picker } from "./picker";
 import { RenderLoop } from "./render-loop";
-
-export type { CameraState } from "./camera-rig";
+import { SceneFacade } from "./scene-facade";
 
 export type Pick =
   | { kind: "file"; index: number }
@@ -23,14 +18,15 @@ export type Pick =
 type Box = { x: number; y: number; w: number; h: number };
 
 /** The 3D city: buildings interpolated on the GPU, plinths, lots, camera, picking and offscreen rendering. */
-export class CityScene {
-  private readonly renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: false });
-  private readonly scene = new THREE.Scene();
+export class CityScene extends SceneFacade {
+  protected readonly renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: false });
+  protected readonly scene = new THREE.Scene();
   private readonly look = new Look();
-  private readonly environment = new Environment(this.scene);
+  protected readonly uniforms = this.look.uniforms;
+  protected readonly environment = new Environment(this.scene);
   private readonly content = new CityContent(this.scene);
   /** The cameras and everything that moves them. */
-  private readonly rig: CameraRig;
+  protected readonly rig: CameraRig;
   /** The outlines of what is pointed at and what is selected. */
   private readonly outlines: Outlines;
   /** What is under a pixel of the picture. */
@@ -49,6 +45,7 @@ export class CityScene {
     private readonly container: HTMLElement,
     private theme: Theme,
   ) {
+    super();
     this.renderer.shadowMap.enabled = theme.light.shadows;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     // shadows depend on the buildings, not on the camera: redraw them only when buildings move
@@ -230,89 +227,9 @@ export class CityScene {
     this.outlines.setSelection(index);
   }
 
-  /** Where a point of the world lands on the picture, in pixels from its top left corner. */
-  project(x: number, y: number, z: number): { x: number; y: number } {
-    const camera = this.rig.camera;
-    camera.updateMatrixWorld();
-    const size = this.renderer.getSize(new THREE.Vector2());
-    const v = new THREE.Vector3(x, y, z).project(camera);
-    return { x: ((v.x + 1) / 2) * size.x, y: ((1 - v.y) / 2) * size.y };
-  }
-
   /** True when a building, as drawn right now, is under a pixel of the picture. */
   blocked(px: number, py: number): boolean {
     return this.picker.blocked(px, py);
-  }
-
-  /** Brings a district to the middle of the free area; `ms` is the duration of the move, 0 is a cut. */
-  frameDistrict(rect: Box, ms: number): void {
-    this.rig.frameDistrict(rect, ms);
-  }
-
-  /** Moves the view to a point of the map, keeping the viewing direction and coming closer. */
-  focus(x: number, z: number): void {
-    this.rig.focus(x, z);
-  }
-
-  /** Where the camera is, to come back to it after an export that moved it. */
-  cameraState(): CameraState {
-    return this.rig.cameraState();
-  }
-
-  /** The view to use for a picture of an exact size. */
-  exportView(width: number, height: number): CameraState {
-    return this.rig.exportView(width, height);
-  }
-
-  /** Places the camera at a saved view turned by an angle around the vertical axis through its target. */
-  setCameraState(state: CameraState, angle = 0): void {
-    this.rig.setCameraState(state, angle);
-  }
-
-  /** Tells the scene what the bar, the panels and the timeline cover; a framed city is framed again. */
-  setFreeArea(insets: Insets): void {
-    this.rig.setFreeArea(insets);
-  }
-
-  /** The part of the picture the panels leave free, in pixels. */
-  freeArea(): Box {
-    return this.rig.freeArea();
-  }
-
-  /** The camera as a three-quarter view of the whole city. */
-  resetCamera(): void {
-    this.rig.resetCamera();
-  }
-
-  /** Straight from above, without perspective: a plan of the city, framed in the free area. */
-  topView(): void {
-    this.rig.topView();
-  }
-
-  /** Average time of one image in milliseconds, for performance checks. */
-  benchmark(images = 60, options: { shadows?: boolean; pixelRatio?: number } = {}): number {
-    return benchmark(this.capture(), images, options);
-  }
-
-  /** Renders the current view at an exact size and returns it as a canvas. */
-  renderToCanvas(
-    width: number,
-    height: number,
-    after?: (ctx: CanvasRenderingContext2D) => void,
-  ): HTMLCanvasElement {
-    return renderToCanvas(this.capture(), width, height, after);
-  }
-
-  private capture(): CaptureHost {
-    return {
-      renderer: this.renderer,
-      scene: this.scene,
-      camera: () => this.rig.camera,
-      rig: this.rig,
-      sun: this.environment.sun,
-      uniforms: this.look.uniforms,
-      requestRender: () => this.requestRender(),
-    };
   }
 
   private resize(): void {
