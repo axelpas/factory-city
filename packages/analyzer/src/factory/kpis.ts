@@ -7,26 +7,36 @@ export { FACTORY_NOTICE, KPI_DEFINITIONS, MIN_GROUP, MIN_ISSUES } from "./defini
 
 const DAY = 86_400_000;
 
-function groupsOf(frames: readonly Frame[], days: number): FactoryPeriod["groups"] {
-  const keys: Array<[string, (f: Frame) => string | undefined]> = [
+type Pick = (f: Frame) => string | undefined;
+
+/** What the issues can be grouped by: the fixed attributes, then each tag the facts file names. */
+function groupKeys(frames: readonly Frame[]): Array<[string, Pick]> {
+  const keys: Array<[string, Pick]> = [
     ["agent", (f) => f.metrics.agent],
     ["model", (f) => f.metrics.model],
     ["kind", (f) => f.kind],
     ["estimate", (f) => f.metrics.estimate],
   ];
-  const tags = new Set<string>();
-  for (const f of frames) for (const t of Object.keys(f.metrics.tags ?? {})) tags.add(t);
+  const tags = new Set(frames.flatMap((f) => Object.keys(f.metrics.tags ?? {})));
   for (const tag of [...tags].sort()) keys.push([`tag:${tag}`, (f) => f.metrics.tags?.[tag]]);
+  return keys;
+}
+
+/** The issues of each value of an attribute; the issues that do not have one are left out. */
+function bucketsOf(frames: readonly Frame[], pick: Pick): Map<string, Frame[]> {
+  const buckets = new Map<string, Frame[]>();
+  for (const f of frames) {
+    const value = pick(f);
+    if (value === undefined) continue;
+    buckets.set(value, [...(buckets.get(value) ?? []), f]);
+  }
+  return buckets;
+}
+
+function groupsOf(frames: readonly Frame[], days: number): FactoryPeriod["groups"] {
   const out: FactoryPeriod["groups"] = {};
-  for (const [name, pick] of keys) {
-    const buckets = new Map<string, Frame[]>();
-    for (const f of frames) {
-      const value = pick(f);
-      if (value === undefined) continue;
-      const list = buckets.get(value);
-      if (list) list.push(f);
-      else buckets.set(value, [f]);
-    }
+  for (const [name, pick] of groupKeys(frames)) {
+    const buckets = bucketsOf(frames, pick);
     if (buckets.size === 0) continue;
     const group: Record<string, FactoryGroup> = {};
     for (const [value, list] of [...buckets].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {

@@ -29,6 +29,22 @@ const KEY_METRICS = [
   "issues_recent",
 ];
 
+/** The dimensions on which a file is high or very high, with its value and the bound it passes. */
+function exceededOf(f: HealthFile, dimensions: readonly RiskDimension[]): Hotspot["exceeded"] {
+  const exceeded: Hotspot["exceeded"] = [];
+  for (const d of dimensions) {
+    const level = rate(f.values, d);
+    if (level !== "high" && level !== "veryHigh") continue;
+    exceeded.push({
+      dimension: d.id,
+      level,
+      value: f.values[d.metric] as number,
+      bound: level === "veryHigh" ? d.bounds[2] : d.bounds[1],
+    });
+  }
+  return exceeded;
+}
+
 /**
  * The top hotspots: complex code that changes often, or complex and large code when there is no history.
  * Tests are left out. Ties are broken by path, so the ranking is deterministic.
@@ -54,18 +70,7 @@ export function findHotspots(
     .sort((a, b) => b.heat - a.heat || (a.f.path < b.f.path ? -1 : 1))
     .slice(0, top);
   return ranked.map(({ f }, i) => {
-    const exceeded: Hotspot["exceeded"] = [];
-    for (const d of dimensions) {
-      const level = rate(f.values, d);
-      if (level === "high" || level === "veryHigh") {
-        exceeded.push({
-          dimension: d.id,
-          level,
-          value: f.values[d.metric] as number,
-          bound: level === "veryHigh" ? d.bounds[2] : d.bounds[1],
-        });
-      }
-    }
+    const exceeded = exceededOf(f, dimensions);
     const metrics: Record<string, number> = {};
     for (const id of KEY_METRICS) if (f.values[id] !== undefined) metrics[id] = f.values[id] as number;
     const rloc = f.values.rloc ?? 0;

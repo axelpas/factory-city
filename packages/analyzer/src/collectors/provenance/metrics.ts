@@ -77,6 +77,20 @@ export interface Retrospective {
   alive_90?: number;
 }
 
+/** The sums over the tallies of a group of steps, and the later fix steps that touched their lines. */
+function sumTallies(tallies: readonly (StepTally | undefined)[], stepIndices: readonly number[]) {
+  const sums = { added: 0, reworked: 0, dead30: 0, dead90: 0, fixes: new Set<number>() };
+  for (const t of stepIndices.map((i) => tallies[i])) {
+    if (!t) continue;
+    sums.added += t.added;
+    sums.reworked += t.reworked;
+    sums.dead30 += t.dead30;
+    sums.dead90 += t.dead90;
+    for (const f of t.fixes) if (!stepIndices.includes(f)) sums.fixes.add(f);
+  }
+  return sums;
+}
+
 /**
  * Retrospective metrics of a group of steps (one frame): what later happened to the lines they added.
  * `rework_after` is pending (undefined) until the rework horizon has passed since the frame.
@@ -86,20 +100,7 @@ export function retrospectiveOf(
   stepIndices: readonly number[],
   age: { tipTime: number; frameTime: number; reworkDays: number },
 ): Retrospective {
-  let added = 0;
-  let reworked = 0;
-  let dead30 = 0;
-  let dead90 = 0;
-  const fixes = new Set<number>();
-  for (const i of stepIndices) {
-    const t = tallies[i];
-    if (!t) continue;
-    added += t.added;
-    reworked += t.reworked;
-    dead30 += t.dead30;
-    dead90 += t.dead90;
-    for (const f of t.fixes) if (!stepIndices.includes(f)) fixes.add(f);
-  }
+  const { added, reworked, dead30, dead90, fixes } = sumTallies(tallies, stepIndices);
   const later = age.tipTime - age.frameTime;
   return {
     ...(later >= age.reworkDays * DAY && added > 0 ? { rework_after: reworked / added } : {}),

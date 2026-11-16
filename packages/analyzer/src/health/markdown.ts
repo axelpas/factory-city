@@ -61,19 +61,9 @@ function hotspotBlock(h: Hotspot, dimensions: readonly RiskDimension[]): string 
   return lines.join("\n");
 }
 
-/** The report as Markdown, with one issue-ready block per hotspot. */
-export function reportMarkdown(report: Report, top = 5): string {
+function profileTable(report: Report): string[] {
   const { health, dimensions } = report;
-  const out: string[] = [
-    `# Code health: ${report.project}`,
-    "",
-    `Snapshot ${report.commit ?? "of the files on disk"}, data level ${report.dataLevel}.`,
-    "",
-    `## Score: ${health.score} out of 100`,
-    "",
-    report.notice,
-    `Dimensions used: ${health.scored.map((id) => dimensions.find((d) => d.id === id)?.label ?? id).join(", ") || "none"}.`,
-    "",
+  const out = [
     "## Risk profile",
     "",
     "Share of code, by real lines, at each risk level.",
@@ -94,21 +84,57 @@ export function reportMarkdown(report: Report, top = 5): string {
       "",
       `Unavailable at this data level or for this code: ${missing.map((d) => d.label).join(", ")}.`,
     );
-  out.push("", "## Thresholds", "");
-  for (const d of dimensions) {
-    out.push(
-      `- **${d.label}** (\`${d.metric}\`${d.minRloc ? `, files of at least ${d.minRloc} real lines` : ""}): ${bounds(d)}. Source: ${d.source}.`,
-    );
-  }
-  out.push("", `## Hotspots (top ${Math.min(top, report.hotspots.length)})`, "");
+  return out;
+}
+
+function thresholdList(dimensions: readonly RiskDimension[]): string[] {
+  return [
+    "",
+    "## Thresholds",
+    "",
+    ...dimensions.map(
+      (d) =>
+        `- **${d.label}** (\`${d.metric}\`${d.minRloc ? `, files of at least ${d.minRloc} real lines` : ""}): ${bounds(d)}. Source: ${d.source}.`,
+    ),
+  ];
+}
+
+function hotspotList(report: Report, top: number): string[] {
+  const out = ["", `## Hotspots (top ${Math.min(top, report.hotspots.length)})`, ""];
   if (report.hotspots.length === 0) out.push("No hotspot: no source file with measured complexity.");
-  for (const h of report.hotspots.slice(0, top)) out.push(hotspotBlock(h, dimensions), "");
-  if (report.hiddenLinks.length) {
-    out.push("## Hidden links (experimental)", "");
-    for (const link of report.hiddenLinks)
-      out.push(`- ${link.files.map((f) => `\`${f}\``).join(" and ")}: ${link.detail}`);
-    out.push("");
-  }
+  for (const h of report.hotspots.slice(0, top)) out.push(hotspotBlock(h, report.dimensions), "");
+  return out;
+}
+
+function hiddenLinkList(report: Report): string[] {
+  if (report.hiddenLinks.length === 0) return [];
+  return [
+    "## Hidden links (experimental)",
+    "",
+    ...report.hiddenLinks.map((l) => `- ${l.files.map((f) => `\`${f}\``).join(" and ")}: ${l.detail}`),
+    "",
+  ];
+}
+
+/** The report as Markdown, with one issue-ready block per hotspot. */
+export function reportMarkdown(report: Report, top = 5): string {
+  const { health, dimensions } = report;
+  const used = health.scored.map((id) => dimensions.find((d) => d.id === id)?.label ?? id).join(", ");
+  const out = [
+    `# Code health: ${report.project}`,
+    "",
+    `Snapshot ${report.commit ?? "of the files on disk"}, data level ${report.dataLevel}.`,
+    "",
+    `## Score: ${health.score} out of 100`,
+    "",
+    report.notice,
+    `Dimensions used: ${used || "none"}.`,
+    "",
+    ...profileTable(report),
+    ...thresholdList(dimensions),
+    ...hotspotList(report, top),
+    ...hiddenLinkList(report),
+  ];
   return `${out
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
