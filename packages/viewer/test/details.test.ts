@@ -3,7 +3,8 @@ import { statsOf } from "../src/data/model";
 import { createFormat } from "../src/lib/format";
 import { defaultMapping } from "../src/presets/index";
 import { placeCard } from "../src/view/card-place";
-import { fileDetails, risksOf, standing } from "../src/view/details";
+import { standing } from "../src/view/detail-rows";
+import { fileDetails, risksOf } from "../src/view/details";
 import { languageLabel } from "../src/view/labels";
 import { makeModel } from "./helpers";
 
