@@ -192,18 +192,6 @@ pnpm licenses:check     # every dependency must be MIT, ISC, BSD, Apache-2.0, 0B
 pnpm docs:assets        # regenerates the pictures of this page and the files of examples/
 ```
 
-## Roadmap
-
-1. Agent skills that read `report.json` and `factory.json` to audit a project and groom its backlog.
-2. A weekly timeline automation and a city diff per worktree before merge.
-3. An MCP server and a Claude skill, usable from other assistants that speak MCP.
-4. A VS Code extension hosting the viewer, where clicking a building opens the file.
-5. A baseline check that fails when hotspots get worse.
-6. Importing agent session reports as facts.
-7. Cohesion and coupling for more languages.
-8. GIF export.
-9. More themes.
-
 ## Prior art and credits
 
 Factory City stands on published work: [CodeCharta](https://codecharta.com) (the `cc.json` format), VERSO (Langelier, Sahraoui and Poulin, 2005: height = complexity, color = coupling, twist = cohesion), CodeCity (Wettel and Lanza), the history-resistant layout of M3triCity (Pfahler et al., 2020), CodeMetropolis (a code city as a block world), hotspot analysis (complexity combined with change frequency), LCOM4 (Hitz and Montazeri) and LCOM5 (Henderson-Sellers) for cohesion, the package metrics of Abdeen, Ducasse and Sahraoui, the SZZ approach (Sliwerski, Zimmermann, Zeller) for bug origins, two-week code churn as a rework signal, and the DORA delivery metrics. The code is original; no code is copied from these projects. Third-party dependencies are listed in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
