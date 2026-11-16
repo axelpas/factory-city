@@ -81,6 +81,65 @@ function edges(rect: Rect, y: number): Array<[[number, number, number], [number,
   ];
 }
 
+type Pt = { x: number; y: number };
+interface Edge {
+  a: Pt;
+  b: Pt;
+  /** The point at a share of the way along the edge, on the plinth top. */
+  at: (t: number) => Pt;
+}
+
+/** The edge of a plinth lowest on the screen: the one nearest to the viewer. */
+function frontEdge(label: DistrictLabel, projector: Projector): Edge | undefined {
+  const top = plinthTop(label.depth);
+  let front: Edge | undefined;
+  for (const [p, q] of edges(label.rect, top)) {
+    const a = projector.project(...p);
+    const b = projector.project(...q);
+    if (front && a.y + b.y <= front.a.y + front.b.y) continue;
+    front = { a, b, at: (t) => projector.project(p[0] + (q[0] - p[0]) * t, top, p[2] + (q[2] - p[2]) * t) };
+  }
+  return front;
+}
+
+/** Whether a box can hold a name: inside the free area, over no other name and no avoided box. */
+function isClear(box: Box, free: Box, placed: readonly PlacedLabel[], avoid: readonly Box[]): boolean {
+  return (
+    inside(box, free) && !placed.some((p) => overlaps(p.box, box)) && !avoid.some((a) => overlaps(a, box))
+  );
+}
+
+/** Whether a building stands over one of the corners, the middle or the anchor of the box. */
+function coversBuilding(box: Box, anchor: Pt, projector: Projector): boolean {
+  const samples = [
+    [box.x, box.y],
+    [box.x + box.w, box.y],
+    [box.x + box.w / 2, box.y + box.h / 2],
+    [box.x, box.y + box.h],
+    [box.x + box.w, box.y + box.h],
+    [anchor.x, anchor.y],
+  ] as const;
+  return samples.some(([x, y]) => projector.blocked(x, y));
+}
+
+/** The first place along the edge where the name fits clear of everything. */
+function placeAlong(
+  front: Edge,
+  size: { w: number; h: number },
+  context: { projector: Projector; free: Box; placed: readonly PlacedLabel[]; avoid: readonly Box[] },
+): Box | undefined {
+  for (const t of ALONG) {
+    const anchor = front.at(t);
+    const box = { x: anchor.x - size.w / 2, y: anchor.y + 1, w: size.w, h: size.h };
+    if (
+      isClear(box, context.free, context.placed, context.avoid) &&
+      !coversBuilding(box, anchor, context.projector)
+    )
+      return box;
+  }
+  return undefined;
+}
+
 /**
  * Names the districts on the ground. Each name hangs from the edge of its plinth nearest to the viewer, on
  * the street side, so it lies where no building stands: a name whose box would cover a building, another
@@ -98,47 +157,13 @@ export function placeLabels(
   const placed: PlacedLabel[] = [];
   for (const label of labels) {
     if (placed.length >= MAX_LABELS) break;
-    const top = plinthTop(label.depth);
-    // the edge lowest on the screen is the one nearest to the viewer
-    let front:
-      | {
-          a: { x: number; y: number };
-          b: { x: number; y: number };
-          at: (t: number) => { x: number; y: number };
-        }
-      | undefined;
-    for (const [p, q] of edges(label.rect, top)) {
-      const a = projector.project(...p);
-      const b = projector.project(...q);
-      if (!front || a.y + b.y > front.a.y + front.b.y)
-        front = {
-          a,
-          b,
-          at: (t) => projector.project(p[0] + (q[0] - p[0]) * t, top, p[2] + (q[2] - p[2]) * t),
-        };
-    }
+    const front = frontEdge(label, projector);
     if (!front) continue;
     const size = measure(label);
     const edgePx = Math.hypot(front.a.x - front.b.x, front.a.y - front.b.y);
     if (label.depth > 1 && size.w + FIT_PAD > edgePx) continue;
-    for (const t of ALONG) {
-      const anchor = front.at(t);
-      const box = { x: anchor.x - size.w / 2, y: anchor.y + 1, w: size.w, h: size.h };
-      if (!inside(box, free)) continue;
-      if (placed.some((p) => overlaps(p.box, box))) continue;
-      if (avoid.some((a) => overlaps(a, box))) continue;
-      const samples = [
-        [box.x, box.y],
-        [box.x + box.w, box.y],
-        [box.x + box.w / 2, box.y + box.h / 2],
-        [box.x, box.y + box.h],
-        [box.x + box.w, box.y + box.h],
-        [anchor.x, anchor.y],
-      ] as const;
-      if (samples.some(([x, y]) => projector.blocked(x, y))) continue;
-      placed.push({ ...label, box });
-      break;
-    }
+    const box = placeAlong(front, size, { projector, free, placed, avoid });
+    if (box) placed.push({ ...label, box });
   }
   return placed;
 }
