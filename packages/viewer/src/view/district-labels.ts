@@ -93,6 +93,7 @@ export function placeLabels(
   projector: Projector,
   measure: (label: DistrictLabel) => { w: number; h: number },
   free: Box,
+  avoid: readonly Box[] = [],
 ): PlacedLabel[] {
   const placed: PlacedLabel[] = [];
   for (const label of labels) {
@@ -125,6 +126,7 @@ export function placeLabels(
       const box = { x: anchor.x - size.w / 2, y: anchor.y + 1, w: size.w, h: size.h };
       if (!inside(box, free)) continue;
       if (placed.some((p) => overlaps(p.box, box))) continue;
+      if (avoid.some((a) => overlaps(a, box))) continue;
       const samples = [
         [box.x, box.y],
         [box.x + box.w, box.y],

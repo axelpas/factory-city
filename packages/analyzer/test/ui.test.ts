@@ -63,7 +63,7 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
     expect(r.disabled).toBeGreaterThan(0);
   });
 
-  it("shows a compact legend on the stage, in the free area, with definitions on demand", async () => {
+  it("pins a compact legend at the bottom left, under the view panel and left of the timeline, with definitions on demand", async () => {
     const r = await inPage<Record<string, unknown>>(`
       const legend = document.querySelector(".legend");
       const panel = box(document.querySelector(".panel"));
@@ -76,8 +76,10 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
       return {
         onStage: legend.parentElement === document.querySelector(".stage").parentElement && !legend.closest(".panel"),
         visible: !legend.hidden && box(legend).w > 0,
-        rightOfPanel: box(legend).x >= panel.right,
-        aboveTimeline: box(legend).bottom <= timeline.y,
+        pinnedLeft: box(legend).x <= 16,
+        pinnedBottom: innerHeight - box(legend).bottom <= 16,
+        underPanel: box(legend).y >= panel.bottom,
+        leftOfTimeline: box(legend).right <= timeline.x,
         channels: lines.map((l) => l.getAttribute("data-channel")),
         glyphs: lines.every((l) => l.querySelector("summary svg")),
         oneLine: closedHeight < 30,
@@ -89,8 +91,10 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
     expect(r).toEqual({
       onStage: true,
       visible: true,
-      rightOfPanel: true,
-      aboveTimeline: true,
+      pinnedLeft: true,
+      pinnedBottom: true,
+      underPanel: true,
+      leftOfTimeline: true,
       channels: ["Area", "Height", "Color"],
       glyphs: true,
       oneLine: true,
@@ -100,15 +104,17 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
     });
   });
 
-  it("starts with the view panel folded to a rail, and gives its room to the city and the timeline", async () => {
+  it("starts with the view panel folded to a rail, and an open panel stays above the legend", async () => {
     const r = await inPage<Record<string, unknown>>(`
       const panel = document.querySelector(".panel");
       const rail = { isRail: panel.classList.contains("rail"), width: box(panel).w, timelineLeft: box(document.querySelector(".timeline")).x };
+      const legendTop = box(document.querySelector(".legend")).y;
       await openPanel();
       const open = {
         isRail: panel.classList.contains("rail"),
         width: box(panel).w,
         timelineLeft: box(document.querySelector(".timeline")).x,
+        aboveLegend: box(panel).bottom <= legendTop,
         main: [...panel.querySelectorAll(":scope > .picker label")].map((l) => l.textContent),
         moreOpen: panel.querySelector("details.more").open,
         inMore: [...panel.querySelectorAll("details.more label")].map((l) => l.textContent.trim()),
@@ -124,8 +130,9 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
     const open = r.open as { width: number; timelineLeft: number };
     expect(rail.width).toBeLessThan(60);
     expect(open.width).toBeGreaterThan(250);
-    // the timeline follows the panel: it starts further left when the panel is a rail
-    expect(rail.timelineLeft).toBeLessThan(open.timelineLeft - 200);
+    // the timeline starts right of the legend, whatever the panel does
+    expect(open.timelineLeft).toBe(rail.timelineLeft);
+    expect(r.open).toMatchObject({ aboveLegend: true });
     expect(r.open).toMatchObject({
       isRail: false,
       main: ["Area", "Height", "Color"],

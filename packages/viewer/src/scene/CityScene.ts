@@ -57,6 +57,8 @@ export type Pick =
   | null;
 
 const MAX_RAMP = 8;
+/** Time the other buildings take to fade when one is pointed at. */
+const HOVER_FADE_MS = 140;
 
 /** Shared by the color and the depth material: where a vertex of a building is, right now. */
 const VERTEX_COMMON = /* glsl */ `
@@ -78,6 +80,8 @@ varying vec4 vMiscB;
 varying vec2 vFx;
 varying float vEase;
 varying vec3 vColor;
+varying float vIsHover;
+uniform float uHover;
 uniform vec3 uRamp[${MAX_RAMP}];
 uniform float uRampCount;
 
@@ -148,6 +152,10 @@ uniform float uMode;
 uniform float uBlock;
 uniform float uGlow;
 uniform float uFaceAlpha;
+// the others fade while one building is pointed at
+uniform float uHoverDim;
+uniform vec3 uDimColor;
+varying float vIsHover;
 vec4 fcWire;
 varying vec3 vBox;
 varying vec3 vSize;
@@ -177,6 +185,7 @@ function patchVertex(shader: { vertexShader: string }): void {
         vMiscA = aMiscA;
         vMiscB = aMiscB;
         vColor = fcColor(e);
+        vIsHover = float(gl_InstanceID) == uHover ? 1.0 : 0.0;
         vFx = vec2(mix(aFx.x, aFx.z, e), mix(aFx.y, aFx.w, e));
       }`,
     );
@@ -226,7 +235,14 @@ export class CityScene {
     uBlock: { value: 8 },
     uGlow: { value: 0 },
     uFaceAlpha: { value: 0.12 },
+    uHover: { value: -1 },
+    uHoverDim: { value: 0 },
+    uDimColor: { value: new THREE.Vector3() },
   };
+  /** Share of the fade of the other buildings reached, and the one wanted: 1 while a building is pointed at. */
+  private hoverDim = 0;
+  private hoverDimTarget = 0;
+  private readonly hoverBuildingHalo: THREE.LineSegments;
   private buildings: THREE.Mesh | undefined;
   private lots: THREE.LineSegments | undefined;
   private plinths: THREE.InstancedMesh | undefined;
@@ -319,7 +335,9 @@ export class CityScene {
       this.unitEdges,
       new THREE.LineBasicMaterial({ depthTest: false }),
     );
-    for (const o of [this.hoverBuilding, this.hoverFolder]) {
+    // a second, larger outline reads as one heavier line
+    this.hoverBuildingHalo = new THREE.LineSegments(this.unitEdges, this.hoverBuilding.material);
+    for (const o of [this.hoverBuilding, this.hoverBuildingHalo, this.hoverFolder]) {
       o.visible = false;
       o.renderOrder = 10;
       this.scene.add(o);
@@ -343,7 +361,7 @@ export class CityScene {
       const dt = this.lastTime ? Math.min(time - this.lastTime, 100) : 0;
       this.lastTime = time;
       const animating = this.onTick?.(dt) ?? false;
-      const flying = this.stepFly(dt);
+      const flying = this.stepFly(dt) || this.stepHoverDim(dt);
       const moved = this.controls.update();
       const moving = moved || animating || flying;
       if (moving) {
@@ -431,6 +449,7 @@ export class CityScene {
     (this.hoverFolder.material as THREE.LineBasicMaterial).color = c("folderHover");
     this.selectionMaterial.color = c("accent");
     this.uniforms.uEdgeColor.value = v("buildingEdge");
+    this.uniforms.uDimColor.value = v("dim");
     this.uniforms.uTouchColor.value = v("accent");
     this.uniforms.uMarkColor.value = v("marker");
     this.uniforms.uLotColor.value = v("plinthEdge");
@@ -609,6 +628,12 @@ export class CityScene {
             col = mix(col, uMarkColor, ring * 0.92);
             col = mix(col, uEdgeColor, max(max(edge, ringLine) * 0.85, mark * 0.7));
             col = mix(col, uTouchColor, touchEdge * 0.75);
+            float others = uHoverDim * (1.0 - vIsHover);
+            col = mix(col, uDimColor, others * 0.7);
+            if (uMode > 1.5) {
+              fcWire.rgb = mix(fcWire.rgb, uDimColor, others * 0.5);
+              fcWire.a *= 1.0 - others * 0.65;
+            }
             diffuseColor.rgb = fcToLinear(col);
           }`,
         )
@@ -855,7 +880,11 @@ export class CityScene {
     folder?: { path: string; rect: { x: number; y: number; w: number; h: number } },
   ): void {
     this.hoverBuilding.visible = false;
+    this.hoverBuildingHalo.visible = false;
     this.hoverFolder.visible = false;
+    // pointing at a building fades the others, so that it stands out
+    if (pick?.kind === "file") this.uniforms.uHover.value = pick.index;
+    this.hoverDimTarget = pick?.kind === "file" ? 1 : 0;
     const state = this.readState?.();
     if (pick?.kind === "file" && state) {
       const o = pick.index * STRIDE;
@@ -871,6 +900,13 @@ export class CityScene {
         (state[o + D] as number) * 1.01,
       );
       this.hoverBuilding.visible = true;
+      this.hoverBuildingHalo.position.copy(this.hoverBuilding.position);
+      this.hoverBuildingHalo.scale.set(
+        (state[o + W] as number) * 1.04,
+        h * 1.04,
+        (state[o + D] as number) * 1.04,
+      );
+      this.hoverBuildingHalo.visible = true;
     } else if (pick?.kind === "lot") {
       const p = this.parcels[pick.index];
       if (p && state) {
@@ -892,6 +928,23 @@ export class CityScene {
       this.hoverFolder.visible = true;
     }
     this.requestRender();
+  }
+
+  /** Fades the other buildings in and out with the pointer; true while it changes. */
+  private stepHoverDim(dtMs: number): boolean {
+    const gap = this.hoverDimTarget - this.hoverDim;
+    if (Math.abs(gap) < 0.002) {
+      if (gap !== 0) {
+        this.hoverDim = this.hoverDimTarget;
+        this.uniforms.uHoverDim.value = this.hoverDim;
+        if (this.hoverDim === 0) this.uniforms.uHover.value = -1;
+        return true;
+      }
+      return false;
+    }
+    this.hoverDim += Math.sign(gap) * Math.min(Math.abs(gap), dtMs / HOVER_FADE_MS);
+    this.uniforms.uHoverDim.value = this.hoverDim;
+    return true;
   }
 
   /** Outlines a building until another is selected, or null. The outline follows the building as it moves. */

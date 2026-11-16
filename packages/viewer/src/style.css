@@ -79,6 +79,9 @@ body {
   position: absolute;
   inset: 0;
 }
+.stage canvas.over-file {
+  cursor: pointer;
+}
 .stage canvas {
   display: block;
   touch-action: none;
@@ -356,7 +359,7 @@ button[aria-pressed="true"] {
   top: var(--below-bar);
   left: var(--gutter);
   /* as tall as its content, up to the status line */
-  max-height: calc(100vh - var(--below-bar) - var(--above-status));
+  max-height: calc(100vh - var(--below-bar) - var(--bottom-stack, var(--above-status)) - var(--gutter));
   width: var(--panel-w);
   overflow: auto;
   padding: var(--s-12);
@@ -490,11 +493,11 @@ button[aria-pressed="true"] {
   margin: var(--s-4) 0;
 }
 
-/* the legend sits on the stage, at the bottom left of the area the panels leave free */
+/* the legend is pinned at the bottom left of the screen, under the view panel; the timeline starts to its right */
 .legend {
   position: absolute;
-  left: calc(var(--free-left, 0px) + var(--gutter));
-  bottom: calc(var(--free-bottom, 0px) + var(--gutter));
+  left: var(--gutter);
+  bottom: var(--gutter);
   z-index: 20;
   width: var(--legend-w);
   padding: var(--s-8) var(--s-12);
@@ -583,7 +586,7 @@ button[aria-pressed="true"] {
 
 .status {
   position: absolute;
-  left: var(--gutter);
+  left: calc(var(--gutter) + var(--legend-room, 0px));
   bottom: var(--s-8);
   z-index: 20;
   display: flex;
@@ -1155,7 +1158,7 @@ button[aria-pressed="true"] {
 
 .timeline {
   position: absolute;
-  left: calc(var(--free-left, 0px) + var(--gutter));
+  left: calc(var(--gutter) + var(--legend-room, 0px));
   right: var(--gutter);
   bottom: 40px;
   padding: var(--s-8) var(--s-12);
@@ -1389,8 +1392,13 @@ button[aria-pressed="true"] {
   .bar {
     flex-wrap: wrap;
   }
-  .timeline {
+  /* narrow: no room beside the legend, it stacks above the timeline again */
+  .timeline,
+  .status {
     left: var(--gutter);
+  }
+  .legend {
+    bottom: calc(var(--free-bottom, 0px) + var(--gutter));
   }
 }
 @media (prefers-reduced-motion: no-preference) {

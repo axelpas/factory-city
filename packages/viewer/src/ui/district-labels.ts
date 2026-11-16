@@ -2,7 +2,13 @@ import type { Layout } from "@factory-city/layout";
 import { el } from "../lib/dom";
 import type { CityScene } from "../scene/CityScene";
 import type { Theme } from "../themes/index";
-import { type DistrictLabel, districtLabels, type Projector, placeLabels } from "../view/district-labels";
+import {
+  type Box,
+  type DistrictLabel,
+  districtLabels,
+  type Projector,
+  placeLabels,
+} from "../view/district-labels";
 
 /** Names are measured once; a city with more folders than this names the biggest ones only. */
 const MAX_NODES = 400;
@@ -24,7 +30,11 @@ export class DistrictLabelLayer {
   private lastCost = 0;
   private timer: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(private readonly scene: CityScene) {
+  constructor(
+    private readonly scene: CityScene,
+    /** What lies over the city and must stay clear of the names, in stage pixels. */
+    private readonly covered: () => Box[] = () => [],
+  ) {
     scene.onRendered = () => this.request();
   }
 
@@ -93,6 +103,7 @@ export class DistrictLabelLayer {
       this.projector(),
       (l) => this.sizes.get(l.path) ?? { w: 60, h: 16 },
       this.scene.freeArea(),
+      this.covered(),
     );
     const at = new Map(placed.map((p) => [p.path, p.box]));
     for (const [path, node] of this.nodes) {

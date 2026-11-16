@@ -289,6 +289,7 @@ export class App {
       this.panel,
       this.bar.element,
       this.status,
+      this.legendBox,
       ...this.rightPanels(),
     ])
       covering.observe(node);
@@ -296,7 +297,7 @@ export class App {
     this.scene.canvas.setAttribute("role", "img");
     this.scene.canvas.setAttribute("aria-label", "City: every building is a file, every district a folder");
     this.scene.canvas.setAttribute("aria-describedby", "city-description");
-    this.districtLabels = new DistrictLabelLayer(this.scene);
+    this.districtLabels = new DistrictLabelLayer(this.scene, () => this.coveredBoxes());
     this.districtLabels.setEnabled(this.labelsOn);
     this.stage.append(this.districtLabels.element);
     this.scene.onTick = (dt) => this.tick(dt);
@@ -1155,6 +1156,11 @@ export class App {
     const legend = this.legend();
     this.legendBox.hidden = !s || !legend;
     if (s && legend) renderLegendBox(this.legendBox, legend, s.model, this.theme);
+    // the legend is pinned at the bottom left: the timeline and the chip start to its right
+    this.stage.parentElement?.style.setProperty(
+      "--legend-room",
+      this.legendBox.hidden ? "0px" : "calc(var(--legend-w) + var(--gutter))",
+    );
   }
 
   /** The text a screen reader gets for the picture: the question asked, the counts and the frame. */
@@ -1301,6 +1307,8 @@ export class App {
     if (!s || this.animator?.playing) return;
     const pick = this.scene.pick(x, y);
     s.hover = pick;
+    // a building can be clicked: the cursor says so
+    this.scene.canvas.classList.toggle("over-file", pick?.kind === "file");
     if (!pick) {
       this.scene.setHover(null);
       this.hideCard();
@@ -2119,6 +2127,16 @@ export class App {
     }
   }
 
+  /** What sits on the stage and hides the city, relative to the stage: district names keep clear of it. */
+  private coveredBoxes(): Array<{ x: number; y: number; w: number; h: number }> {
+    const stage = this.stage.getBoundingClientRect();
+    return [this.legendBox, this.status]
+      .filter((n) => !n.hidden)
+      .map((n) => n.getBoundingClientRect())
+      .filter((r) => r.width > 0)
+      .map((r) => ({ x: r.left - stage.left, y: r.top - stage.top, w: r.width, h: r.height }));
+  }
+
   private rightPanels(): HTMLElement[] {
     return [this.inspector.element];
   }
@@ -2133,6 +2151,7 @@ export class App {
     const header = shown(this.header);
     const left = shown(this.panel);
     const bottom = shown(this.bar.element) ?? shown(this.status);
+    const status = shown(this.status);
     const right = this.rightPanels()
       .map(shown)
       .filter((r) => r !== undefined);
@@ -2146,6 +2165,14 @@ export class App {
     };
     // what sits on the stage (the legend) places itself in the free area through these
     this.insets = insets;
+    // the tallest thing pinned at the bottom: a panel stops above it
+    const legend = shown(this.legendBox);
+    const stack = Math.max(
+      legend ? stage.bottom - legend.top : 0,
+      bottom ? stage.bottom - bottom.top : 0,
+      status ? stage.bottom - status.top : 0,
+    );
+    this.stage.parentElement?.style.setProperty("--bottom-stack", `${Math.round(stack)}px`);
     for (const [side, value] of Object.entries(insets))
       this.stage.parentElement?.style.setProperty(`--free-${side}`, `${Math.round(value)}px`);
     this.scene.setFreeArea(insets);
