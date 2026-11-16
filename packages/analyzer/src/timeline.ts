@@ -130,6 +130,19 @@ function parseRevs(raw: string): Rev[] {
     });
 }
 
+/** The branch to name in the manifest: `HEAD` becomes the current branch, or `detached <commit>` on a detached HEAD. */
+export async function branchLabel(topLevel: string, branch: string): Promise<string> {
+  if (branch !== "HEAD") return branch;
+  try {
+    const name = (await git(topLevel, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
+    if (name && name !== "HEAD") return name;
+    const commit = (await git(topLevel, ["rev-parse", "--short", "HEAD"])).trim();
+    return commit ? `detached ${commit}` : "HEAD";
+  } catch {
+    return "HEAD";
+  }
+}
+
 async function listRevs(topLevel: string, opts: TimelineOptions, branch: string): Promise<Rev[]> {
   const format = "--format=%x01%H%x02%ct%x02%s";
   if (opts.revs?.length) {
@@ -292,6 +305,8 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
   if (!repo.hasCommits) throw new Error("This repository has no commit yet: there is no history to play.");
 
   const branch = opts.branch ?? "HEAD";
+  // what the manifest says: the name of the branch checked out, not the word HEAD
+  const branchName = await branchLabel(repo.topLevel, branch);
   const mode: TimelineMode = opts.mode ?? (opts.revs?.length ? "revs" : opts.by);
   const config = await loadConfig(folder);
   const planWarnings: string[] = [];
@@ -534,7 +549,7 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
     project: basename(folder),
     source: {
       mode,
-      branch: opts.range ?? branch,
+      branch: opts.range ?? branchName,
       firstParent: !opts.allCommits && !opts.revs?.length,
       ...(total !== revs.length ? { sampledFrom: total } : {}),
     },

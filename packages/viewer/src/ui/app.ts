@@ -45,6 +45,7 @@ import {
 import { placeCard } from "../view/card-place";
 import { biggestChanges, CHANGE, changePlacements, type FileChange } from "../view/change";
 import { parseHex } from "../view/color";
+import { projectContext } from "../view/context";
 import { describeCity } from "../view/describe";
 import { type DetailRow, fileDetails } from "../view/details";
 import { factoryView } from "../view/factory";
@@ -176,6 +177,11 @@ export class App {
   private factory: Factory | undefined;
   private factoryPeriod: "last30" | "all" = "last30";
   private readonly status = el("footer", { class: "status" });
+  /** What was analyzed: the project, its branch or revision, the subfolder when only one was taken. */
+  private readonly context = el("span", {
+    class: "context",
+    attrs: { "aria-label": "Analyzed project and branch" },
+  });
   private readonly projectSelect = el("select", {
     title: "Switch project",
     attrs: { "aria-label": "Project" },
@@ -380,6 +386,7 @@ export class App {
 
   open(loaded: Loaded): void {
     const data = buildTimelineData(loaded.snapshots, loaded.manifest);
+    this.renderContext(loaded, data.project);
     const last = data.frames[data.frames.length - 1];
     if (!last) {
       this.renderDropZone("This data holds no frame.");
@@ -561,8 +568,9 @@ export class App {
     return el(
       "header",
       { class: "bar" },
-      el("strong", { class: "brand", text: "Factory City" }),
+      el("strong", { class: "brand", text: "Indicator" }),
       this.projectSelect,
+      this.context,
       // what is asked of the city: the preset and its question
       this.lensMenu,
       this.presetQuestion,
@@ -649,6 +657,17 @@ export class App {
       this.projectSelect.append(o);
     }
     this.projectSelect.hidden = projects.length < 2;
+  }
+
+  /** The project and its branch, at the top of the page. The name is left to the project switcher when it shows. */
+  private renderContext(loaded: Loaded, project: string): void {
+    const c = projectContext(loaded.manifest, project);
+    const where = c.path ? `${c.name} / ${c.path}` : c.name;
+    this.context.replaceChildren(
+      ...(this.projectSelect.hidden ? [el("b", { class: "context-name", text: where })] : []),
+      el("span", { class: "context-ref" }, icon("branch"), el("span", { text: c.ref })),
+    );
+    this.context.title = `${where}, ${c.ref}`;
   }
 
   /** The ways of cutting the history sit in the playback options of the timeline bar. */

@@ -225,6 +225,31 @@ button.icon,
 .brand {
   letter-spacing: 0.02em;
 }
+/* the project and its branch: always in view, so that nobody wonders what is drawn */
+.context {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-8);
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.context-name {
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.context-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-2) var(--s-8);
+  font-size: var(--text-sm);
+  color: var(--c-text-muted);
+  background: color-mix(in srgb, var(--c-text) 7%, transparent);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
 .spacer {
   flex: 0 0 var(--s-8);
 }

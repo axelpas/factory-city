@@ -28,6 +28,14 @@ const PATHS = {
   marker: ["M2.5 7.5L8 2.5l5.5 5z", "M4 7.5v6h8v-6"],
   tint: ["M2 11l6-2.5 6 2.5-6 2.5z", "M2 7.5l6-2.5 6 2.5"],
   close: ["M4 4l8 8", "M12 4l-8 8"],
+  /** A branch: two commits joined by a fork. */
+  branch: [
+    "M5 2.5v11",
+    "M5 9.5c0-2.5 6-1 6-4.5",
+    "M5 2.5a1 1 0 1 0 0 .01",
+    "M11 5a1 1 0 1 0 0 .01",
+    "M5 13.5a1 1 0 1 0 0 .01",
+  ],
   /** A magnifying glass. */
   search: ["M7 2.5a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0-9z", "M10.4 10.4L13.5 13.5"],
   /** Transport: back one frame, play, pause, forward one frame. */

@@ -124,6 +124,20 @@ describe("frame selection", () => {
     expect(manifest.frames[0]?.totals.files).toBe(2);
   });
 
+  it("names the branch checked out in the manifest, not the word HEAD", async () => {
+    const dir = repo();
+    git(dir, "checkout", "-q", "-b", "feat/12-demo");
+    const named = await buildTimeline({ folder: dir, by: "commit" }, makeTree({}));
+    expect(named.manifest.source.branch).toBe("feat/12-demo");
+    // a detached HEAD says so, with the commit
+    git(dir, "checkout", "-q", "--detach");
+    const detached = await buildTimeline({ folder: dir, by: "commit" }, makeTree({}));
+    expect(detached.manifest.source.branch).toMatch(/^detached [0-9a-f]{7,}$/);
+    // an explicit branch is kept as it is
+    const explicit = await buildTimeline({ folder: dir, by: "commit", branch: "feat/12-demo" }, makeTree({}));
+    expect(explicit.manifest.source.branch).toBe("feat/12-demo");
+  });
+
   it("takes an explicit list of revisions", async () => {
     const dir = repo();
     const first = git(dir, "rev-list", "--max-parents=0", "HEAD").trim();

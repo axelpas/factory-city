@@ -523,4 +523,23 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
     expect(r.focusInInspector).toBe(true);
     expect(r.selected).toBe(true);
   });
+
+  it("names the project and its branch in the top bar, under the brand", async () => {
+    const r = await inPage<Record<string, unknown>>(`
+      await wait(300);
+      const bar = document.querySelector(".bar");
+      const brand = bar.querySelector(".brand").textContent;
+      const context = bar.querySelector(".context");
+      return {
+        brand,
+        name: context.querySelector(".context-name")?.textContent ?? bar.querySelector("select").selectedOptions[0]?.textContent ?? "",
+        ref: context.querySelector(".context-ref")?.textContent ?? "",
+        inBar: box(context).right <= box(bar).right && box(context).bottom <= box(bar).bottom,
+      };
+    `);
+    expect(r.brand).toBe("Indicator");
+    expect(r.name).not.toBe("");
+    expect(r.ref).not.toBe("");
+    expect(r.inBar).toBe(true);
+  });
 });
