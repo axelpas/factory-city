@@ -9,37 +9,52 @@ export type { HealthExtras, HealthFile } from "./types.js";
 
 const round = (x: number, digits = 4) => Math.round(x * 10 ** digits) / 10 ** digits;
 
+/** How the real lines of code spread over the risk levels of one dimension; nothing when no file is rated. */
+function riskShare(files: readonly HealthFile[], d: RiskDimension, total: number): RiskShare | undefined {
+  const weight = { low: 0, moderate: 0, high: 0, veryHigh: 0 };
+  let rated = 0;
+  for (const f of files) {
+    const level = rate(f.values, d);
+    if (!level) continue;
+    const w = f.values.rloc ?? 0;
+    weight[level] += w;
+    rated += w;
+  }
+  if (rated === 0) return undefined;
+  return {
+    low: round(weight.low / rated),
+    moderate: round(weight.moderate / rated),
+    high: round(weight.high / rated),
+    veryHigh: round(weight.veryHigh / rated),
+    rated: round(total === 0 ? 0 : rated / total),
+  };
+}
+
+/** Real lines of the files that are low risk on every static dimension. */
+function healthyLines(files: readonly HealthFile[], statics: readonly RiskDimension[]): number {
+  let healthy = 0;
+  for (const f of files) {
+    const levels = statics.map((d) => rate(f.values, d)).filter((l) => l !== undefined);
+    if (levels.every((l) => l === "low")) healthy += f.values.rloc ?? 0;
+  }
+  return healthy;
+}
+
 /** Risk profile and score of a set of files, weighted by real lines of code. */
 export function computeHealth(files: readonly HealthFile[], dimensions: readonly RiskDimension[]): Health {
   const total = files.reduce((sum, f) => sum + (f.values.rloc ?? 0), 0);
   const profile: Record<string, RiskShare> = {};
   const scored: string[] = [];
   for (const d of dimensions) {
-    const weight = { low: 0, moderate: 0, high: 0, veryHigh: 0 };
-    let rated = 0;
-    for (const f of files) {
-      const level = rate(f.values, d);
-      if (!level) continue;
-      const w = f.values.rloc ?? 0;
-      weight[level] += w;
-      rated += w;
-    }
-    if (rated === 0) continue;
-    profile[d.id] = {
-      low: round(weight.low / rated),
-      moderate: round(weight.moderate / rated),
-      high: round(weight.high / rated),
-      veryHigh: round(weight.veryHigh / rated),
-      rated: round(total === 0 ? 0 : rated / total),
-    };
+    const share = riskShare(files, d, total);
+    if (!share) continue;
+    profile[d.id] = share;
     if (d.kind === "static") scored.push(d.id);
   }
-  const statics = dimensions.filter((d) => d.kind === "static");
-  let healthy = 0;
-  for (const f of files) {
-    const levels = statics.map((d) => rate(f.values, d)).filter((l) => l !== undefined);
-    if (levels.every((l) => l === "low")) healthy += f.values.rloc ?? 0;
-  }
+  const healthy = healthyLines(
+    files,
+    dimensions.filter((d) => d.kind === "static"),
+  );
   return { score: total === 0 ? 100 : round((healthy / total) * 100, 1), profile, scored };
 }
 

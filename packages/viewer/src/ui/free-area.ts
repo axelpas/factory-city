@@ -27,28 +27,34 @@ function shown(node: HTMLElement): DOMRect | undefined {
   return r.width > 0 && r.height > 0 ? r : undefined;
 }
 
+/** What covers the stage at each edge. */
+function insetsOf(n: AreaNodes, stage: DOMRect, overlay: boolean): Insets {
+  const header = shown(n.header);
+  const left = shown(n.panel);
+  const bottom = shown(n.timeline) ?? shown(n.status);
+  const right = n.right.map(shown).filter((r) => r !== undefined);
+  return {
+    top: header ? header.bottom - stage.top : 0,
+    left: left && !overlay ? left.right - stage.left : 0,
+    right: right.length && !overlay ? stage.right - Math.min(...right.map((r) => r.left)) : 0,
+    bottom: bottom ? stage.bottom - bottom.top : 0,
+  };
+}
+
+/** The tallest of the things pinned at the bottom: a panel stops above it. */
+function stackOf(n: AreaNodes, stage: DOMRect): number {
+  const heights = [n.legend, n.timeline, n.status].map((node) => {
+    const r = shown(node);
+    return r ? stage.bottom - r.top : 0;
+  });
+  return Math.max(...heights);
+}
+
 /**
  * Measures what covers the stage on each side. In a medium window the panels overlay the stage: the city
  * keeps the whole width.
  */
 export function measureFreeArea(n: AreaNodes, overlay: boolean): FreeArea {
   const stage = n.stage.getBoundingClientRect();
-  const header = shown(n.header);
-  const left = shown(n.panel);
-  const status = shown(n.status);
-  const bottom = shown(n.timeline) ?? status;
-  const right = n.right.map(shown).filter((r) => r !== undefined);
-  const insets: Insets = {
-    top: header ? header.bottom - stage.top : 0,
-    left: left && !overlay ? left.right - stage.left : 0,
-    right: right.length && !overlay ? stage.right - Math.min(...right.map((r) => r.left)) : 0,
-    bottom: bottom ? stage.bottom - bottom.top : 0,
-  };
-  const legend = shown(n.legend);
-  const bottomStack = Math.max(
-    legend ? stage.bottom - legend.top : 0,
-    bottom ? stage.bottom - bottom.top : 0,
-    status ? stage.bottom - status.top : 0,
-  );
-  return { insets, bottomStack };
+  return { insets: insetsOf(n, stage, overlay), bottomStack: stackOf(n, stage) };
 }
