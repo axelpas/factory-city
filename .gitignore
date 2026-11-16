@@ -4,3 +4,6 @@ node_modules
 dist
 *.tsbuildinfo
 .vitest
+
+# local copy of the build brief
+docs/specs/factory-city-brief.md
