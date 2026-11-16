@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createFormat } from "../src/lib/format";
 import { defaultMapping } from "../src/presets/index";
 import { fileCard, folderCard } from "../src/view/card";
-import { dataLevelLine, hiddenContentLine, legendLines } from "../src/view/legend";
+import { legendLines } from "../src/view/legend";
 import { makeModel, SAMPLE } from "./helpers";
 
 const fmt = createFormat(["en-US"]);
@@ -77,16 +77,5 @@ describe("legend and help lines", () => {
   it("reads in plain language", () => {
     const lines = legendLines(model, mapping).map((l) => l.text);
     expect(lines).toEqual(["bigger ground = more code", "taller = more complex", "darker = deeper nesting"]);
-  });
-
-  it("explains hidden content and how to show it", () => {
-    expect(hiddenContentLine(model, fmt.integer)).toBe(
-      "12 files and 1 folder left out: assets, dependencies, generated or non-code files. Analyze with --all to show everything.",
-    );
-  });
-
-  it("states the data level and the next step", () => {
-    expect(dataLevelLine(model)).toContain("Data level 0");
-    expect(dataLevelLine(model)).toContain("Analyze a git repository");
   });
 });

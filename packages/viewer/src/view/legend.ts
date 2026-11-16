@@ -105,32 +105,3 @@ export function legendModel(
     ...(note ? { note } : {}),
   };
 }
-
-/** One line telling how much code is hidden and why, with the way to show it. */
-export function hiddenContentLine(model: Model, format: (n: number) => string): string | undefined {
-  const m = model.manifest;
-  if (!m) return undefined;
-  const files = Object.values(m.ignored.files).reduce((a, b) => a + b, 0);
-  const folders = Object.values(m.ignored.folders).reduce((a, b) => a + b, 0);
-  if (files + folders === 0) return undefined;
-  const parts: string[] = [];
-  if (files > 0) parts.push(`${format(files)} file${files === 1 ? "" : "s"}`);
-  if (folders > 0) parts.push(`${format(folders)} folder${folders === 1 ? "" : "s"}`);
-  return `${parts.join(" and ")} left out: assets, dependencies, generated or non-code files. Analyze with --all to show everything.`;
-}
-
-/** The data level reached and the one action that unlocks the next. */
-export function dataLevelLine(model: Model): string {
-  const m = model.manifest;
-  const level = m?.dataLevel ?? 0;
-  if (level === 1) {
-    return "Data level 1 (history). Sign in to `gh` on a GitHub repository to add issue titles and CI runs (level 2).";
-  }
-  if (level === 2)
-    return "Data level 2 (forge): issue titles come from GitHub. A facts file unlocks level 3.";
-  if (level >= 3) return "Data level 3 (facts): agent, model, outcome and cost come from your facts file.";
-  const next = m?.git.available
-    ? "Git history is available in this repository: it will unlock level 1 (changes, fixes)."
-    : "Analyze a git repository to unlock level 1 (history).";
-  return `Data level 0 (files). ${next}`;
-}

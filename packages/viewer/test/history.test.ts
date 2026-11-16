@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { defaultMapping, presetStatuses } from "../src/presets/index";
-import { dataLevelLine } from "../src/view/legend";
 import { makeModel, SAMPLE } from "./helpers";
 
 const withHistory = makeModel(
@@ -26,11 +25,6 @@ describe("history presets", () => {
   it("offers Bug magnets colored by fix commits", () => {
     const status = presetStatuses(withHistory).find((s) => s.preset.id === "bug-magnets");
     expect(status?.mapping?.color).toBe("fix_commits");
-  });
-
-  it("states level 1 and the action that unlocks level 2", () => {
-    expect(dataLevelLine(withHistory)).toContain("Data level 1 (history)");
-    expect(dataLevelLine(withHistory)).toContain("gh");
   });
 });
 
