@@ -1,17 +1,10 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { Theme } from "../themes/index";
-import {
-  cityCorners,
-  frameOrthographic,
-  framePerspective,
-  freeRect,
-  type Insets,
-  NO_INSETS,
-  type Vec3,
-} from "../view/framing";
+import { freeRect, type Insets, NO_INSETS } from "../view/framing";
 import { plinthTop } from "../view/placements";
 import { districtView } from "../view/scene-logic";
+import { fitCamera, ORTHO_HEIGHT } from "./camera-fit";
 import { CameraFly } from "./camera-fly";
 
 /** A camera view that can be saved and restored. */
@@ -25,9 +18,6 @@ export interface CameraState {
   framed: "default" | "top" | null;
   orthographic: boolean;
 }
-
-/** Frame height of the orthographic camera at zoom 1, as a share of the map side. */
-export const ORTHO_HEIGHT = 1.28;
 
 /** What the camera rig needs to know about the scene around it. */
 export interface RigHost {
@@ -189,25 +179,16 @@ export class CameraRig {
 
   /** Places the camera, along its current direction, so that the city fills the free part of a picture. */
   private applyFrame(w: number, h: number, insets: Insets): void {
-    const target = this.controls.target;
-    const offset = this.camera.position.clone().sub(target);
-    const input = {
-      corners: cityCorners(this.host.size(), this.cityHeight()),
-      direction: [offset.x, offset.y, offset.z] as Vec3,
+    const center = fitCamera({
+      camera: this.camera,
+      perspective: this.perspective,
+      orthographic: this.orthographic,
+      target: this.controls.target,
+      size: this.host.size(),
+      cityHeight: this.cityHeight(),
       viewport: { w, h },
-      free: freeRect({ w, h }, insets),
-    };
-    let center: { x: number; y: number };
-    if (this.camera === this.perspective) {
-      const fit = framePerspective({ ...input, fovDeg: this.perspective.fov });
-      this.camera.position.copy(target).add(offset.setLength(fit.distance));
-      center = fit.center;
-    } else {
-      const fit = frameOrthographic({ ...input, unitsHigh: this.host.size() * ORTHO_HEIGHT });
-      this.orthographic.zoom = fit.zoom;
-      center = fit.center;
-    }
-    this.camera.lookAt(target);
+      insets,
+    });
     this.shift = { x: center.x - w / 2, y: center.y - h / 2 };
     this.applyShift(w, h);
     this.camera.updateMatrixWorld();
