@@ -36,14 +36,9 @@ export async function writeAtomic(path: string, content: string): Promise<void> 
 }
 
 export async function loadFileCache(path: string): Promise<Map<string, CachedFile>> {
-  try {
-    const parsed = JSON.parse(await readFile(path, "utf8")) as {
-      version: string;
-      entries: Array<[string, CachedFile]>;
-    };
-    if (parsed.version === ANALYZER_VERSION) return new Map(parsed.entries);
-  } catch {
-    // no cache yet, or unreadable: start empty
-  }
-  return new Map();
+  // no cache yet, or unreadable: start empty
+  const parsed = await readFile(path, "utf8")
+    .then((text) => JSON.parse(text) as { version: string; entries: Array<[string, CachedFile]> })
+    .catch(() => undefined);
+  return parsed?.version === ANALYZER_VERSION ? new Map(parsed.entries) : new Map();
 }

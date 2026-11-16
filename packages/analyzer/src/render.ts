@@ -46,9 +46,7 @@ async function launch(): Promise<BrowserLike> {
   for (const options of attempts) {
     try {
       return await driver.chromium.launch({ headless: true, ...options });
-    } catch {
-      // try the next browser
-    }
+    } catch {}
   }
   throw new Error(
     "No browser found to render with. Install Google Chrome, or run `npx playwright-core install chromium`.",

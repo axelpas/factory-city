@@ -188,6 +188,6 @@ export function openBrowser(url: string): void {
       .on("error", () => {})
       .unref();
   } catch {
-    // no browser available
+    return;
   }
 }

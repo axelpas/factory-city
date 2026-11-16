@@ -39,14 +39,8 @@ export async function updateIndex(entry: IndexEntry): Promise<void> {
   const root = outputRoot();
   await mkdir(root, { recursive: true });
   const path = join(root, "index.json");
-  let projects: IndexEntry[] = [];
-  try {
-    const parsed = JSON.parse(await readFile(path, "utf8")) as { projects?: IndexEntry[] };
-    projects = parsed.projects ?? [];
-  } catch {
-    // no index yet, or unreadable: start a new one
-  }
-  projects = [...projects.filter((p) => p.slug !== entry.slug), entry].sort((a, b) =>
+  // no index yet, or unreadable: start a new one
+  const projects = [...(await readIndex()).filter((p) => p.slug !== entry.slug), entry].sort((a, b) =>
     a.slug < b.slug ? -1 : 1,
   );
   await writeAtomic(path, `${JSON.stringify({ version: 1, projects }, null, 2)}\n`);

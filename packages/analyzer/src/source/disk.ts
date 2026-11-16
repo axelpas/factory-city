@@ -30,11 +30,9 @@ export class DiskSource implements Source {
   /** Adds the `.gitignore` of a folder to the stack, when there is one and it is respected. */
   private async pushGitignore(dir: string, rel: string, names: string[], ignores: GitIgnoreStack) {
     if (!this.respectGitignore || !names.includes(".gitignore")) return;
-    try {
-      ignores.push(new GitIgnore(await readFile(join(dir, ".gitignore"), "utf8"), rel));
-    } catch {
-      // unreadable .gitignore: ignore it
-    }
+    // an unreadable .gitignore is ignored
+    const text = await readFile(join(dir, ".gitignore"), "utf8").catch(() => undefined);
+    if (text !== undefined) ignores.push(new GitIgnore(text, rel));
   }
 
   /** Why a folder is skipped, if it is. */

@@ -72,20 +72,36 @@ interface RawRun {
   createdAt: string;
 }
 
+/** The CI runs of the repository; a repository without CI, or runs that cannot be read, give none. */
+async function loadRuns(run: GhRunner): Promise<CiRun[] | undefined> {
+  try {
+    const rawRuns = JSON.parse(
+      await run(["run", "list", "--limit", LIMIT, "--json", "headBranch,headSha,conclusion,createdAt"]),
+    ) as RawRun[];
+    if (rawRuns.length === 0) return undefined;
+    return rawRuns.map((r) => ({
+      branch: r.headBranch,
+      sha: r.headSha,
+      conclusion: (r.conclusion ?? "").toLowerCase(),
+      createdAt: r.createdAt,
+    }));
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Issues, pull requests and CI runs of the repository, in three batched `gh` calls, cached on disk for a few
  * minutes. Throws when `gh` is missing, not signed in or rate limited: the caller falls back to git data alone.
  * A repository without CI simply has no runs.
  */
 export async function loadForge(run: GhRunner, cachePath: string, now = Date.now()): Promise<ForgeData> {
-  try {
-    const cached = JSON.parse(await readFile(cachePath, "utf8")) as Cached;
-    if (cached.version === CACHE_VERSION && now - Date.parse(cached.fetchedAt) < CACHE_MINUTES * 60_000) {
-      return toData(cached);
-    }
-  } catch {
-    // no cache, or unreadable: ask gh
-  }
+  // no cache, or unreadable: ask gh
+  const known = await readFile(cachePath, "utf8")
+    .then((text) => JSON.parse(text) as Cached)
+    .catch(() => undefined);
+  if (known && known.version === CACHE_VERSION && now - Date.parse(known.fetchedAt) < CACHE_MINUTES * 60_000)
+    return toData(known);
   const list = (kind: "issue" | "pr", fields: string) =>
     run([kind, "list", "--state", "all", "--limit", LIMIT, "--json", fields]);
   const rawIssues = JSON.parse(
@@ -94,22 +110,7 @@ export async function loadForge(run: GhRunner, cachePath: string, now = Date.now
   const rawPulls = JSON.parse(
     await list("pr", "number,title,body,headRefName,url,createdAt,mergedAt,closingIssuesReferences"),
   ) as RawPull[];
-  let runs: CiRun[] | undefined;
-  try {
-    const rawRuns = JSON.parse(
-      await run(["run", "list", "--limit", LIMIT, "--json", "headBranch,headSha,conclusion,createdAt"]),
-    ) as RawRun[];
-    if (rawRuns.length > 0) {
-      runs = rawRuns.map((r) => ({
-        branch: r.headBranch,
-        sha: r.headSha,
-        conclusion: (r.conclusion ?? "").toLowerCase(),
-        createdAt: r.createdAt,
-      }));
-    }
-  } catch {
-    // no CI, or runs are not readable: CI metrics stay unavailable
-  }
+  const runs = await loadRuns(run);
   const cached: Cached = {
     version: CACHE_VERSION,
     fetchedAt: new Date(now).toISOString(),

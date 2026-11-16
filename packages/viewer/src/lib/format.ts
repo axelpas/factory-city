@@ -22,15 +22,17 @@ export interface FormatOptions {
   timeZone?: string;
 }
 
-export function resolveLocale(preferred: readonly string[] | undefined): string {
-  for (const candidate of preferred ?? []) {
-    try {
-      if (Intl.NumberFormat.supportedLocalesOf([candidate]).length > 0) return candidate;
-    } catch {
-      // not a valid locale tag: try the next one
-    }
+/** Whether the browser knows a locale; a tag that is not a valid one is not known. */
+function isSupported(candidate: string): boolean {
+  try {
+    return Intl.NumberFormat.supportedLocalesOf([candidate]).length > 0;
+  } catch {
+    return false;
   }
-  return FALLBACK_LOCALE;
+}
+
+export function resolveLocale(preferred: readonly string[] | undefined): string {
+  return (preferred ?? []).find(isSupported) ?? FALLBACK_LOCALE;
 }
 
 export function createFormat(preferred?: readonly string[], options: FormatOptions = {}): Formatter {
