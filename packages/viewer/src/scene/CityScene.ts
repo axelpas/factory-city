@@ -21,13 +21,12 @@ import {
 import type { Theme } from "../themes/index";
 import { parseHex, type Rgb } from "../view/color";
 import type { Insets } from "../view/framing";
-import { folderDepth, plinthTop } from "../view/placements";
+import { folderDepth } from "../view/placements";
 import { edgeWidth, REST_DELAY_MS, restRatio } from "../view/resolution";
 import { CameraRig, type CameraState } from "./camera-rig";
+import { buildBuildings, buildPlinths, buildRoofs } from "./city-meshes";
 import { buildLots } from "./lots";
-import { buildingMaterials, roofMaterials } from "./materials";
 import { Outlines } from "./outlines";
-import { pyramidGeometry } from "./patches";
 import { Picker } from "./picker";
 import { ResolutionGovernor } from "./resolution-governor";
 import { MAX_RAMP } from "./shaders";
@@ -313,85 +312,17 @@ export class CityScene {
       m.geometry.dispose();
     }
 
-    // plinths: one low box per folder
+    // plinths: one low box per folder; buildings, moved by the vertex shader; roofs on the marked ones
     const folders = [...layout.folders.entries()].sort((a, b) => folderDepth(a[0]) - folderDepth(b[0]));
     this.plinthPaths = folders.map(([path]) => path);
     this.maxFolderDepth = folders.reduce((max, [path]) => Math.max(max, folderDepth(path)), 0);
-    this.plinths = new THREE.InstancedMesh(
-      this.unitBox,
-      new THREE.MeshLambertMaterial(),
-      Math.max(folders.length, 1),
-    );
-    const m4 = new THREE.Matrix4();
-    folders.forEach(([path, r], i) => {
-      const top = plinthTop(folderDepth(path));
-      m4.compose(
-        new THREE.Vector3(r.x + r.w / 2, top / 2, r.y + r.h / 2),
-        new THREE.Quaternion(),
-        new THREE.Vector3(Math.max(r.w, 0.01), top, Math.max(r.h, 0.01)),
-      );
-      this.plinths?.setMatrixAt(i, m4);
-      this.plinths?.setColorAt(i, this.plinthColor(path));
-    });
-    this.plinths.count = folders.length;
-    this.plinths.receiveShadow = true;
-    this.plinths.castShadow = true;
-    this.plinths.instanceMatrix.needsUpdate = true;
-    this.plinths.computeBoundingSphere();
-
-    // buildings: one box, drawn once per file, moved by the vertex shader
-    const box = new THREE.BoxGeometry(1, 1, 1);
-    box.translate(0, 0.5, 0);
-    const geometry = new THREE.InstancedBufferGeometry();
-    geometry.index = box.index;
-    geometry.setAttribute("position", box.getAttribute("position"));
-    geometry.setAttribute("normal", box.getAttribute("normal"));
-    geometry.instanceCount = this.count;
-    const n = Math.max(this.count, 1);
-    const attr = (name: string, size: number, array?: Float32Array) => {
-      const a = new THREE.InstancedBufferAttribute(array ?? new Float32Array(n * size), size);
-      a.setUsage(THREE.DynamicDrawUsage);
-      geometry.setAttribute(name, a);
-    };
-    attr("aPosA", 3);
-    attr("aPosB", 3);
-    attr("aSizeA", 3);
-    attr("aSizeB", 3);
-    attr("aMiscA", 4);
-    attr("aMiscB", 4);
-    attr("aColA", 3);
-    attr("aColB", 3);
-    attr("aFx", 4);
-    const delayArray = new Float32Array(n);
-    delayArray.set(delays.subarray(0, n));
-    attr("aDelay", 1, delayArray);
-
-    const uniforms = this.uniforms;
-    const { material, depth } = buildingMaterials(theme, this.uniforms);
-    this.buildings = new THREE.Mesh(geometry, material);
-    this.buildings.customDepthMaterial = depth;
-    this.buildings.castShadow = true;
-    this.buildings.receiveShadow = true;
-    this.buildings.frustumCulled = false;
-
-    // roofs: a pyramid on every marked building, driven by the same instance data
-    const roofGeometry = new THREE.InstancedBufferGeometry();
-    const pyramid = pyramidGeometry();
-    roofGeometry.setAttribute("position", pyramid.getAttribute("position"));
-    roofGeometry.setAttribute("normal", pyramid.getAttribute("normal"));
-    for (const name of ["aPosA", "aPosB", "aSizeA", "aSizeB", "aMiscA", "aMiscB", "aDelay"])
-      roofGeometry.setAttribute(name, geometry.getAttribute(name));
-    roofGeometry.instanceCount = this.count;
-    const { material: roofMaterial, depth: roofDepth } = roofMaterials(theme, this.uniforms);
-    this.roofs = new THREE.Mesh(roofGeometry, roofMaterial);
-    this.roofs.customDepthMaterial = roofDepth;
-    this.roofs.castShadow = true;
-    this.roofs.receiveShadow = true;
-    this.roofs.frustumCulled = false;
+    this.plinths = buildPlinths(this.unitBox, folders, (path) => this.plinthColor(path));
+    this.buildings = buildBuildings(this.count, delays, theme, this.uniforms);
+    this.roofs = buildRoofs(this.buildings, this.count, theme, this.uniforms);
 
     // lots: the outline of every parcel; it fades in when the parcel is empty
     this.parcels = paths.map((path) => layout.files.get(path));
-    this.lots = buildLots(layout, paths, delays, uniforms);
+    this.lots = buildLots(layout, paths, delays, this.uniforms);
     this.scene.add(this.plinths, this.buildings, this.roofs, this.lots);
     this.uniforms.uBlock.value = this.size * (theme.effects?.blockSize ?? 0.008);
     if (this.grid) {
