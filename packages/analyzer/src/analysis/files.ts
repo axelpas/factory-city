@@ -23,13 +23,18 @@ export interface MeasuredFiles {
   syntaxErrorFiles: number;
 }
 
+/** The key under which the metrics of a file are cached: its content, how it is read and how it is measured. */
+function cacheKeyOf(candidate: Candidate, opts: AnalyzeOptions): string | undefined {
+  const { entry, language, isTest } = candidate;
+  if (!entry.blobId) return undefined;
+  return `${entry.blobId}|${language?.id ?? ""}|${isTest ? 1 : 0}|${opts.all ? 1 : 0}`;
+}
+
 /** The metrics of one candidate: from the cache when its content is known, else read, checked and measured. */
 async function measure(source: Source, candidate: Candidate, opts: AnalyzeOptions): Promise<CachedFile> {
   const { entry, language, isTest } = candidate;
   const cache = opts.shared?.fileCache;
-  const cacheKey = entry.blobId
-    ? `${entry.blobId}|${language?.id ?? ""}|${isTest ? 1 : 0}|${opts.all ? 1 : 0}`
-    : undefined;
+  const cacheKey = cacheKeyOf(candidate, opts);
   const known = cacheKey ? cache?.get(cacheKey) : undefined;
   if (known) return known;
   const inspected = inspectContent(await source.read(entry), !opts.all);
@@ -43,6 +48,25 @@ async function measure(source: Source, candidate: Candidate, opts: AnalyzeOption
         };
   if (cacheKey) cache?.set(cacheKey, measured);
   return measured;
+}
+
+/** Records a file that was measured in the totals of the run. */
+function record(
+  out: MeasuredFiles,
+  candidate: Candidate,
+  result: Extract<CachedFile, { result: unknown }>["result"],
+) {
+  const { entry, language, isTest } = candidate;
+  out.analyzedEntries.push(entry);
+  if (entry.blobId) out.blobs.set(entry.path, entry.blobId);
+  if (language?.imports) out.importsByFile.set(entry.path, result.imports);
+  if (result.syntaxErrors) out.syntaxErrorFiles++;
+  if (result.groups) out.groupNames.set(entry.path, result.groups);
+  const values: Record<string, number> = { ...result.metrics, is_test: isTest ? 1 : 0 };
+  // the code is the language's position in the fixed list, so that it means the same in every frame
+  if (language) values.language = LANGUAGE_CODES.get(language.id) as number;
+  for (const key of Object.keys(values)) out.present.add(key);
+  out.attributesByPath.set(entry.path, values);
 }
 
 /** Reads and measures every selected file; a file that cannot be read is counted, not measured. */
@@ -62,24 +86,11 @@ export async function measureFiles(
     syntaxErrorFiles: 0,
   };
   for (const candidate of candidates) {
-    const { entry, language, isTest } = candidate;
     const cached = await measure(source, candidate, opts);
     if ("problem" in cached) {
       if (cached.problem === "generated_or_vendored") bump(summary.files, cached.problem);
       else bump(summary.warnings, cached.problem);
-      continue;
-    }
-    const { result } = cached;
-    out.analyzedEntries.push(entry);
-    if (entry.blobId) out.blobs.set(entry.path, entry.blobId);
-    if (language?.imports) out.importsByFile.set(entry.path, result.imports);
-    if (result.syntaxErrors) out.syntaxErrorFiles++;
-    if (result.groups) out.groupNames.set(entry.path, result.groups);
-    const values: Record<string, number> = { ...result.metrics, is_test: isTest ? 1 : 0 };
-    // the code is the language's position in the fixed list, so that it means the same in every frame
-    if (language) values.language = LANGUAGE_CODES.get(language.id) as number;
-    for (const key of Object.keys(values)) out.present.add(key);
-    out.attributesByPath.set(entry.path, values);
+    } else record(out, candidate, cached.result);
   }
   return out;
 }

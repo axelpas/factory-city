@@ -6,8 +6,114 @@ import { coverageLine } from "../../collectors/issues.js";
 import { buildDiff, diffText } from "../../diff.js";
 import { outputRoot, updateIndex } from "../../output.js";
 import { parseSize, renderImage } from "../../render.js";
-import { buildTimeline } from "../../timeline.js";
+import { buildTimeline, type TimelineOptions } from "../../timeline.js";
 import { collect, serve } from "../shared.js";
+
+type Options = Record<string, unknown>;
+
+/** The options of `timeline` as checked values. */
+function timelineOptions(opts: Options, folder: string, quiet: boolean): TimelineOptions {
+  const by = opts.by as string;
+  if (by !== "commit" && by !== "day" && by !== "issue")
+    throw new Error(`Unknown --by "${by}". Use commit, issue or day.`);
+  const maxFrames = opts.maxFrames === undefined ? undefined : Number(opts.maxFrames);
+  if (maxFrames !== undefined && (!Number.isInteger(maxFrames) || maxFrames < 2))
+    throw new Error("--max-frames must be a whole number of at least 2.");
+  const revs =
+    typeof opts.revs === "string"
+      ? opts.revs
+          .split(",")
+          .map((r) => r.trim())
+          .filter(Boolean)
+      : undefined;
+  return {
+    folder,
+    by,
+    branch: opts.branch as string | undefined,
+    allCommits: opts.allCommits as boolean | undefined,
+    since: opts.since as string | undefined,
+    until: opts.until as string | undefined,
+    range: opts.range as string | undefined,
+    revs,
+    maxFrames,
+    offline: opts.offline as boolean | undefined,
+    facts: opts.facts as string | undefined,
+    path: opts.path as string | undefined,
+    all: opts.all as boolean | undefined,
+    include: opts.include as string[],
+    exclude: opts.exclude as string[],
+    onProgress: quiet ? undefined : (done, total) => process.stderr.write(`\rframe ${done}/${total}`),
+  };
+}
+
+type TimelineBuilt = Awaited<ReturnType<typeof buildTimeline>>;
+
+function printTimeline(result: TimelineBuilt, dataDir: string, seconds: number): void {
+  const sampled = result.manifest.source.sampledFrom
+    ? ` (sampled from ${result.manifest.source.sampledFrom})`
+    : "";
+  console.log(
+    `Timeline of ${result.manifest.frames.length} frames${sampled} written to ${dataDir} in ${seconds.toFixed(1)} s.`,
+  );
+  console.log(`Parsed ${result.cache.parsed} file contents, reused ${result.cache.reused} from the cache.`);
+  if (result.manifest.coverage) console.log(coverageLine(result.manifest.coverage));
+  for (const warning of result.manifest.warnings) console.warn(`warning: ${warning}`);
+  console.log("Run `factory-city view` to play it.");
+}
+
+async function runTimeline(repoPath: string, opts: Options): Promise<void> {
+  const folder = resolve(repoPath);
+  const quiet = Boolean(opts.json) || !process.stderr.isTTY;
+  const options = timelineOptions(opts, folder, quiet);
+  const slug = slugFor(folder);
+  const dataDir = opts.out ? resolve(opts.out as string) : join(outputRoot(), slug);
+  const started = Date.now();
+  const result = await buildTimeline(options, dataDir);
+  if (!quiet) process.stderr.write("\n");
+  if (!opts.out)
+    await updateIndex({ slug, name: result.manifest.project, dataDir, updatedAt: new Date().toISOString() });
+  const seconds = (Date.now() - started) / 1000;
+  if (!opts.json) return printTimeline(result, dataDir, seconds);
+  const summary = {
+    dataDir,
+    frames: result.manifest.frames.length,
+    seconds,
+    cache: result.cache,
+    dataLevel: result.manifest.dataLevel,
+  };
+  console.log(JSON.stringify(summary, null, 2));
+}
+
+/** `[repo] [base] [head]`: the repository is the first argument when it is a folder, else the current one. */
+function splitDiffArgs(args: string[]): { repoPath: string; base?: string; head?: string } {
+  const rest = [...args];
+  const first = rest[0];
+  const isFolder = first !== undefined && existsSync(first) && statSync(first).isDirectory();
+  const repoPath = isFolder ? (rest.shift() as string) : ".";
+  return { repoPath, base: rest[0], head: rest[1] };
+}
+
+async function runDiff(args: string[], opts: Options): Promise<void> {
+  const { repoPath, base, head } = splitDiffArgs(args);
+  const folder = resolve(repoPath);
+  const slug = slugFor(folder);
+  const dataDir = opts.out ? resolve(opts.out as string) : join(outputRoot(), slug);
+  const result = await buildDiff({ folder, base, head, top: Number(opts.top) || 10 }, dataDir);
+  const entry = { slug, name: result.manifest.project, dataDir, updatedAt: new Date().toISOString() };
+  if (!opts.out) await updateIndex(entry);
+  if (opts.json) console.log(JSON.stringify(result.summary, null, 2));
+  else console.log(diffText(result.summary));
+  for (const warning of result.manifest.warnings) console.warn(`warning: ${warning}`);
+  if (opts.image) {
+    const [width, height] = parseSize(opts.size as string);
+    const out = resolve(opts.image as string);
+    await renderImage({ entry, source: "diff", preset: "change", width, height, out });
+    if (!opts.json) console.log(`Picture written to ${out}`);
+    return;
+  }
+  if (opts.json || opts.open === false) return;
+  await serve(entry, { port: opts.port as string | undefined, open: true }, "?source=diff");
+}
 
 /** Registers the commands of this module on the program. */
 export function registerTimeline(program: Command): void {
@@ -34,84 +140,7 @@ export function registerTimeline(program: Command): void {
     .option("--exclude <glob>", "exclude files matching the glob (repeatable)", collect, [])
     .option("-o, --out <dir>", "output folder (default: ~/.factory-city/<project>)")
     .option("--json", "print machine-readable output")
-    .action(async (repoPath: string, opts: Record<string, unknown>) => {
-      const by = opts.by as string;
-      if (by !== "commit" && by !== "day" && by !== "issue")
-        throw new Error(`Unknown --by "${by}". Use commit, issue or day.`);
-      const maxFrames = opts.maxFrames === undefined ? undefined : Number(opts.maxFrames);
-      if (maxFrames !== undefined && (!Number.isInteger(maxFrames) || maxFrames < 2)) {
-        throw new Error("--max-frames must be a whole number of at least 2.");
-      }
-      const folder = resolve(repoPath);
-      const slug = slugFor(folder);
-      const dataDir = opts.out ? resolve(opts.out as string) : join(outputRoot(), slug);
-      const started = Date.now();
-      const quiet = Boolean(opts.json) || !process.stderr.isTTY;
-      const result = await buildTimeline(
-        {
-          folder,
-          by,
-          branch: opts.branch as string | undefined,
-          allCommits: opts.allCommits as boolean | undefined,
-          since: opts.since as string | undefined,
-          until: opts.until as string | undefined,
-          range: opts.range as string | undefined,
-          revs:
-            typeof opts.revs === "string"
-              ? opts.revs
-                  .split(",")
-                  .map((r) => r.trim())
-                  .filter(Boolean)
-              : undefined,
-          maxFrames,
-          offline: opts.offline as boolean | undefined,
-          facts: opts.facts as string | undefined,
-          path: opts.path as string | undefined,
-          all: opts.all as boolean | undefined,
-          include: opts.include as string[],
-          exclude: opts.exclude as string[],
-          onProgress: quiet ? undefined : (done, total) => process.stderr.write(`\rframe ${done}/${total}`),
-        },
-        dataDir,
-      );
-      if (!quiet) process.stderr.write("\n");
-      if (!opts.out)
-        await updateIndex({
-          slug,
-          name: result.manifest.project,
-          dataDir,
-          updatedAt: new Date().toISOString(),
-        });
-      const seconds = (Date.now() - started) / 1000;
-      if (opts.json) {
-        console.log(
-          JSON.stringify(
-            {
-              dataDir,
-              frames: result.manifest.frames.length,
-              seconds,
-              cache: result.cache,
-              dataLevel: result.manifest.dataLevel,
-            },
-            null,
-            2,
-          ),
-        );
-        return;
-      }
-      const sampled = result.manifest.source.sampledFrom
-        ? ` (sampled from ${result.manifest.source.sampledFrom})`
-        : "";
-      console.log(
-        `Timeline of ${result.manifest.frames.length} frames${sampled} written to ${dataDir} in ${seconds.toFixed(1)} s.`,
-      );
-      console.log(
-        `Parsed ${result.cache.parsed} file contents, reused ${result.cache.reused} from the cache.`,
-      );
-      if (result.manifest.coverage) console.log(coverageLine(result.manifest.coverage));
-      for (const warning of result.manifest.warnings) console.warn(`warning: ${warning}`);
-      console.log("Run `factory-city view` to play it.");
-    });
+    .action(runTimeline);
 
   program
     .command("diff")
@@ -127,37 +156,5 @@ export function registerTimeline(program: Command): void {
     .option("--port <n>", "port to listen on (localhost only)")
     .option("--no-open", "do not open the browser")
     .option("-o, --out <dir>", "output folder (default: ~/.factory-city/<project>)")
-    .action(async (args: string[], opts: Record<string, unknown>) => {
-      const rest = [...args];
-      const first = rest[0];
-      const repoPath =
-        first !== undefined && existsSync(first) && statSync(first).isDirectory()
-          ? (rest.shift() as string)
-          : ".";
-      const [base, head] = rest;
-      const folder = resolve(repoPath);
-      const slug = slugFor(folder);
-      const dataDir = opts.out ? resolve(opts.out as string) : join(outputRoot(), slug);
-      const result = await buildDiff({ folder, base, head, top: Number(opts.top) || 10 }, dataDir);
-      const entry = { slug, name: result.manifest.project, dataDir, updatedAt: new Date().toISOString() };
-      if (!opts.out) await updateIndex(entry);
-      if (opts.json) console.log(JSON.stringify(result.summary, null, 2));
-      else console.log(diffText(result.summary));
-      for (const warning of result.manifest.warnings) console.warn(`warning: ${warning}`);
-      if (opts.image) {
-        const [width, height] = parseSize(opts.size as string);
-        await renderImage({
-          entry,
-          source: "diff",
-          preset: "change",
-          width,
-          height,
-          out: resolve(opts.image as string),
-        });
-        if (!opts.json) console.log(`Picture written to ${resolve(opts.image as string)}`);
-        return;
-      }
-      if (opts.json || opts.open === false) return;
-      await serve(entry, { port: opts.port as string | undefined, open: true }, "?source=diff");
-    });
+    .action(runDiff);
 }
