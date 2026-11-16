@@ -29,6 +29,7 @@ import { buildLots } from "./lots";
 import { buildingMaterials, roofMaterials } from "./materials";
 import { Outlines } from "./outlines";
 import { pyramidGeometry } from "./patches";
+import { ResolutionGovernor } from "./resolution-governor";
 import { MAX_RAMP } from "./shaders";
 
 export type { CameraState } from "./camera-rig";
@@ -108,13 +109,9 @@ export class CityScene {
   onRendered: (() => void) | undefined;
   /** Current render scale: `motionRatio` while something moves, as sharp as the screen allows at rest. */
   private pixelRatio = 1;
-  /** Render scale while something moves: lowered when images take too long, raised back when there is room. */
-  private motionRatio = 1;
-  /** Smoothed time of one image while something moves, in milliseconds. */
-  private motionMs = 0;
+  /** Learns the render scale that keeps motion fluid. */
+  private governor!: ResolutionGovernor;
   private lastMotion = 0;
-  private slow = 0;
-  private fast = 0;
   /** Images drawn during the last second, for performance checks. */
   fps = 0;
   private fpsFrames = 0;
@@ -127,7 +124,7 @@ export class CityScene {
     this.theme = theme;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: false });
     this.pixelRatio = this.maxRatio();
-    this.motionRatio = this.pixelRatio;
+    this.governor = new ResolutionGovernor(this.pixelRatio);
     this.renderer.setPixelRatio(this.pixelRatio);
     this.uniforms.uEdgeWidth.value = edgeWidth(this.pixelRatio);
     this.renderer.shadowMap.enabled = theme.light.shadows;
@@ -193,10 +190,10 @@ export class CityScene {
       const moving = moved || animating || flying;
       if (moving) {
         this.lastMotion = time;
-        if (this.pixelRatio !== this.motionRatio) this.setPixelRatio(this.motionRatio);
+        if (this.pixelRatio !== this.governor.ratio) this.setPixelRatio(this.governor.ratio);
       } else if (time - this.lastMotion > REST_DELAY_MS) {
         // at rest: draw the still picture once more, as sharp as the screen allows
-        const rest = restRatio(this.motionRatio, this.motionMs, this.maxRatio());
+        const rest = restRatio(this.governor.ratio, this.governor.ms, this.maxRatio());
         if (rest > this.pixelRatio + 0.01) this.setPixelRatio(rest);
       }
       if (this.dirty || moving) {
@@ -216,30 +213,10 @@ export class CityScene {
     this.frame = requestAnimationFrame(loop);
   }
 
-  /**
-   * Keeps motion fluid: when several images in a row take longer than 1/40 s the picture is drawn at a
-   * lower resolution, and the resolution comes back when images are fast again.
-   */
+  /** Draws at a lower resolution when images take too long, and back when they are fast again. */
   private adaptResolution(dtMs: number): void {
-    const max = this.maxRatio();
-    if (dtMs > 0) this.motionMs = this.motionMs > 0 ? this.motionMs * 0.8 + dtMs * 0.2 : dtMs;
-    if (dtMs > 25) {
-      this.fast = 0;
-      if (++this.slow >= 3 && this.motionRatio > 0.75) {
-        this.slow = 0;
-        this.motionRatio = Math.max(0.75, this.motionRatio * 0.8);
-        this.setPixelRatio(this.motionRatio);
-      }
-    } else if (dtMs > 0 && dtMs < 14) {
-      this.slow = 0;
-      if (++this.fast >= 90 && this.motionRatio < max) {
-        this.fast = 0;
-        this.motionRatio = Math.min(max, this.motionRatio * 1.15);
-        this.setPixelRatio(this.motionRatio);
-      }
-    } else {
-      this.slow = 0;
-    }
+    const next = this.governor.adapt(dtMs, this.maxRatio());
+    if (next !== undefined) this.setPixelRatio(next);
   }
 
   private maxRatio(): number {
