@@ -16,6 +16,39 @@ function attributesByPath(cc: CcJson): Map<string, Record<string, number>> {
 /** What a branch does to the city, from the snapshots of its base and of its head. */
 export type Side = { rev: string; commit: string; cc: CcJson; health?: FrameHealth };
 
+type Attrs = Map<string, Record<string, number>>;
+type Values = Record<string, number> | undefined;
+
+/** Files, real lines and complexity of a snapshot. */
+function totalsOf(m: Attrs) {
+  let rloc = 0;
+  let mcc = 0;
+  for (const v of m.values()) {
+    rloc += v.rloc ?? 0;
+    mcc += v.mcc ?? 0;
+  }
+  return { files: m.size, rloc, mcc };
+}
+
+/** The change of each kind of silenced check in one file, added to the running total by kind. */
+function addShortcutKinds(byKind: Record<string, number>, a: Values, b: Values): void {
+  for (const key of new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])) {
+    if (!key.startsWith("escape_") || key === "escape_hatches" || key === "escape_hatch_density") continue;
+    const delta = (b?.[key] ?? 0) - (a?.[key] ?? 0);
+    if (delta !== 0) byKind[key.slice(7)] = (byKind[key.slice(7)] ?? 0) + delta;
+  }
+}
+
+/** What happened to a file between the base and the head: added, removed, modified, or nothing. */
+function changeOf(path: string, a: Values, b: Values): DiffFileChange | undefined {
+  const rloc = (b?.rloc ?? 0) - (a?.rloc ?? 0);
+  const mcc = (b?.mcc ?? 0) - (a?.mcc ?? 0);
+  if (!a) return { path, status: "added", rloc, mcc };
+  if (!b) return { path, status: "removed", rloc, mcc };
+  const touched = rloc !== 0 || mcc !== 0 || (a.loc ?? 0) !== (b.loc ?? 0);
+  return touched ? { path, status: "modified", rloc, mcc } : undefined;
+}
+
 export function summarize(project: string, base: Side, head: Side, top = 10): DiffSummary {
   const before = attributesByPath(base.cc);
   const after = attributesByPath(head.cc);
@@ -23,41 +56,21 @@ export function summarize(project: string, base: Side, head: Side, top = 10): Di
   const files = { added: 0, removed: 0, modified: 0, unchanged: 0 };
   const byKind: Record<string, number> = {};
   let shortcuts = 0;
-  const totals = (m: Map<string, Record<string, number>>) => {
-    let rloc = 0;
-    let mcc = 0;
-    for (const v of m.values()) {
-      rloc += v.rloc ?? 0;
-      mcc += v.mcc ?? 0;
-    }
-    return { files: m.size, rloc, mcc };
-  };
   for (const path of new Set([...before.keys(), ...after.keys()])) {
     const a = before.get(path);
     const b = after.get(path);
-    const rloc = (b?.rloc ?? 0) - (a?.rloc ?? 0);
-    const mcc = (b?.mcc ?? 0) - (a?.mcc ?? 0);
-    for (const key of new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])) {
-      if (!key.startsWith("escape_") || key === "escape_hatches" || key === "escape_hatch_density") continue;
-      const delta = (b?.[key] ?? 0) - (a?.[key] ?? 0);
-      if (delta !== 0) byKind[key.slice(7)] = (byKind[key.slice(7)] ?? 0) + delta;
-    }
+    addShortcutKinds(byKind, a, b);
     shortcuts += (b?.escape_hatches ?? 0) - (a?.escape_hatches ?? 0);
-    if (!a) {
-      files.added++;
-      changes.push({ path, status: "added", rloc, mcc });
-    } else if (!b) {
-      files.removed++;
-      changes.push({ path, status: "removed", rloc, mcc });
-    } else if (rloc !== 0 || mcc !== 0 || (a.loc ?? 0) !== (b.loc ?? 0)) {
-      files.modified++;
-      changes.push({ path, status: "modified", rloc, mcc });
-    } else files.unchanged++;
+    const change = changeOf(path, a, b);
+    if (change) changes.push(change);
+    files[change ? change.status : "unchanged"]++;
   }
   const weight = (c: DiffFileChange) => Math.abs(c.rloc) + Math.abs(c.mcc);
   changes.sort((x, y) => weight(y) - weight(x) || (x.path < y.path ? -1 : 1));
-  const tb = totals(before);
-  const th = totals(after);
+  const tb = totalsOf(before);
+  const th = totalsOf(after);
+  const baseHotspots = base.health?.hotspots ?? [];
+  const headHotspots = head.health?.hotspots ?? [];
   return {
     kind: "diff",
     schemaVersion: 1,
@@ -78,8 +91,8 @@ export function summarize(project: string, base: Side, head: Side, top = 10): Di
       delta: Math.round(((head.health?.score ?? 0) - (base.health?.score ?? 0)) * 10) / 10,
     },
     hotspots: {
-      created: (head.health?.hotspots ?? []).filter((p) => !(base.health?.hotspots ?? []).includes(p)),
-      resolved: (base.health?.hotspots ?? []).filter((p) => !(head.health?.hotspots ?? []).includes(p)),
+      created: headHotspots.filter((p) => !baseHotspots.includes(p)),
+      resolved: baseHotspots.filter((p) => !headHotspots.includes(p)),
     },
   };
 }
