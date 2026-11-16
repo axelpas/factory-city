@@ -73,6 +73,12 @@ class Walker {
   }
 
   private inspect(node: Node): void {
+    this.countShortcuts(node);
+    this.collectImport(node);
+  }
+
+  /** Counts the places where a check was silenced, by the language's rules. */
+  private countShortcuts(node: Node): void {
     const type = node.type;
     for (const { rule, re } of this.rules) {
       if (rule.type === "node" && rule.nodeType === type && (!re || re.test(node.text)))
@@ -85,6 +91,11 @@ class Walker {
         if (body?.namedChildren.every((c) => !c || this.cm.has(c.type))) this.count(rule.kind);
       }
     }
+  }
+
+  /** Collects the module a node imports: an import statement, or a call such as `require`. */
+  private collectImport(node: Node): void {
+    const type = node.type;
     const imp = this.lang.imports;
     if (!imp) return;
     if (imp.statements.includes(type)) {
