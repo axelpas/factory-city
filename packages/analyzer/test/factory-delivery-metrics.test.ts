@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { ciAttempts, estimateOf, hoursBetween, median, scopeGap } from "../src/collectors/delivery.js";
 import { computeKpis, KPI_DEFINITIONS } from "../src/factory/kpis.js";
-import { frame, SIX } from "./factory-helpers.js";
+import { SIX } from "./factory-frames.js";
+import { frame } from "./factory-helpers.js";
 
 describe("delivery metrics", () => {
   it("reads the estimate from a size label, and from the project's own patterns", () => {

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { computeFactory } from "../src/factory/kpis.js";
 import { factoryMarkdown } from "../src/factory/markdown.js";
-import { frame, SIX } from "./factory-helpers.js";
+import { SIX } from "./factory-frames.js";
+import { frame } from "./factory-helpers.js";
 
 describe("factory.json", () => {
   const factory = computeFactory({
