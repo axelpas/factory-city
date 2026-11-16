@@ -1,30 +1,12 @@
 import type { Layout } from "@factory-city/layout";
 import * as THREE from "three";
-import {
-  B,
-  D,
-  G,
-  H,
-  MARK,
-  MODE,
-  PRESENCE,
-  R,
-  RAMP,
-  ROOF,
-  STRIDE,
-  TOUCHED,
-  W,
-  X,
-  Y,
-  Z,
-} from "../anim/transition";
 import type { Theme } from "../themes/index";
 import { parseHex, type Rgb } from "../view/color";
 import type { Insets } from "../view/framing";
 import { folderDepth } from "../view/placements";
 import { edgeWidth, REST_DELAY_MS, restRatio } from "../view/resolution";
 import { CameraRig, type CameraState } from "./camera-rig";
-import { buildBuildings, buildPlinths, buildRoofs } from "./city-meshes";
+import { buildBuildings, buildPlinths, buildRoofs, writeStates } from "./city-meshes";
 import { buildLots } from "./lots";
 import { Outlines } from "./outlines";
 import { Picker } from "./picker";
@@ -386,49 +368,9 @@ export class CityScene {
   setStates(start: Float32Array, target: Float32Array): void {
     const geometry = this.buildings?.geometry;
     if (!geometry) return;
-    const get = (name: string) => geometry.getAttribute(name) as THREE.InstancedBufferAttribute;
-    const posA = get("aPosA");
-    const posB = get("aPosB");
-    const sizeA = get("aSizeA");
-    const sizeB = get("aSizeB");
-    const miscA = get("aMiscA");
-    const miscB = get("aMiscB");
-    const colA = get("aColA");
-    const colB = get("aColB");
-    const fx = get("aFx");
     const lotFx = this.lots?.geometry.getAttribute("aPresence") as THREE.BufferAttribute | undefined;
-    const fill = (
-      s: Float32Array,
-      pos: THREE.BufferAttribute,
-      size: THREE.BufferAttribute,
-      misc: THREE.BufferAttribute,
-      col: THREE.BufferAttribute,
-      i: number,
-    ) => {
-      const o = i * STRIDE;
-      pos.setXYZ(i, s[o + X] as number, s[o + Y] as number, s[o + Z] as number);
-      size.setXYZ(i, s[o + W] as number, s[o + H] as number, s[o + D] as number);
-      misc.setXYZW(
-        i,
-        s[o + MARK] as number,
-        s[o + RAMP] as number,
-        s[o + MODE] as number,
-        s[o + ROOF] as number,
-      );
-      col.setXYZ(i, s[o + R] as number, s[o + G] as number, s[o + B] as number);
-    };
-    for (let i = 0; i < this.count; i++) {
-      fill(start, posA, sizeA, miscA, colA, i);
-      fill(target, posB, sizeB, miscB, colB, i);
-      const o = i * STRIDE;
-      const pa = start[o + PRESENCE] as number;
-      const pb = target[o + PRESENCE] as number;
-      fx.setXYZW(i, start[o + TOUCHED] as number, pa, target[o + TOUCHED] as number, pb);
-      if (lotFx) for (let k = 0; k < 8; k++) lotFx.setXY(i * 8 + k, pa, pb);
-    }
-    for (const a of [posA, posB, sizeA, sizeB, miscA, miscB, colA, colB, fx]) a.needsUpdate = true;
+    writeStates(geometry, lotFx, this.count, start, target);
     this.renderer.shadowMap.needsUpdate = true;
-    if (lotFx) lotFx.needsUpdate = true;
     this.requestRender();
   }
 
