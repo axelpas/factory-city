@@ -42,6 +42,7 @@ import type { ScaleKind } from "../view/scales";
 import { buildDelays, buildState } from "../view/state";
 import { statusChip, statusDetails } from "../view/status";
 import { blockLegend, blockSize, voxelize } from "../view/voxel";
+import { AppearanceMenu, type MotionSetting } from "./appearance-menu";
 import { fileCardView, folderCardView } from "./card-view";
 import { renderFileDetails } from "./details-view";
 import { DistrictLabelLayer } from "./district-labels";
@@ -79,8 +80,6 @@ interface State {
   hover: Pick;
   pinned: Pick;
 }
-
-type MotionSetting = "auto" | "full" | "reduced";
 
 const HELP_KEY = "fc.help.seen";
 const THEME_KEY = "fc.theme";
@@ -194,19 +193,29 @@ export class App {
     this.lensButton,
     this.lensList,
   );
-  private readonly appearanceList = el("div", { class: "menu-list" });
   /** The Export menu, which also keeps the options of the film. */
   private readonly exportMenu = new ExportMenu({
     onPicture: (size, overlay) => this.exporter.exportPng(size, overlay),
     onVideo: () => void this.exporter.exportVideo(),
     frameCount: () => this.state?.data.frames.length ?? 1,
   });
+  /** The Appearance menu, which also keeps the theme-independent settings. */
+  private readonly appearance = new AppearanceMenu(
+    {
+      theme: () => this.theme,
+      setTheme: (theme) => this.setTheme(theme),
+      onMotion: () => this.applyMotion(),
+      setDistrictNames: (on) => this.districtLabels.setEnabled(on),
+      setGlow: (on) => this.scene.setGlow(on),
+      remember: (key, value) =>
+        safeStorage(() => localStorage.setItem(key === "motion" ? MOTION_KEY : LABELS_KEY, value)),
+    },
+    {
+      motion: (safeStorage(() => localStorage.getItem(MOTION_KEY)) as MotionSetting | null) ?? "auto",
+      districtNames: safeStorage(() => localStorage.getItem(LABELS_KEY)) !== "off",
+    },
+  );
   private readonly presetQuestion = el("span", { class: "question" });
-  private readonly themeSelect = el("select", {
-    title: "Theme: the look changes, the data and the legend stay the same (T)",
-    attrs: { "aria-label": "Theme" },
-  });
-  private glow = true;
   private scaleBeforeTheme: ScaleKind | undefined;
   private readonly bar: TimelineBar;
   private state: State | undefined;
@@ -217,8 +226,6 @@ export class App {
   private shownFrame = -1;
   private slug: string | undefined;
   private available: Available = {};
-  private motion: MotionSetting =
-    (safeStorage(() => localStorage.getItem(MOTION_KEY)) as MotionSetting | null) ?? "auto";
   private readonly reducedQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
   /** Shown with `?fps` in the address: images per second, for performance checks. */
   private readonly fpsBox = new URLSearchParams(location.search).has("fps")
@@ -235,7 +242,6 @@ export class App {
   private districtLabels!: DistrictLabelLayer;
   /** Pictures and films of the city. */
   private exporter!: Exporter;
-  private labelsOn = safeStorage(() => localStorage.getItem(LABELS_KEY)) !== "off";
   /** The building the details show, outlined in the city until another one is selected. */
   private selectedUnion: number | null = null;
   private rafPending = false;
@@ -296,7 +302,7 @@ export class App {
     this.scene.canvas.setAttribute("aria-label", "City: every building is a file, every district a folder");
     this.scene.canvas.setAttribute("aria-describedby", "city-description");
     this.districtLabels = new DistrictLabelLayer(this.scene, () => this.coveredBoxes());
-    this.districtLabels.setEnabled(this.labelsOn);
+    this.districtLabels.setEnabled(this.appearance.districtNames);
     this.stage.append(this.districtLabels.element);
     this.exporter = new Exporter({
       state: () => this.state,
@@ -481,34 +487,11 @@ export class App {
       b.addEventListener("click", onClick);
       return b;
     };
-    for (const t of THEMES) {
-      const o = el("option", { text: t.label, attrs: { value: t.id } });
-      if (t.id === this.theme.id) o.selected = true;
-      this.themeSelect.append(o);
-    }
-    this.themeSelect.addEventListener("change", () =>
-      this.setTheme(themeById(this.themeSelect.value) ?? DEFAULT_THEME),
-    );
     this.projectSelect.addEventListener("change", () => {
       const url = new URL(location.href);
       url.searchParams.set("project", this.projectSelect.value);
       location.href = url.toString();
     });
-    const appearance = el(
-      "details",
-      { class: "menu popover" },
-      el(
-        "summary",
-        {
-          class: "icon quiet",
-          title: "Appearance: theme (T: next theme) and motion",
-          attrs: { "aria-label": "Appearance" },
-        },
-        icon("appearance"),
-      ),
-      this.appearanceList,
-    );
-    this.renderAppearance();
     return el(
       "header",
       { class: "bar" },
@@ -527,67 +510,10 @@ export class App {
       this.finder.element,
       iconButton("top", "Top view", "Top view: look straight down (V)", () => this.scene.topView()),
       iconButton("reset", "Reset the view", "Reset the view (R)", () => this.scene.resetCamera()),
-      appearance,
+      this.appearance.element,
       this.exportMenu.element,
       button("?", "How to read this city, and keyboard shortcuts (?)", () => this.toggleHelp(), "icon quiet"),
     );
-  }
-
-  /** The appearance menu: theme, motion, and the effects of the theme in force. None of it carries data. */
-  private renderAppearance(): void {
-    const motion = el("select", {
-      title: "Auto follows your system's reduced-motion setting",
-      attrs: { "aria-label": "Motion" },
-    });
-    for (const [value, label] of [
-      ["auto", "auto"],
-      ["full", "full"],
-      ["reduced", "reduced"],
-    ] as const) {
-      const o = el("option", { text: label, attrs: { value } });
-      if (value === this.motion) o.selected = true;
-      motion.append(o);
-    }
-    motion.addEventListener("change", () => {
-      this.motion = motion.value as MotionSetting;
-      safeStorage(() => localStorage.setItem(MOTION_KEY, this.motion));
-      this.applyMotion();
-    });
-    this.appearanceList.replaceChildren(
-      el("label", { class: "field" }, el("span", { text: "Theme" }), this.themeSelect),
-      el("label", { class: "field" }, el("span", { text: "Motion" }), motion),
-    );
-    const names = el("input", { attrs: { type: "checkbox" } });
-    names.checked = this.labelsOn;
-    names.addEventListener("change", () => {
-      this.labelsOn = names.checked;
-      safeStorage(() => localStorage.setItem(LABELS_KEY, this.labelsOn ? "on" : "off"));
-      this.districtLabels.setEnabled(this.labelsOn);
-    });
-    this.appearanceList.append(
-      el(
-        "label",
-        { class: "check", title: "Write the name of the districts on the ground" },
-        names,
-        " district names",
-      ),
-    );
-    if (this.theme.effects?.glow) {
-      const glow = el("input", { attrs: { type: "checkbox" } });
-      glow.checked = this.glow;
-      glow.addEventListener("change", () => {
-        this.glow = glow.checked;
-        this.scene.setGlow(this.glow);
-      });
-      this.appearanceList.append(
-        el(
-          "label",
-          { class: "check", title: "A soft glow around the edges; it carries no data" },
-          glow,
-          " edge glow",
-        ),
-      );
-    }
   }
 
   private fillProjectSelect(
@@ -811,7 +737,9 @@ export class App {
   }
 
   private applyMotion(): void {
-    const reduced = this.motion === "reduced" || (this.motion === "auto" && this.reducedQuery.matches);
+    const reduced =
+      this.appearance.motion === "reduced" ||
+      (this.appearance.motion === "auto" && this.reducedQuery.matches);
     if (this.animator) this.animator.reducedMotion = reduced;
   }
 
@@ -1333,9 +1261,8 @@ export class App {
     safeStorage(() => localStorage.setItem(THEME_KEY, theme.id));
     applyTheme(theme, document.documentElement);
     this.scene.applyTheme(theme);
-    this.scene.setGlow(this.glow);
-    this.themeSelect.value = theme.id;
-    this.renderAppearance();
+    this.scene.setGlow(this.appearance.glow);
+    this.appearance.showTheme(theme);
     if (!s) return;
     // a theme may prefer a scale (Blocks counts whole blocks); leaving it gives the previous scale back
     if (this.scaleBeforeTheme && !theme.scale) {
