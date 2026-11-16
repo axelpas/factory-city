@@ -45,6 +45,27 @@ export class DiskSource implements Source {
     );
   }
 
+  /** One entry of a folder: a folder is entered unless skipped, a file or a link is listed unless ignored. */
+  private async visitEntry(
+    path: string,
+    info: Awaited<ReturnType<typeof lstat>>,
+    name: string,
+    ignores: GitIgnoreStack,
+    options: ListOptions,
+    out: SourceEntry[],
+  ): Promise<void> {
+    if (info.isDirectory()) {
+      const reason = this.skipReason(path, name, ignores, options);
+      if (reason) options.onSkippedDir?.(reason);
+      else await this.walk(path, ignores, options, out);
+    } else if (info.isSymbolicLink()) {
+      out.push({ path, size: 0, kind: "symlink" });
+    } else if (info.isFile()) {
+      if (this.respectGitignore && ignores.isIgnored(path, false)) options.onSkippedDir?.("gitignored-file");
+      else out.push({ path, size: Number(info.size), kind: "file" });
+    }
+  }
+
   private async walk(
     rel: string,
     ignores: GitIgnoreStack,
@@ -54,21 +75,9 @@ export class DiskSource implements Source {
     const dir = rel ? join(this.root, rel) : this.root;
     const names = (await readdir(dir)).sort();
     await this.pushGitignore(dir, rel, names, ignores);
-    for (const name of names) {
-      if (name === ".git") continue;
-      const path = rel ? `${rel}/${name}` : name;
+    for (const name of names.filter((n) => n !== ".git")) {
       const info = await lstat(join(dir, name));
-      if (info.isDirectory()) {
-        const reason = this.skipReason(path, name, ignores, options);
-        if (reason) options.onSkippedDir?.(reason);
-        else await this.walk(path, ignores, options, out);
-      } else if (info.isSymbolicLink()) {
-        out.push({ path, size: 0, kind: "symlink" });
-      } else if (info.isFile()) {
-        if (this.respectGitignore && ignores.isIgnored(path, false))
-          options.onSkippedDir?.("gitignored-file");
-        else out.push({ path, size: info.size, kind: "file" });
-      }
+      await this.visitEntry(rel ? `${rel}/${name}` : name, info, name, ignores, options, out);
     }
   }
 

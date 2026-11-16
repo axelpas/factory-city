@@ -11,6 +11,13 @@ function stringValue(node: Node): string {
   return fragment ? fragment.text : node.text.slice(1, -1);
 }
 
+/** A call whose callee matches the rule, such as `eval(...)` or `test.skip(...)`. */
+function matchesCall(rule: ShortcutRule, re: RegExp | undefined, node: Node): boolean {
+  if (node.type !== (rule.nodeType ?? "call_expression")) return false;
+  const callee = node.childForFieldName("function")?.text;
+  return callee !== undefined && re?.test(callee) === true;
+}
+
 export class Walker {
   functions = 0;
   branches = 0;
@@ -55,14 +62,13 @@ export class Walker {
 
   /** Whether a node is a place where a check was silenced, by one of the language's rules. */
   private matches(rule: ShortcutRule, re: RegExp | undefined, node: Node): boolean {
-    const type = node.type;
-    if (rule.type === "node") return rule.nodeType === type && (!re || re.test(node.text));
-    if (rule.type === "call") {
-      if (type !== (rule.nodeType ?? "call_expression")) return false;
-      const callee = node.childForFieldName("function")?.text;
-      return callee !== undefined && re?.test(callee) === true;
-    }
-    if (rule.type !== "emptyBlock" || rule.nodeType !== type) return false;
+    if (rule.type === "node") return rule.nodeType === node.type && (!re || re.test(node.text));
+    if (rule.type === "call") return matchesCall(rule, re, node);
+    if (rule.type === "emptyBlock") return rule.nodeType === node.type && this.isEmptyBlock(rule, node);
+    return false;
+  }
+
+  private isEmptyBlock(rule: ShortcutRule, node: Node): boolean {
     const body = node.childForFieldName(rule.bodyField ?? "body");
     return body?.namedChildren.every((c) => !c || this.cm.has(c.type)) === true;
   }
@@ -95,12 +101,24 @@ export class Walker {
     return depth + 1;
   }
 
+  /** A comment: its place is remembered, and the rules about comments are applied. */
+  private visitComment(node: Node): void {
+    this.addComment(node);
+    for (const { rule, re } of this.rules)
+      if (rule.type === "comment" && re?.test(node.text)) this.count(rule.kind);
+  }
+
+  /** The end of a function: its complexity is one plus the branches inside it. */
+  private leaveFunction(): void {
+    const frame = this.stack.pop() as FunctionFrame;
+    const complexity = 1 + frame.branches;
+    this.maxFunctionComplexity = Math.max(this.maxFunctionComplexity ?? 0, complexity);
+  }
+
   visit(node: Node, depth: number, parentType: string): void {
     const type = node.type;
     if (this.cm.has(type)) {
-      this.addComment(node);
-      for (const { rule, re } of this.rules)
-        if (rule.type === "comment" && re?.test(node.text)) this.count(rule.kind);
+      this.visitComment(node);
       return;
     }
     this.inspect(node);
@@ -116,13 +134,7 @@ export class Walker {
       if (frame) frame.branches++;
     }
     for (const child of node.namedChildren) if (child) this.visit(child, nextDepth, type);
-    if (isFunction) {
-      const frame = this.stack.pop() as FunctionFrame;
-      const complexity = 1 + frame.branches;
-      if (this.maxFunctionComplexity === undefined || complexity > this.maxFunctionComplexity) {
-        this.maxFunctionComplexity = complexity;
-      }
-    }
+    if (isFunction) this.leaveFunction();
   }
 
   private isBranch(node: Node): boolean {
