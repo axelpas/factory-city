@@ -7,3 +7,7 @@ dist
 
 # local copy of the build brief
 docs/specs/factory-city-brief.md
+
+# analyses of other repositories stay out of this one
+private/
+*.local/
