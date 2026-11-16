@@ -19,15 +19,12 @@ import type { Model } from "../data/model";
 import { syntheticSnapshots } from "../data/synthetic";
 import { buildTimelineData, layoutWeights, type TimelineData } from "../data/timeline";
 import {
-  durationText,
   type EncodedVideo,
   encodeVideo,
   pixelHash,
   planVideo,
   secondsPerFrameAt,
-  VIDEO_SPEEDS,
   type VideoOptions,
-  videoSeconds,
 } from "../export/video";
 import { clear, el } from "../lib/dom";
 import { format } from "../lib/format";
@@ -62,6 +59,7 @@ import { statusChip, statusDetails } from "../view/status";
 import { blockLegend, blockSize, voxelize } from "../view/voxel";
 import { fileCardView, folderCardView, rowView } from "./card-view";
 import { DistrictLabelLayer } from "./district-labels";
+import { ExportMenu } from "./export-menu";
 import { FileFinder } from "./file-finder";
 import { fillHelp } from "./help";
 import { type IconName, icon } from "./icons";
@@ -205,6 +203,12 @@ export class App {
     this.lensList,
   );
   private readonly appearanceList = el("div", { class: "menu-list" });
+  /** The Export menu, which also keeps the options of the film. */
+  private readonly exportMenu = new ExportMenu({
+    onPicture: (size, overlay) => this.exportPng(size, overlay),
+    onVideo: () => void this.exportVideo(),
+    frameCount: () => this.state?.data.frames.length ?? 1,
+  });
   private readonly presetQuestion = el("span", { class: "question" });
   private readonly themeSelect = el("select", {
     title: "Theme: the look changes, the data and the legend stay the same (T)",
@@ -212,10 +216,6 @@ export class App {
   });
   private glow = true;
   private exporting = false;
-  private videoFps = 30;
-  /** How fast the film runs: a multiple of the base pace of 1.4 s per frame. */
-  private videoSpeed = 1;
-  private videoOrbit = false;
   private scaleBeforeTheme: ScaleKind | undefined;
   private readonly bar: TimelineBar;
   private state: State | undefined;
@@ -491,19 +491,6 @@ export class App {
       url.searchParams.set("project", this.projectSelect.value);
       location.href = url.toString();
     });
-    const exportMenu = el(
-      "details",
-      { class: "menu popover export-menu" },
-      el(
-        "summary",
-        {
-          class: "icon quiet",
-          title: "Export a picture, or the timelapse as a video (E: PNG)",
-          attrs: { "aria-label": "Export" },
-        },
-        icon("export"),
-      ),
-    );
     const appearance = el(
       "details",
       { class: "menu popover" },
@@ -519,75 +506,6 @@ export class App {
       this.appearanceList,
     );
     this.renderAppearance();
-    const overlay = el("input", { attrs: { type: "checkbox", checked: "" } });
-    const options: Array<[string, number | "4k"]> = [
-      ["PNG 1x", 1],
-      ["PNG 2x", 2],
-      ["PNG 4K", "4k"],
-    ];
-    const list = el("div", { class: "menu-list" });
-    for (const [label, size] of options) {
-      list.append(
-        button(label, `Download the view as ${label}`, () => {
-          exportMenu.open = false;
-          this.exportPng(size, overlay.checked);
-        }),
-      );
-    }
-    list.append(el("label", { class: "check" }, overlay, " with title and legend"));
-    const fps = el("select", {
-      title: "Images per second of the video",
-      attrs: { "aria-label": "Video images per second" },
-    });
-    for (const n of [30, 60])
-      fps.append(el("option", { text: `Video at ${n} images per second`, attrs: { value: String(n) } }));
-    fps.addEventListener("change", () => {
-      this.videoFps = Number(fps.value);
-    });
-    const speed = el("select", {
-      title: "How fast the film runs through the frames",
-      attrs: { "aria-label": "Video speed" },
-    });
-    for (const v of VIDEO_SPEEDS) {
-      const label = v < 1 ? "slow" : v === 1 ? "normal" : "fast";
-      const o = el("option", {
-        text: `Video speed ${format.number(v)}× (${label})`,
-        attrs: { value: String(v) },
-      });
-      if (v === this.videoSpeed) o.selected = true;
-      speed.append(o);
-    }
-    const length = el("p", { class: "muted video-length" });
-    const showLength = () => {
-      const frames = this.state?.data.frames.length ?? 1;
-      length.textContent = `Film length: about ${durationText(videoSeconds(frames, secondsPerFrameAt(this.videoSpeed)))}`;
-    };
-    speed.addEventListener("change", () => {
-      this.videoSpeed = Number(speed.value);
-      showLength();
-    });
-    exportMenu.addEventListener("toggle", () => {
-      if (exportMenu.open) showLength();
-    });
-    const orbit = el("input", { attrs: { type: "checkbox" } });
-    orbit.addEventListener("change", () => {
-      this.videoOrbit = orbit.checked;
-    });
-    list.append(
-      button(
-        "Video of the timelapse",
-        "Render the timelapse image by image and download it (MP4, or WebM)",
-        () => {
-          exportMenu.open = false;
-          void this.exportVideo();
-        },
-      ),
-      fps,
-      speed,
-      length,
-      el("label", { class: "check" }, orbit, " slow orbit in the video"),
-    );
-    exportMenu.append(list);
     return el(
       "header",
       { class: "bar" },
@@ -607,7 +525,7 @@ export class App {
       iconButton("top", "Top view", "Top view: look straight down (V)", () => this.scene.topView()),
       iconButton("reset", "Reset the view", "Reset the view (R)", () => this.scene.resetCamera()),
       appearance,
-      exportMenu,
+      this.exportMenu.element,
       button("?", "How to read this city, and keyboard shortcuts (?)", () => this.toggleHelp(), "icon quiet"),
     );
   }
@@ -2029,10 +1947,10 @@ export class App {
         {
           width: 1920,
           height: 1080,
-          fps: this.videoFps,
-          secondsPerFrame: secondsPerFrameAt(this.videoSpeed),
+          fps: this.exportMenu.fps,
+          secondsPerFrame: secondsPerFrameAt(this.exportMenu.speed),
           overlay: true,
-          orbit: this.videoOrbit,
+          orbit: this.exportMenu.orbit,
         },
         (done, total) => {
           note.textContent = `Rendering the video: image ${format.integer(done)} of ${format.integer(total)}`;
