@@ -585,7 +585,7 @@ export class CityScene {
             float width = fwidth(mid) * uEdgeWidth;
             float edge = 1.0 - smoothstep(width * 0.5, width, mid);
             float touched = vFx.x;
-            float touchWidth = fwidth(mid) * (uEdgeWidth + 0.8);
+            float touchWidth = fwidth(mid) * uEdgeWidth;
             float touchEdge = (1.0 - smoothstep(touchWidth * 0.6, touchWidth, mid)) * touched;
             // roof mark: a darker patch on the roof whose size repeats the category
             float roof = mix(vMiscA.w, vMiscB.w, vEase);
@@ -627,7 +627,7 @@ export class CityScene {
             }
             col = mix(col, uMarkColor, ring * 0.92);
             col = mix(col, uEdgeColor, max(max(edge, ringLine) * 0.85, mark * 0.7));
-            col = mix(col, uTouchColor, touchEdge * 0.75);
+            col = mix(col, uTouchColor, touchEdge * 0.9);
             float others = uHoverDim * (1.0 - vIsHover);
             col = mix(col, uDimColor, others * 0.7);
             if (uMode > 1.5) {

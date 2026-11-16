@@ -74,6 +74,32 @@ export function latestSource(available: Available): SourceKey | undefined {
   return entries.sort((a, b) => (a[1].createdAt < b[1].createdAt ? 1 : -1))[0]?.[0];
 }
 
+/**
+ * What can be chosen to look at: the timelines, which are cut per commit, per day or per issue. A snapshot is
+ * the last frame of a timeline, so it is offered only when no timeline exists.
+ */
+export function selectableSources(available: Available): SourceKey[] {
+  const keys = Object.keys(available) as SourceKey[];
+  const timelines = keys.filter((k) => k !== "snapshot");
+  return timelines.length > 0 ? timelines : keys;
+}
+
+/** The source opened first: the most recent of the selectable ones. */
+export function defaultSource(available: Available): SourceKey | undefined {
+  const keys = selectableSources(available);
+  return latestSource(Object.fromEntries(keys.map((k) => [k, available[k]])) as Available);
+}
+
+/** How a way of cutting the history is named. */
+export const SOURCE_LABELS: Record<SourceKey, string> = {
+  snapshot: "Snapshot",
+  commit: "Per commit",
+  day: "Per day",
+  issue: "Per issue",
+  revs: "Chosen revisions",
+  diff: "Branch diff",
+};
+
 export async function loadSource(
   slug: string,
   manifest: AnalysisManifest | TimelineManifest,

@@ -5,13 +5,15 @@ import { Animator } from "../anim/animator";
 import { readEmbedded } from "../data/embedded";
 import {
   type Available,
+  defaultSource,
   type Loaded,
-  latestSource,
   loadAvailable,
   loadProjects,
   loadSource,
   readDropped,
+  SOURCE_LABELS,
   type SourceKey,
+  selectableSources,
 } from "../data/load";
 import type { Model } from "../data/model";
 import { syntheticSnapshots } from "../data/synthetic";
@@ -178,10 +180,6 @@ export class App {
     title: "Switch project",
     attrs: { "aria-label": "Project" },
   });
-  private readonly sourceSelect = el("select", {
-    title: "Single snapshot, or a timeline per commit or per day",
-    attrs: { "aria-label": "Snapshot or timeline", hidden: "" },
-  });
   /** The preset picker: the main control of the bar. Each preset is listed with the question it answers. */
   private readonly lensButton = el("summary", {
     title: "Presets set all channels at once and answer one question (P: next preset)",
@@ -265,6 +263,9 @@ export class App {
         if (this.animator) this.animator.loop = loop;
       },
       onOrbit: (orbit) => this.scene.setOrbit(orbit),
+      onSource: (key) => {
+        void this.openSource(key as SourceKey);
+      },
     });
     this.header = this.buildHeader();
     root.append(
@@ -347,7 +348,11 @@ export class App {
     }
     this.available = await loadAvailable(this.slug);
     const wanted = params.get("source") as SourceKey | null;
-    const source = wanted && this.available[wanted] ? wanted : latestSource(this.available);
+    // a snapshot is the last frame of a timeline: it is opened only when there is no timeline
+    const source =
+      wanted && this.available[wanted] && selectableSources(this.available).includes(wanted)
+        ? wanted
+        : defaultSource(this.available);
     if (!source) {
       this.renderDropZone(`No data found for "${this.slug}". Run factory-city analyze or timeline first.`);
       return;
@@ -358,7 +363,7 @@ export class App {
   private async openSource(source: SourceKey): Promise<void> {
     const manifest = this.available[source];
     if (!manifest || !this.slug) return;
-    this.fillSourceSelect(source);
+    this.fillSources(source);
     try {
       this.renderDropZone("Loading…");
       const loaded = await loadSource(this.slug, manifest, (done, total) => {
@@ -478,9 +483,6 @@ export class App {
     this.themeSelect.addEventListener("change", () =>
       this.setTheme(themeById(this.themeSelect.value) ?? DEFAULT_THEME),
     );
-    this.sourceSelect.addEventListener("change", () => {
-      void this.openSource(this.sourceSelect.value as SourceKey);
-    });
     this.projectSelect.addEventListener("change", () => {
       const url = new URL(location.href);
       url.searchParams.set("project", this.projectSelect.value);
@@ -561,7 +563,6 @@ export class App {
       { class: "bar" },
       el("strong", { class: "brand", text: "Factory City" }),
       this.projectSelect,
-      this.sourceSelect,
       // what is asked of the city: the preset and its question
       this.lensMenu,
       this.presetQuestion,
@@ -650,23 +651,12 @@ export class App {
     this.projectSelect.hidden = projects.length < 2;
   }
 
-  private fillSourceSelect(current: SourceKey): void {
-    const labels: Record<SourceKey, string> = {
-      snapshot: "Snapshot",
-      commit: "Timeline per commit",
-      day: "Timeline per day",
-      issue: "Timeline per issue",
-      revs: "Chosen revisions",
-      diff: "Branch diff",
-    };
-    clear(this.sourceSelect);
-    const keys = Object.keys(this.available) as SourceKey[];
-    for (const key of keys) {
-      const o = el("option", { text: labels[key], attrs: { value: key } });
-      if (key === current) o.selected = true;
-      this.sourceSelect.append(o);
-    }
-    this.sourceSelect.hidden = keys.length < 2;
+  /** The ways of cutting the history sit in the playback options of the timeline bar. */
+  private fillSources(current: SourceKey): void {
+    this.bar.setSources(
+      selectableSources(this.available).map((value) => ({ value, label: SOURCE_LABELS[value] })),
+      current,
+    );
   }
 
   // ----------------------------------------------------------------- panel
@@ -1276,7 +1266,6 @@ export class App {
       const files = [...(e.dataTransfer?.files ?? [])];
       if (files.length === 0) return;
       try {
-        this.sourceSelect.hidden = true;
         this.open(await readDropped(files));
       } catch (err) {
         this.renderDropZone(err instanceof Error ? err.message : String(err));

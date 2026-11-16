@@ -1,5 +1,6 @@
 import type { Frame, TimelineManifest } from "@factory-city/schema";
 import { describe, expect, it } from "vitest";
+import { defaultSource, selectableSources } from "../src/data/load";
 import { syntheticSnapshots } from "../src/data/synthetic";
 import { buildTimelineData, layoutWeights } from "../src/data/timeline";
 import { createFormat } from "../src/lib/format";
@@ -179,5 +180,22 @@ describe("last change of a file", () => {
       value: "3 days before the snapshot",
     });
     expect(lastChangeRow(one, 0, 1, fmt)).toBeUndefined();
+  });
+});
+
+describe("sources to look at", () => {
+  const manifest = (createdAt: string) => ({ createdAt }) as never;
+
+  it("offers the timelines only when there are some: a snapshot is the last frame of one", () => {
+    const both = { snapshot: manifest("2026-03"), commit: manifest("2026-01"), issue: manifest("2026-02") };
+    expect(selectableSources(both)).toEqual(["commit", "issue"]);
+    expect(selectableSources({ snapshot: manifest("2026-03") })).toEqual(["snapshot"]);
+  });
+
+  it("opens the most recent of the selectable sources, whatever a newer snapshot says", () => {
+    const both = { snapshot: manifest("2026-03"), commit: manifest("2026-01"), issue: manifest("2026-02") };
+    expect(defaultSource(both)).toBe("issue");
+    expect(defaultSource({ snapshot: manifest("2026-03") })).toBe("snapshot");
+    expect(defaultSource({})).toBeUndefined();
   });
 });

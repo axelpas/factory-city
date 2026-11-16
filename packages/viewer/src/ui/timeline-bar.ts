@@ -17,6 +17,8 @@ export interface TimelineBarHandlers {
   onSpeed(speed: number): void;
   onLoop(loop: boolean): void;
   onOrbit(orbit: boolean): void;
+  /** Another way of cutting the history was chosen (per commit, per day, per issue). */
+  onSource(key: string): void;
 }
 
 const MAX_TICKS = 400;
@@ -48,6 +50,16 @@ export class TimelineBar {
     attrs: { type: "button", "aria-label": "Play" },
   });
   private playing = false;
+  private readonly sourceSelect = el("select", {
+    title: "How the history is cut into frames",
+    attrs: { "aria-label": "Frames" },
+  });
+  private readonly sourceField = el(
+    "label",
+    { class: "field", attrs: { hidden: "" } },
+    el("span", { text: "Frames" }),
+    this.sourceSelect,
+  );
   private readonly strip = el("div", { class: "strip" });
   private readonly stripSelect = el("select", {
     title: "Series drawn above the bar",
@@ -88,6 +100,7 @@ export class TimelineBar {
       input.addEventListener("change", () => onChange(input.checked));
       return el("label", { class: "check", title }, input, ` ${text}`);
     };
+    this.sourceSelect.addEventListener("change", () => handlers.onSource(this.sourceSelect.value));
     const options = el(
       "details",
       { class: `${POPOVER_CLASS} menu timeline-options` },
@@ -99,6 +112,7 @@ export class TimelineBar {
       el(
         "div",
         { class: "menu-list" },
+        this.sourceField,
         el("label", { class: "field" }, el("span", { text: "Speed" }), speed),
         check("Loop", "Start again from the first frame at the end", handlers.onLoop),
         check("Orbit", "Turn slowly around the city", handlers.onOrbit),
@@ -191,6 +205,17 @@ export class TimelineBar {
       ),
       this.strip,
     );
+  }
+
+  /** The ways of cutting the history that exist for this project; hidden when there is only one. */
+  setSources(options: Array<{ value: string; label: string }>, current: string): void {
+    clear(this.sourceSelect);
+    for (const o of options) {
+      const node = el("option", { text: o.label, attrs: { value: o.value } });
+      if (o.value === current) node.selected = true;
+      this.sourceSelect.append(node);
+    }
+    this.sourceField.hidden = options.length < 2;
   }
 
   private renderPlay(): void {
