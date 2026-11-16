@@ -2,9 +2,9 @@ import { mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { TimelineMode } from "@factory-city/schema";
 import type { AnalyzeShared } from "./analyze.js";
-import { ANALYZER_VERSION, analyze } from "./analyze.js";
+import { ANALYZER_VERSION } from "./analyze.js";
 import { enrichFrames } from "./collectors/enrich.js";
-import { computeHistory, loadHistoryLog, reachableCommits } from "./collectors/history.js";
+import { computeHistory, loadHistoryLog } from "./collectors/history.js";
 import { loadConfig } from "./config.js";
 import { resolveDimensions } from "./health/dimensions.js";
 import { findRepo, scopeOf } from "./source/git.js";
@@ -14,6 +14,7 @@ import { buildManifest, writeOutputs } from "./timeline/manifest.js";
 import { branchLabel, planFrames } from "./timeline/plan.js";
 import { FrameRecorder } from "./timeline/recorder.js";
 import { addRetrospective } from "./timeline/retro.js";
+import { type RunState, runFrames } from "./timeline/run-frames.js";
 import type { Rev, TimelineOptions, TimelineResult } from "./timeline/types.js";
 
 export { branchLabel, kindOfSubject, lastOfEachDay, sample } from "./timeline/plan.js";
@@ -72,14 +73,13 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
     dataDir,
     mode,
   });
-  let reachable = new Set<string>();
-  let currentTime = 0;
+  const state: RunState = { reachable: new Set<string>(), currentTime: 0 };
   const shared: AnalyzeShared = {
     provenance: (hash) => (lineage ? { metrics: lineage.at.get(hash), labels: lineage.labels } : undefined),
     config,
     fileCache,
     history: async (_rev, files) =>
-      computeHistory(log, currentTime, reachable, repo.prefix, files, {
+      computeHistory(log, state.currentTime, state.reachable, repo.prefix, files, {
         recentDays: config.windows.recentDays,
         fixPatterns: config.fixPatterns,
       }),
@@ -102,31 +102,18 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
     dimensions: resolveDimensions(config.thresholds),
     metrics,
   });
-  const frames = [];
-  let last: Awaited<ReturnType<typeof analyze>> | undefined;
-  let lookups = 0;
-  for (const [index, rev] of revs.entries()) {
-    reachable = await reachableCommits(repo.topLevel, rev.hash);
-    currentTime = rev.time;
-    const sizeBefore = fileCache.size;
-    const result = await analyze({
-      folder,
-      rev: rev.hash,
-      path: opts.path,
-      all: opts.all,
-      include: opts.include,
-      exclude: opts.exclude,
-      shared,
-    });
-    lookups += result.manifest.selected - (fileCache.size - sizeBefore);
-    last = result;
-    for (const m of result.manifest.metrics) metrics.add(m);
-    for (const w of result.manifest.warnings) warnings.add(w);
-    frames.push(await recorder.record({ index, rev, result, reachable }));
-    opts.onProgress?.(index + 1, revs.length);
-  }
-
-  if (!last) throw new Error("No frame was produced.");
+  const { frames, last, lookups } = await runFrames({
+    topLevel: repo.topLevel,
+    folder,
+    opts,
+    revs,
+    shared,
+    fileCache,
+    state,
+    recorder,
+    metrics,
+    warnings,
+  });
   if (facts) await writeAtomic(join(dataDir, "facts.json"), `${JSON.stringify(facts, null, 2)}\n`);
   if (lineage) addRetrospective(frames, revs, lineage);
   enrichFrames(frames, { forge, facts, estimatePatterns: config.estimatePatterns });
