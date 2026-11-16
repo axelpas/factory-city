@@ -11,6 +11,8 @@ export interface RenderImageOptions {
   width: number;
   height: number;
   overlay?: boolean;
+  /** The frame of a timeline to show, from 0; the last one by default. */
+  frame?: number;
   out: string;
 }
 
@@ -25,6 +27,7 @@ interface PageLike {
   goto(url: string): Promise<unknown>;
   waitForFunction(fn: string, arg?: unknown, options?: { timeout: number }): Promise<unknown>;
   evaluate<T>(fn: string): Promise<T>;
+  screenshot(options: { path: string }): Promise<unknown>;
 }
 
 const GL_ARGS = ["--ignore-gpu-blocklist", "--enable-unsafe-swiftshader", "--use-angle=swiftshader"];
@@ -76,7 +79,7 @@ export async function renderImage(options: RenderImageOptions): Promise<void> {
       timeout: 120_000,
     });
     const dataUrl = await page.evaluate<string | null>(
-      `window.factoryCity.capture(${Math.round(options.width)}, ${Math.round(options.height)}, ${options.overlay !== false}) ?? null`,
+      `window.factoryCity.capture(${Math.round(options.width)}, ${Math.round(options.height)}, ${options.overlay !== false}${options.frame === undefined ? "" : `, ${Math.round(options.frame)}`}) ?? null`,
     );
     if (!dataUrl?.startsWith("data:image/png;base64,")) {
       throw new Error("The viewer produced no picture (WebGL may be unavailable in this browser).");
@@ -198,4 +201,18 @@ export function parseSize(
   const m = /^(\d{2,5})x(\d{2,5})$/i.exec(text.trim());
   if (!m) throw new Error(`Invalid size "${text}". Use WIDTHxHEIGHT, for example 1920x1080.`);
   return [Number(m[1]), Number(m[2])];
+}
+
+/**
+ * A screenshot of the page itself, panels and bar included, after a script has set it up (open a panel, point
+ * at a building...). For the pictures of the documentation, not for exports.
+ */
+export async function screenshotPage(
+  options: Pick<RenderImageOptions, "entry" | "source" | "preset" | "theme" | "width" | "height" | "out">,
+  script: string,
+): Promise<void> {
+  await withPage(options, async (page) => {
+    await page.evaluate(`(async () => { ${script} })()`);
+    await page.screenshot({ path: options.out });
+  });
 }

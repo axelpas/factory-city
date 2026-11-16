@@ -418,6 +418,7 @@ program
   .option("--seconds-per-frame <n>", "seconds each frame of the timeline takes in the video", "1.4")
   .option("--orbit", "turn slowly around the city during the video")
   .option("--no-overlay", "leave out the title, the frame label and the legend")
+  .option("--frame <n>", "the frame of the timeline to show in a picture, from 1 (default: the last)")
   .option(
     "--redact",
     "remove commit subjects, issue titles, author and agent labels, facts, cost and declaration names",
@@ -488,7 +489,10 @@ program
       try {
         if (opts.image) {
           const path = resolve(opts.image as string);
-          await renderImage({ ...common, out: path });
+          const frame = opts.frame === undefined ? undefined : Number(opts.frame) - 1;
+          if (frame !== undefined && !(Number.isInteger(frame) && frame >= 0))
+            throw new Error("--frame must be a whole number from 1.");
+          await renderImage({ ...common, ...(frame === undefined ? {} : { frame }), out: path });
           written.push({ kind: "image", path });
           say(`Picture written to ${path}`);
         }

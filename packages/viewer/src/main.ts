@@ -8,7 +8,8 @@ const app = new App(root);
 // integration hook, used by headless rendering: wait for `ready`, then ask for a picture or a film
 const hook = {
   ready: false,
-  capture: (width: number, height: number, overlay = true) => app.capture(width, height, overlay),
+  capture: (width: number, height: number, overlay = true, frame?: number) =>
+    app.capture(width, height, overlay, frame),
   /** Renders the film and returns it as base64, with its type. */
   video: async (options: VideoOptions) => {
     const result = await app.video(options);

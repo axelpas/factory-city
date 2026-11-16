@@ -162,15 +162,16 @@ export class App {
     class: "factory",
     attrs: { "aria-label": "Factory", hidden: "" },
   });
-  /** The one panel on the right: the file, the health and the factory are its tabs. */
+  /** The code health in brief: what the folded inspector shows. */
+  private readonly scoreBox = new ScoreBox();
+  /** The one panel on the right, always there: the health, the file and the factory are its tabs. */
   private readonly inspector = new Inspector({
-    panes: { file: this.details, health: this.healthPanel, factory: this.factoryPanel },
+    panes: { health: this.healthPanel, file: this.details, factory: this.factoryPanel },
+    summary: this.scoreBox.element,
     onTab: (tab) => this.openTab(tab),
     onChange: (tab) => {
-      // closing the inspector ends the selection
+      // folding the inspector ends the selection
       if (tab === undefined) this.clearSelection();
-      this.healthButton.setAttribute("aria-pressed", String(tab === "health"));
-      this.factoryButton.setAttribute("aria-pressed", String(tab === "factory"));
     },
     width: Number(safeStorage(() => localStorage.getItem(INSPECTOR_KEY))) || undefined,
     onResize: (width) => safeStorage(() => localStorage.setItem(INSPECTOR_KEY, String(Math.round(width)))),
@@ -200,18 +201,6 @@ export class App {
     this.lensList,
   );
   private readonly appearanceList = el("div", { class: "menu-list" });
-  /** Opens the full report; it sits in the score box. */
-  private readonly healthButton = el("button", {
-    text: "Open the full report",
-    title: "Score, risk profile and hotspots (H)",
-    attrs: { type: "button", "aria-pressed": "false" },
-  });
-  private readonly scoreBox = new ScoreBox(this.healthButton);
-  private readonly factoryButton = el("button", {
-    text: "Factory",
-    title: "Factory KPIs and the issues to look at (F)",
-    attrs: { type: "button", "aria-pressed": "false" },
-  });
   private readonly presetQuestion = el("span", { class: "question" });
   private readonly themeSelect = el("select", {
     title: "Theme: the look changes, the data and the legend stay the same (T)",
@@ -483,8 +472,6 @@ export class App {
       b.addEventListener("click", onClick);
       return b;
     };
-    this.healthButton.addEventListener("click", () => this.toggleHealth());
-    this.factoryButton.addEventListener("click", () => this.toggleFactory());
     for (const t of THEMES) {
       const o = el("option", { text: t.label, attrs: { value: t.id } });
       if (t.id === this.theme.id) o.selected = true;
@@ -581,8 +568,6 @@ export class App {
       this.presetQuestion,
       el("span", { class: "spacer" }),
       // panels
-      this.scoreBox.element,
-      this.factoryButton,
       el("span", { class: "bar-rule" }),
       // view and page actions
       this.finder.element,
@@ -2001,14 +1986,7 @@ export class App {
       panel.append(el("p", { class: "muted", text: view.reason ?? "" }));
       return;
     }
-    panel.append(
-      el(
-        "div",
-        { class: "score" },
-        el("b", { text: format.number(view.score, 1) }),
-        el("span", { class: "muted", text: " out of 100" }),
-      ),
-    );
+    panel.append(el("div", { class: "score" }, el("b", { text: format.score(view.score) })));
     if (view.trend.length > 1) {
       const points = trendPoints(view.trend, 300, 36);
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -2154,7 +2132,7 @@ export class App {
   /** What sits on the stage and hides the city, relative to the stage: district names keep clear of it. */
   private coveredBoxes(): Array<{ x: number; y: number; w: number; h: number }> {
     const stage = this.stage.getBoundingClientRect();
-    return [this.legendBox, this.status]
+    return [this.legendBox, this.inspector.element, this.status]
       .filter((n) => !n.hidden)
       .map((n) => n.getBoundingClientRect())
       .filter((r) => r.width > 0)
@@ -2176,7 +2154,8 @@ export class App {
     const left = shown(this.panel);
     const bottom = shown(this.bar.element) ?? shown(this.status);
     const status = shown(this.status);
-    const right = this.rightPanels()
+    // folded, the inspector is a small summary laid over the stage: it takes no room from the city
+    const right = (this.inspector.isFolded ? [] : this.rightPanels())
       .map(shown)
       .filter((r) => r !== undefined);
     // in a medium window the panels overlay the stage: the city keeps the whole width
@@ -2197,6 +2176,7 @@ export class App {
       status ? stage.bottom - status.top : 0,
     );
     this.stage.parentElement?.style.setProperty("--bottom-stack", `${Math.round(stack)}px`);
+
     for (const [side, value] of Object.entries(insets))
       this.stage.parentElement?.style.setProperty(`--free-${side}`, `${Math.round(value)}px`);
     this.scene.setFreeArea(insets);
@@ -2212,7 +2192,9 @@ export class App {
   }
 
   /** The current view as a PNG data URL at an exact size, for headless rendering. */
-  capture(width: number, height: number, withOverlay = true): string | undefined {
+  capture(width: number, height: number, withOverlay = true, frame?: number): string | undefined {
+    // a frame asked for (0 to the last) is shown, whole, before the picture is taken
+    if (frame !== undefined) this.animator?.setPosition(frame);
     this.settle();
     return this.picture(width, height, withOverlay)?.toDataURL("image/png");
   }
@@ -2255,7 +2237,7 @@ export class App {
   private exportScore(): { health?: string } {
     const s = this.state;
     const score = s ? scoreAt(s.data, this.report, this.animator?.playhead ?? 0) : undefined;
-    return score === undefined ? {} : { health: format.number(score, 1) };
+    return score === undefined ? {} : { health: format.score(score) };
   }
 
   private frameText(): string | undefined {

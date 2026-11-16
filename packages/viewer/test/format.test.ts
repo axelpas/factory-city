@@ -26,3 +26,11 @@ describe("lib/format", () => {
     expect(zurich.date("2026-11-14T23:30:00Z")).toBe("Nov 15, 2026");
   });
 });
+
+describe("score", () => {
+  it("writes the code-health score as a percentage with one decimal", () => {
+    expect(createFormat(["en-US"]).score(41.8)).toBe("41.8%");
+    expect(createFormat(["en-US"]).score(100)).toBe("100.0%");
+    expect(createFormat(["fr-CH"]).score(20.75)).toMatch(/^20[.,][78] ?%$/);
+  });
+});

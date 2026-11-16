@@ -112,7 +112,7 @@ describe("health panel", () => {
     expect(view).toMatchObject({
       available: true,
       score: 62.5,
-      scoreText: "62.5 out of 100",
+      scoreText: "62.5%",
       notice: "The score is a heuristic.",
       trend: [],
     });

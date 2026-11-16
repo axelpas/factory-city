@@ -22,8 +22,10 @@ export function clampInspectorWidth(wanted: number, windowWidth: number): number
 }
 
 export interface InspectorOptions {
-  /** The content of each tab. A pane is shown by clearing its `hidden` attribute, from anywhere. */
+  /** The content of each tab, in the order of the tabs. A pane is shown by clearing its `hidden` attribute, from anywhere. */
   panes: Record<InspectorTab, HTMLElement>;
+  /** What the folded inspector shows: the code health in brief. */
+  summary: HTMLElement;
   /** A tab was asked for from the inspector's own header. */
   onTab(tab: InspectorTab): void;
   /** The tab shown changed, or the inspector closed. */
@@ -34,15 +36,17 @@ export interface InspectorOptions {
 }
 
 /**
- * The one panel on the right: the selected file, the code health and the factory share it as tabs, with one
- * header and one scrolling body. It follows the panes: showing a pane opens the inspector on its tab and hides
- * the others; hiding them all closes it.
+ * The one panel on the right, always there: the code health, the selected file and the factory share it as
+ * tabs, with one header and one scrolling body. Folded, it shows the code health in brief. It follows its
+ * panes: showing a pane unfolds the inspector on its tab and hides the others; hiding them all folds it.
  */
 export class Inspector {
   readonly element = el("aside", {
     class: "inspector",
-    attrs: { "aria-label": "Inspector", hidden: "", tabindex: "-1" },
+    attrs: { "aria-label": "Inspector", tabindex: "-1" },
   });
+  private folded = true;
+  private readonly foldButton: HTMLButtonElement;
   private readonly tabs = new Map<InspectorTab, HTMLButtonElement>();
   private current: InspectorTab | undefined;
   /** What had the focus when the inspector opened: it gets it back when the inspector closes. */
@@ -63,16 +67,16 @@ export class Inspector {
       pane.setAttribute("role", "tabpanel");
       pane.classList.add("pane");
     }
-    const close = el(
+    this.foldButton = el(
       "button",
-      {
-        class: "icon quiet",
-        title: "Close (Escape)",
-        attrs: { type: "button", "aria-label": "Close the inspector" },
-      },
-      icon("close"),
+      { class: "icon quiet inspector-fold", attrs: { type: "button" } },
+      icon("chevron"),
     );
-    close.addEventListener("click", () => this.close());
+    this.foldButton.addEventListener("click", () => {
+      if (this.folded) options.onTab("health");
+      else this.close();
+    });
+    this.renderFold();
     const grip = el("div", {
       class: "inspector-grip",
       title: "Drag to resize",
@@ -81,9 +85,10 @@ export class Inspector {
     this.watchGrip(grip);
     this.element.append(
       grip,
-      el("header", { class: "inspector-head" }, tablist, close),
-      el("div", { class: "inspector-body" }, ...Object.values(options.panes)),
+      el("header", { class: "inspector-head" }, tablist, this.foldButton),
+      el("div", { class: "inspector-body" }, options.summary, ...Object.values(options.panes)),
     );
+    this.element.classList.add("folded");
     if (options.width)
       this.element.style.width = `${clampInspectorWidth(options.width, window.innerWidth)}px`;
 
@@ -97,6 +102,17 @@ export class Inspector {
     });
     for (const pane of Object.values(options.panes))
       observer.observe(pane, { attributes: true, attributeFilter: ["hidden"] });
+  }
+
+  /** True while the inspector shows the code health in brief. */
+  get isFolded(): boolean {
+    return this.folded;
+  }
+
+  private renderFold(): void {
+    this.foldButton.title = this.folded ? "Unfold the inspector" : "Fold the inspector (Escape)";
+    this.foldButton.setAttribute("aria-label", this.folded ? "Unfold the inspector" : "Fold the inspector");
+    this.foldButton.setAttribute("aria-expanded", String(!this.folded));
   }
 
   get tab(): InspectorTab | undefined {
@@ -117,11 +133,16 @@ export class Inspector {
       if (pane === winner) tab = name;
       else if (!pane.hidden) pane.hidden = true;
     }
-    for (const [name, button] of this.tabs) button.setAttribute("aria-selected", String(name === tab));
-    const wasOpen = !this.element.hidden;
-    this.element.hidden = tab === undefined;
-    if (wasOpen && tab === undefined) this.giveFocusBack();
-    else if (!wasOpen && tab !== undefined) this.takeFocus();
+    // folded, the health tab is the one that speaks
+    for (const [name, button] of this.tabs)
+      button.setAttribute("aria-selected", String(name === (tab ?? "health")));
+    const wasOpen = !this.folded;
+    this.folded = tab === undefined;
+    this.element.classList.toggle("folded", this.folded);
+    this.options.summary.hidden = !this.folded;
+    this.renderFold();
+    if (wasOpen && this.folded) this.giveFocusBack();
+    else if (!wasOpen && !this.folded) this.takeFocus();
     if (tab !== this.current) {
       this.current = tab;
       this.options.onChange(tab);

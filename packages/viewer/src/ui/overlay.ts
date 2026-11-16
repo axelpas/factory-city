@@ -48,7 +48,7 @@ export function drawOverlay(
     ctx.fillText("Code health", width - pad, pad + 36 * k);
     ctx.fillStyle = text;
     ctx.font = `600 ${28 * k}px ${theme.font}`;
-    ctx.fillText(`${input.health} / 100`, width - pad, pad);
+    ctx.fillText(input.health, width - pad, pad);
     ctx.textAlign = "left";
   }
   const lineHeight = 22 * k;

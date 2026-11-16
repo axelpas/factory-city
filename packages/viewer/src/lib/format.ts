@@ -6,6 +6,8 @@ export interface Formatter {
   integer(value: number): string;
   number(value: number, maxFractionDigits?: number): string;
   percent(ratio: number): string;
+  /** The code-health score (0 to 100) as a percentage with one decimal: "41,8 %". */
+  score(value: number): string;
   /** A number with its unit, in agreement: "1 module", "6 modules"; a share reads as a percentage. */
   quantity(value: number, unit: string): string;
   date(value: string | Date): string;
@@ -39,11 +41,18 @@ export function createFormat(preferred?: readonly string[], options: FormatOptio
     new Intl.NumberFormat(locale, { maximumFractionDigits: max }).format(v);
   const percent = (v: number) =>
     new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 }).format(v);
+  const score = (v: number) =>
+    new Intl.NumberFormat(locale, {
+      style: "percent",
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(v / 100);
   return {
     locale,
     integer: (v) => new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(v),
     number,
     percent,
+    score,
     quantity: (v, unit) => {
       if (unit === "share") return percent(v);
       if (UNITLESS.has(unit)) return number(v);

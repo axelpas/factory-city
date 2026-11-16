@@ -173,10 +173,10 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
       const inspector = document.querySelector(".inspector");
       const shown = () => [...inspector.querySelectorAll(".pane")].filter((p) => !p.hidden).map((p) => p.getAttribute("aria-label"));
       const selected = () => [...inspector.querySelectorAll('[role="tab"]')].filter((t) => t.getAttribute("aria-selected") === "true").map((t) => t.textContent);
-      const closed = inspector.hidden;
+      const closed = inspector.classList.contains("folded");
       key("h");
       await wait(80);
-      const health = { panes: shown(), tab: selected(), pressed: document.querySelector('.bar button[aria-pressed="true"]')?.textContent };
+      const health = { panes: shown(), tab: selected() };
       const timeline = box(document.querySelector(".timeline"));
       const fits = box(inspector).bottom <= timeline.y && box(inspector).y >= box(document.querySelector(".bar")).bottom;
       const body = inspector.querySelector(".inspector-body");
@@ -193,11 +193,11 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
       const file = { panes: shown(), tab: selected(), text: inspector.querySelector(".pane:not([hidden])").textContent };
       key("Escape");
       await wait(40);
-      return { closed, health, fits, headStays, scrolls, factory, file, closedAgain: inspector.hidden, closeButtons: inspector.querySelectorAll('[aria-label="Close the inspector"]').length };
+      return { closed, health, fits, headStays, scrolls, factory, file, closedAgain: inspector.classList.contains("folded"), foldButtons: inspector.querySelectorAll(".inspector-fold").length, tabs: [...inspector.querySelectorAll('[role="tab"]')].map((t) => t.textContent) };
     `);
     expect(r).toEqual({
       closed: true,
-      health: { panes: ["Code health"], tab: ["Health"], pressed: "Open the full report" },
+      health: { panes: ["Code health"], tab: ["Health"] },
       fits: true,
       headStays: true,
       scrolls: true,
@@ -208,7 +208,8 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
         text: "Click a building to see all the metrics of its file.",
       },
       closedAgain: true,
-      closeButtons: 1,
+      foldButtons: 1,
+      tabs: ["Health", "File", "Factory"],
     });
   });
 
@@ -311,10 +312,10 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
       const trail = [...document.querySelectorAll(".breadcrumb button")].map((b) => b.textContent);
       document.querySelector(".breadcrumb button")?.click();
       await wait(700);
-      const closeButton = inspector.querySelector('[aria-label="Close the inspector"]');
+      const closeButton = inspector.querySelector(".inspector-fold");
       closeButton?.click();
       await wait(60);
-      return { ok, trail, closed: inspector.hidden, selected: hook.selected?.() ?? null };
+      return { ok, trail, closed: inspector.classList.contains("folded"), selected: hook.selected?.() ?? null };
     `);
     expect(r.ok).toBe(true);
     expect((r.trail as string[]).length).toBeGreaterThan(0);
@@ -369,7 +370,7 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
       const legendClear = !document.querySelector(".legend") || box(document.querySelector(".legend")).right <= box(inspector).x + 1 || box(document.querySelector(".legend")).bottom <= box(inspector).y;
       key("Escape");
       await wait(60);
-      return { ...audit, onStage, legendClear, closedByEscape: inspector.hidden };
+      return { ...audit, onStage, legendClear, closedByEscape: inspector.classList.contains("folded") };
     `,
       { width: 1000, height: 760 },
     );
@@ -466,7 +467,7 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
       await wait(80);
       const menuBack = document.activeElement === appearance;
 
-      const health = [...document.querySelectorAll(".bar button")].find((b) => b.textContent === "Factory");
+      const health = document.querySelector(".inspector-fold");
       health.focus();
       health.click();
       await wait(80);
@@ -509,7 +510,7 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
         options,
         closed: !finder.open,
         title: inspector.querySelector(".pane-title")?.textContent,
-        inspectorShown: !inspector.hidden,
+        inspectorShown: !inspector.classList.contains("folded"),
         focusInInspector: inspector.contains(document.activeElement),
         selected: window.factoryCity.selected() !== null,
       };
@@ -574,32 +575,44 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
     expect((r.away as { cursor: string }).cursor).not.toBe("pointer");
   });
 
-  it("keeps the code-health score in view at the top right, follows the playhead, and opens on the report", async () => {
+  it("keeps the code health in view in the folded inspector on the right: score in percent, trend, risks, Health first", async () => {
     const r = await inPage<Record<string, unknown>>(`
       await wait(300);
-      const score = document.querySelector(".score-box");
+      const inspector = document.querySelector(".inspector");
       const bar = document.querySelector(".bar");
-      const value = () => score.querySelector(".score-value").textContent;
-      const first = value();
-      const rightEdge = score.querySelector("summary").getBoundingClientRect().right;
-      // the box is on the right of the bar, right of the indicator selector
-      const onRight = rightEdge > bar.getBoundingClientRect().width / 2;
-      score.querySelector("summary").click();
+      const summary = inspector.querySelector(".score-summary");
+      const folded = {
+        isFolded: inspector.classList.contains("folded"),
+        summaryShown: !summary.hidden && box(summary).h > 0,
+        value: summary.querySelector(".score-value").textContent,
+        outOf100: summary.textContent.includes("out of 100"),
+        trend: !!summary.querySelector(".score-trend"),
+        risks: summary.querySelectorAll(".score-risks .kv").length,
+        onRight: box(inspector).x > innerWidth / 2,
+        tabs: [...inspector.querySelectorAll('[role="tab"]')].map((t) => t.textContent),
+        selected: [...inspector.querySelectorAll('[role="tab"]')].filter((t) => t.getAttribute("aria-selected") === "true").map((t) => t.textContent),
+        notInBar: ![...bar.querySelectorAll("button")].some((b) => ["Health", "Factory"].includes(b.textContent)),
+      };
+      inspector.querySelector(".inspector-fold").click();
       await wait(120);
-      const body = { open: score.open, trend: !!score.querySelector(".score-trend"), risks: score.querySelectorAll(".score-risks .kv").length };
-      score.querySelector("button").click();
-      await wait(150);
-      const report = { panes: [...document.querySelectorAll(".inspector .pane")].filter((p) => !p.hidden).map((p) => p.getAttribute("aria-label")) };
-      // moving the playhead to the first frame changes the number
-      document.querySelector('[aria-label="Previous frame (left arrow)"]').click();
-      document.querySelector('[aria-label="Previous frame (left arrow)"]').click();
-      await wait(1200);
-      return { first, last: value(), onRight, body, report, hasButtonInBar: !![...bar.children].find((c) => c.tagName === "BUTTON" && c.textContent === "Health") };
+      const unfolded = { folded: inspector.classList.contains("folded"), panes: [...inspector.querySelectorAll(".pane")].filter((p) => !p.hidden).map((p) => p.getAttribute("aria-label")), summaryHidden: summary.hidden };
+      inspector.querySelector(".inspector-fold").click();
+      await wait(120);
+      return { folded, unfolded, foldedAgain: inspector.classList.contains("folded") };
     `);
-    expect(r.first).toMatch(/\d/);
-    expect(r.onRight).toBe(true);
-    expect(r.body).toMatchObject({ trend: true });
-    expect(r.report).toEqual({ panes: ["Code health"] });
-    expect(r.hasButtonInBar).toBe(false);
+    expect(r.folded).toMatchObject({
+      isFolded: true,
+      summaryShown: true,
+      outOf100: false,
+      trend: true,
+      onRight: true,
+      tabs: ["Health", "File", "Factory"],
+      selected: ["Health"],
+      notInBar: true,
+    });
+    expect((r.folded as { risks: number }).risks).toBe(3);
+    expect((r.folded as { value: string }).value).toMatch(/\d.*%$/);
+    expect(r.unfolded).toEqual({ folded: false, panes: ["Code health"], summaryHidden: true });
+    expect(r.foldedAgain).toBe(true);
   });
 });

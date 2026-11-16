@@ -1,7 +1,6 @@
 import { el } from "../lib/dom";
 import { format } from "../lib/format";
 import { type HealthView, trendPoints } from "../view/health";
-import { POPOVER_CLASS } from "./popovers";
 
 const SVG = "http://www.w3.org/2000/svg";
 const TREND_W = 280;
@@ -10,31 +9,26 @@ const TREND_H = 34;
 const TOP_DIMENSIONS = 3;
 
 /**
- * The code-health score, always in view at the top right: a number and its change, which opens on the trend,
- * the risk it comes from, and the way to the full report. The number follows the playhead.
+ * What the code-health tab says when the inspector is folded, so that it is always in view: the score and its
+ * change, the trend over the frames with the playhead on it, and the three kinds of risk that weigh most. The
+ * number follows the playhead.
  */
 export class ScoreBox {
-  readonly element = el("details", { class: `${POPOVER_CLASS} menu score-box`, attrs: { hidden: "" } });
+  readonly element = el("div", { class: "score-summary" });
   private readonly value = el("b", { class: "score-value" });
   private readonly delta = el("span", { class: "score-delta muted" });
-  private readonly body = el("div", { class: "menu-list score-body" });
+  private readonly body = el("div", { class: "score-body" });
+  private readonly row = el(
+    "div",
+    { class: "score", title: "Code-health score of the frame shown (H: full report)" },
+    this.value,
+    this.delta,
+  );
+  private readonly message = el("p", { class: "muted", attrs: { hidden: "" } });
   private shown = Number.NaN;
 
-  /** `report` is the button that opens the full report: it lives in the box, and the app owns it. */
-  constructor(private readonly report: HTMLElement) {
-    this.element.append(
-      el(
-        "summary",
-        {
-          title: "Code-health score of the frame shown (H: full report)",
-          attrs: { "aria-label": "Code health" },
-        },
-        el("span", { class: "score-label", text: "Health" }),
-        this.value,
-        this.delta,
-      ),
-      this.body,
-    );
+  constructor() {
+    this.element.append(this.row, this.body, this.message);
   }
 
   /** The score under the playhead: cheap, called at every image. */
@@ -43,29 +37,31 @@ export class ScoreBox {
     const rounded = Math.round(score * 10) / 10;
     if (rounded === this.shown) return;
     this.shown = rounded;
-    this.value.textContent = format.number(rounded, 1);
+    this.value.textContent = format.score(rounded);
   }
 
   /** What the box says for the frame shown: the change, the trend, the main risks. Called when the frame changes. */
   render(view: HealthView, position: number): void {
-    this.element.hidden = !view.available;
-    if (!view.available) return;
+    this.row.hidden = !view.available;
+    this.body.hidden = !view.available;
+    this.message.hidden = view.available;
+    if (!view.available) {
+      this.message.textContent = view.reason ?? "No code-health data.";
+      return;
+    }
     this.setScore(view.score);
     const change = view.movement?.qualityDelta;
-    this.delta.textContent = change && change !== "unchanged" ? change : "";
+    this.delta.textContent = change && change !== "unchanged" ? ` ${change}` : "";
+    // a higher score is better: green when it went up, red when it went down
+    this.delta.classList.toggle("positive", Boolean(change?.startsWith("+")));
+    this.delta.classList.toggle("negative", Boolean(change?.startsWith("−")));
     this.delta.title = change ? `Change since the previous frame: ${change}` : "";
 
-    const parts: Array<Node> = [
-      el(
-        "div",
-        { class: "score" },
-        el("b", { text: format.number(view.score, 1) }),
-        el("span", { class: "muted", text: " out of 100" }),
-      ),
-    ];
+    const parts: Array<Node> = [];
     if (view.trend.length > 1) {
       const svg = document.createElementNS(SVG, "svg");
       svg.setAttribute("viewBox", `0 0 ${TREND_W} ${TREND_H}`);
+      svg.setAttribute("preserveAspectRatio", "none");
       svg.setAttribute("class", "score-trend");
       svg.setAttribute("role", "img");
       svg.setAttribute("aria-label", "Score over the frames");
@@ -88,7 +84,7 @@ export class ScoreBox {
       parts.push(
         el(
           "div",
-          { class: "score-risks" },
+          { class: "score-risks", title: "Share of code at high or very high risk" },
           ...risks.map((r) =>
             el(
               "div",
@@ -97,10 +93,8 @@ export class ScoreBox {
               el("span", { class: "v", text: format.percent(r.share.high + r.share.veryHigh) }),
             ),
           ),
-          el("p", { class: "muted score-caption", text: "Share of code at high or very high risk." }),
         ),
       );
-    parts.push(el("p", { class: "muted score-caption", text: view.notice }), this.report);
     this.body.replaceChildren(...parts);
   }
 }

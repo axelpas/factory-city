@@ -20,6 +20,8 @@
     "panel": "#fbfaf8",
     "panelBorder": "#d8d4c9",
     "accent": "#1f3a5f",
+    "positive": "#1a7a45",
+    "negative": "#b3261e",
     "accentText": "#ffffff",
     "marker": "#c8553d",
     "riskLow": "#cfe0ee",

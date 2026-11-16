@@ -93,7 +93,7 @@ export function healthView(
     ...empty,
     available: true,
     score,
-    scoreText: `${fmt.number(score, 1)} out of 100`,
+    scoreText: fmt.score(score),
     notice: report.notice,
     trend: isTimeline ? frames.map((h) => h?.score ?? Number.NaN) : [],
     profile: rows,
