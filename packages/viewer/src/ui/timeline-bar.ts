@@ -1,10 +1,12 @@
 import type { Frame } from "@factory-city/schema";
 import { clear, el } from "../lib/dom";
 import { format } from "../lib/format";
-import { frameCardRows, frameMarkers, type SeriesState } from "../view/lenses";
+import { frameMarkers, type SeriesState } from "../view/lenses";
 import { frameTitle } from "../view/transport";
+import { fillFrameCard } from "./frame-card";
 import { icon } from "./icons";
 import { PlaybackOptions } from "./playback-options";
+import { attachScrub } from "./scrub";
 import { TrendStrip } from "./trend-strip";
 
 export interface TimelineBarHandlers {
@@ -23,7 +25,6 @@ export interface TimelineBarHandlers {
 
 const MAX_TICKS = 400;
 /** Pointer travel (px) from which a press on the track is a drag and no more a click. */
-const DRAG_PX = 4;
 
 /**
  * The timeline bar: frame ticks, playhead, play and pause, speed, previous and next, loop, frame label and
@@ -52,7 +53,6 @@ export class TimelineBar {
   private frames: Array<Frame | undefined> = [];
   private shown = { files: 0, rloc: 0, mcc: 0 };
   private wanted = { files: 0, rloc: 0, mcc: 0 };
-  private pressed: { x: number; moved: boolean } | undefined;
 
   constructor(handlers: TimelineBarHandlers) {
     const button = (name: "prev" | "next", title: string, onClick: () => void) => {
@@ -66,34 +66,18 @@ export class TimelineBar {
     this.options = new PlaybackOptions(handlers);
 
     this.track.append(this.ticks, this.head);
-    // a press without a move is a click: the playhead travels to the frame with the picture; a drag seeks
-    this.track.addEventListener("pointerdown", (e) => {
-      this.pressed = { x: e.clientX, moved: false };
-      this.card.hidden = true;
-      this.track.setPointerCapture(e.pointerId);
+    attachScrub(this.track, {
+      positionAt: (x) => this.positionAt(x),
+      onHover: (x) => this.showCard(Math.round(this.positionAt(x)), x),
+      onLeave: () => {
+        this.card.hidden = true;
+      },
+      onPress: () => {
+        this.card.hidden = true;
+      },
+      onSeek: (position) => handlers.onSeek(position),
+      onJump: (frame) => handlers.onJump(frame),
     });
-    this.track.addEventListener("pointermove", (e) => {
-      const press = this.pressed;
-      if (!press) {
-        this.showCard(Math.round(this.positionAt(e.clientX)), e.clientX);
-        return;
-      }
-      if (!press.moved && Math.abs(e.clientX - press.x) < DRAG_PX) return;
-      press.moved = true;
-      handlers.onSeek(this.positionAt(e.clientX));
-    });
-    this.track.addEventListener("pointerleave", () => {
-      this.card.hidden = true;
-    });
-    const release = (e: PointerEvent) => {
-      if (!this.pressed) return;
-      this.pressed = undefined;
-      this.track.releasePointerCapture(e.pointerId);
-      // settle on the nearest frame, with a move
-      handlers.onJump(Math.round(this.positionAt(e.clientX)));
-    };
-    this.track.addEventListener("pointerup", release);
-    this.track.addEventListener("pointercancel", release);
     this.element.append(
       this.card,
       el("div", { class: "frame-info" }, this.label, this.totals),
@@ -167,21 +151,7 @@ export class TimelineBar {
       this.card.hidden = true;
       return;
     }
-    clear(this.card);
-    this.card.append(
-      el("div", { class: "card-title", text: frameTitle(frame) }),
-      el("div", { class: "muted", text: format.date(frame.date) }),
-      ...frameCardRows(frame, format).map((r) =>
-        el(
-          "div",
-          { class: "kv", title: r.note },
-          el("span", { class: "k", text: r.label }),
-          el("span", { class: r.value === "n/a" ? "v na" : "v", text: r.value }),
-          r.note ? el("span", { class: "note", text: r.note }) : undefined,
-        ),
-      ),
-      ...frameMarkers(frame).map((m) => el("div", { class: "muted", text: m.title })),
-    );
+    fillFrameCard(this.card, frame);
     this.card.hidden = false;
     const box = this.element.getBoundingClientRect();
     const width = this.card.offsetWidth;
