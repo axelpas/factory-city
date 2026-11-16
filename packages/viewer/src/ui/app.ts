@@ -42,16 +42,7 @@ import {
 } from "../presets/index";
 import { type CameraState, CityScene, type Pick } from "../scene/CityScene";
 import { applyTheme, DEFAULT_THEME, THEMES, type Theme, themeById } from "../themes/index";
-import {
-  type CardRow,
-  type FileCard,
-  type FolderCard,
-  fileCard,
-  folderCard,
-  frameChangeRows,
-  lastChangeRow,
-  lotCard,
-} from "../view/card";
+import { fileCard, folderCard, frameChangeRows, lastChangeRow, lotCard } from "../view/card";
 import { placeCard } from "../view/card-place";
 import { biggestChanges, CHANGE, changePlacements, type FileChange } from "../view/change";
 import { parseHex } from "../view/color";
@@ -60,7 +51,7 @@ import { describeCity } from "../view/describe";
 import { type DetailRow, fileDetails } from "../view/details";
 import { factoryView } from "../view/factory";
 import { freeRect, type Insets, NO_INSETS } from "../view/framing";
-import { healthView, scoreAt, trendPoints } from "../view/health";
+import { healthView, scoreAt } from "../view/health";
 import { type LegendModel, legendModel } from "../view/legend";
 import { hiddenLensesLine } from "../view/lenses";
 import { resolveMarker } from "../view/marker";
@@ -69,13 +60,16 @@ import { SCALE_KINDS, type ScaleKind } from "../view/scales";
 import { buildDelays, buildState } from "../view/state";
 import { statusChip, statusDetails } from "../view/status";
 import { blockLegend, blockSize, voxelize } from "../view/voxel";
+import { fileCardView, folderCardView, rowView } from "./card-view";
 import { DistrictLabelLayer } from "./district-labels";
 import { FileFinder } from "./file-finder";
+import { fillHelp } from "./help";
 import { type IconName, icon } from "./icons";
 import { Inspector, type InspectorTab } from "./inspector";
 import { renderLegendBox } from "./legend-box";
 import { lensGroups, renderLensButton, renderLensList } from "./lens";
 import { drawOverlay } from "./overlay";
+import { renderFactoryPanel, renderHealthPanel } from "./panels";
 import { closePopovers, watchPopovers } from "./popovers";
 import { ScoreBox } from "./score-box";
 import { renderStatusChip } from "./status-chip";
@@ -1407,7 +1401,7 @@ export class App {
     if (!s) return;
     clear(this.card);
     if (pick.kind === "folder") {
-      this.card.append(this.folderCardView(folderCard(s.model, pick.path, format)));
+      this.card.append(folderCardView(folderCard(s.model, pick.path, format)));
     } else {
       const m = this.modelIndex(pick.index);
       if (pick.kind === "lot" || m < 0) {
@@ -1424,7 +1418,7 @@ export class App {
       } else {
         const data = fileCard(s.model, m, s.mapping, format, this.report?.dimensions);
         const last = lastChangeRow(s.data, frame, pick.index, format);
-        this.card.append(this.fileCardView(data, last ? [last] : []));
+        this.card.append(fileCardView(data, last ? [last] : []));
       }
     }
     this.card.classList.add("on");
@@ -1442,59 +1436,6 @@ export class App {
 
   private hideCard(): void {
     this.card.classList.remove("on");
-  }
-
-  private rowView(r: CardRow): HTMLElement {
-    const marker =
-      r.marker !== undefined
-        ? el(
-            "span",
-            { class: "scale", title: `Higher than ${format.percent(r.marker)} of files` },
-            el("i", { style: { left: `${Math.round(r.marker * 100)}%` } }),
-          )
-        : undefined;
-    return el(
-      "div",
-      { class: "kv", title: r.note },
-      el("span", { class: "k", text: r.label }),
-      el("span", { class: r.value === "n/a" ? "v na" : "v", text: r.value }),
-      marker,
-      r.note && r.value === "n/a" ? el("span", { class: "note", text: r.note }) : undefined,
-    );
-  }
-
-  private fileCardView(c: FileCard, changes: CardRow[] = []): HTMLElement {
-    return el(
-      "div",
-      {},
-      el("div", { class: "card-title", text: c.title }),
-      el("div", { class: "muted", text: c.folder }),
-      el("div", { class: "muted", text: `${c.language}${c.isTest ? " · test" : ""}` }),
-      ...c.channels.map((r) => this.rowView(r)),
-      c.facts.length || changes.length ? el("hr") : undefined,
-      ...c.facts.map((r) => this.rowView({ ...r, marker: undefined })),
-      ...changes.map((r) => this.rowView(r)),
-      el("div", { class: "hint", text: c.hint }),
-    );
-  }
-
-  private folderCardView(c: FolderCard): HTMLElement {
-    return el(
-      "div",
-      {},
-      el("div", { class: "card-title", text: c.title }),
-      el("div", { class: "muted", text: c.path }),
-      ...c.rows.map((r) => this.rowView(r)),
-      c.worst.length ? el("div", { class: "muted", text: "Most complex files" }) : undefined,
-      ...c.worst.map((w) =>
-        el(
-          "div",
-          { class: "kv" },
-          el("span", { class: "k", text: w.path }),
-          el("span", { class: "v", text: w.value }),
-        ),
-      ),
-    );
   }
 
   // --------------------------------------------------------------- details
@@ -1545,11 +1486,11 @@ export class App {
       el("div", { class: "muted", text: `${d.language}${d.isTest ? " · test file" : ""}` }),
       ...(d.risks.length ? [el("p", { class: "risks", text: d.risks.join(" · ") })] : []),
       el("h3", { text: "Shown in the city" }),
-      ...d.channels.map((r) => this.rowView(r)),
+      ...d.channels.map((r) => rowView(r)),
     );
     const changes = frameChangeRows(s.data, frame, union, s.mapping, format);
     if (changes.length) {
-      this.details.append(el("h3", { text: "This frame" }), ...changes.map((r) => this.rowView(r)));
+      this.details.append(el("h3", { text: "This frame" }), ...changes.map((r) => rowView(r)));
     }
     for (const group of d.groups) {
       if (group.allZero) {
@@ -1693,66 +1634,7 @@ export class App {
   // ------------------------------------------------------------ help, drop
 
   private showHelp(): void {
-    clear(this.helpDialog);
-    const close = el("button", { text: "Got it", class: "primary", attrs: { type: "button" } });
-    close.addEventListener("click", () => this.hideHelp());
-    const sample = el(
-      "div",
-      { class: "mini" },
-      el(
-        "div",
-        { class: "mini-item" },
-        el("i", { class: "mini-ground" }),
-        el("span", { text: "bigger ground = more code" }),
-      ),
-      el(
-        "div",
-        { class: "mini-item" },
-        el("i", { class: "mini-tall" }),
-        el("span", { text: "taller = more complex" }),
-      ),
-      el(
-        "div",
-        { class: "mini-item" },
-        el("i", { class: "mini-dark" }),
-        el("span", { text: "darker = higher color metric" }),
-      ),
-    );
-    const shortcuts: Array<[string, string]> = [
-      ["Space", "play or pause the timelapse"],
-      ["← →", "previous or next frame"],
-      ["R", "reset the camera"],
-      ["V", "top view"],
-      ["P", "next preset"],
-      ["T", "next theme"],
-      ["H", "code health: score, risk profile, hotspots"],
-      ["F", "factory: KPIs and the issues to look at"],
-      ["E", "export a PNG"],
-      ["/", "find a file by name and open its details"],
-      ["?", "this help"],
-      ["Esc", "close panels"],
-    ];
-    this.helpDialog.append(
-      el("h2", { text: "How to read this city" }),
-      el("p", {
-        text: "Each building is a file, each plinth a folder. Area, height and color show metrics you can change.",
-      }),
-      el("p", {
-        text: "Point at a building for its card, click it for all its metrics. Drag to orbit, scroll to zoom, right-drag to pan.",
-      }),
-      el("p", { text: "n/a means a value could not be computed for that file: it is never shown as zero." }),
-      sample,
-      ...(hiddenLensesLine(this.bar.lenses)
-        ? [el("p", { class: "muted", text: hiddenLensesLine(this.bar.lenses) })]
-        : []),
-      el("h3", { text: "Keyboard" }),
-      el(
-        "dl",
-        { class: "keys" },
-        ...shortcuts.flatMap(([k, d]) => [el("dt", { text: k }), el("dd", { text: d })]),
-      ),
-      close,
-    );
+    fillHelp(this.helpDialog, hiddenLensesLine(this.bar.lenses) || undefined, () => this.hideHelp());
     const active = document.activeElement;
     this.helpOpener = active instanceof HTMLElement && active !== document.body ? active : null;
     this.helpDialog.hidden = false;
@@ -1899,99 +1781,13 @@ export class App {
 
   private renderFactory(): void {
     const view = factoryView(this.factory, this.factoryPeriod, format);
-    const panel = this.factoryPanel;
-    clear(panel);
-    if (!view.available) {
-      panel.append(el("p", { class: "muted", text: view.reason ?? "" }));
-      return;
-    }
-    panel.append(el("p", { class: "muted", text: view.notice }));
-    const period = el("select", { title: "Period of the KPIs", attrs: { "aria-label": "Period" } });
-    for (const p of view.periods) {
-      const o = el("option", {
-        text: `${p.label} (${format.integer(p.issues)} issues)`,
-        attrs: { value: p.id },
-      });
-      if (p.id === view.period) o.selected = true;
-      period.append(o);
-    }
-    period.addEventListener("change", () => {
-      this.factoryPeriod = period.value as "last30" | "all";
-      this.renderFactory();
+    renderFactoryPanel(this.factoryPanel, view, {
+      onPeriod: (period) => {
+        this.factoryPeriod = period;
+        this.renderFactory();
+      },
+      onGoToFrame: (frame) => this.animator?.goTo(frame),
     });
-    panel.append(period);
-    const hasPrevious = view.kpis.some((k) => k.previous !== undefined);
-    for (const k of view.kpis) {
-      panel.append(
-        el(
-          "div",
-          { class: "kpi", title: k.definition },
-          el(
-            "span",
-            { class: "k" },
-            k.label,
-            k.experimental ? el("i", { class: "badge", text: "experimental" }) : undefined,
-          ),
-          el("span", { class: k.value === "n/a" ? "v na" : "v", text: k.value }),
-          el(
-            "span",
-            { class: "note" },
-            k.reason ? `${k.reason} · ` : "",
-            k.sample,
-            hasPrevious && k.previous !== undefined ? ` · previous period: ${k.previous}` : "",
-          ),
-        ),
-      );
-    }
-    if (view.hidden) panel.append(el("p", { class: "muted", text: view.hidden }));
-    for (const g of view.groups) {
-      if (g.rows.length === 0) {
-        const sizes = g.columns.map((c) => `${c.value}: ${format.integer(c.issues)}`).join(", ");
-        panel.append(
-          el("p", {
-            class: "muted",
-            text: `By ${g.name}: no group has 10 issues yet (${sizes}), too few to compare.`,
-          }),
-        );
-        continue;
-      }
-      const table = el("table", { class: "groups" });
-      table.append(
-        el(
-          "tr",
-          {},
-          el("th", { text: `By ${g.name}` }),
-          ...g.columns.map((c) => el("th", { text: `${c.value} (${format.integer(c.issues)})` })),
-        ),
-      );
-      for (const row of g.rows)
-        table.append(
-          el("tr", {}, el("td", { text: row.label }), ...row.cells.map((c) => el("td", { text: c }))),
-        );
-      panel.append(table);
-      if (g.warn)
-        panel.append(
-          el("p", {
-            class: "muted",
-            text: "Groups under 10 issues are too small to compare: their values are not shown.",
-          }),
-        );
-    }
-    for (const list of view.lists) {
-      panel.append(el("h3", { text: list.title }));
-      for (const line of list.lines) {
-        const go = el("button", {
-          class: "link",
-          text: line.label,
-          title: "Go to this frame",
-          attrs: { type: "button" },
-        });
-        go.addEventListener("click", () => this.animator?.goTo(line.frame));
-        panel.append(
-          el("div", { class: "kv" }, go, el("span", { class: "v", text: format.number(line.value, 2) })),
-        );
-      }
-    }
   }
 
   // ---------------------------------------------------------------- health
@@ -2019,153 +1815,7 @@ export class App {
     const s = this.state;
     if (!s) return;
     const view = healthView(s.data, this.animator?.frame ?? 0, this.report, format);
-    const panel = this.healthPanel;
-    clear(panel);
-    if (!view.available) {
-      panel.append(el("p", { class: "muted", text: view.reason ?? "" }));
-      return;
-    }
-    panel.append(el("div", { class: "score" }, el("b", { text: format.score(view.score) })));
-    if (view.trend.length > 1) {
-      const points = trendPoints(view.trend, 300, 36);
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.setAttribute("viewBox", "0 -2 300 40");
-      svg.setAttribute("class", "trend");
-      svg.setAttribute("role", "img");
-      svg.setAttribute("aria-label", "Score of each frame");
-      const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-      line.setAttribute("points", points);
-      const mark = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      const x = String((view.frame / (view.trend.length - 1)) * 300);
-      mark.setAttribute("x1", x);
-      mark.setAttribute("x2", x);
-      mark.setAttribute("y1", "-2");
-      mark.setAttribute("y2", "38");
-      mark.setAttribute("class", "now");
-      svg.append(line, mark);
-      panel.append(svg);
-    }
-    panel.append(el("p", { class: "muted", text: view.notice }));
-    if (view.movement) {
-      const m = view.movement;
-      panel.append(
-        el("h3", { text: "This frame" }),
-        el("p", {
-          text: `Score ${m.qualityDelta}. Hotspots created: ${format.integer(m.created.length)}, resolved: ${format.integer(m.resolved.length)}.`,
-        }),
-      );
-    }
-    panel.append(
-      el("h3", { text: "Risk profile" }),
-      el("p", { class: "muted", text: "Share of code, by real lines, at each risk level." }),
-    );
-    const levels = [
-      ["low", "risk-low", "low"],
-      ["moderate", "risk-moderate", "moderate"],
-      ["high", "risk-high", "high"],
-      ["veryHigh", "risk-very-high", "very high"],
-    ] as const;
-    for (const row of view.profile) {
-      const bar = el("div", {
-        class: "risk-bar",
-        attrs: { role: "img", "aria-label": `${row.label}: ${row.text}` },
-      });
-      for (const [key, cls, name] of levels) {
-        const share = row.share[key];
-        if (share <= 0) continue;
-        bar.append(
-          el("i", {
-            class: cls,
-            title: `${name}: ${format.percent(share)}`,
-            style: { width: `${share * 100}%` },
-          }),
-        );
-      }
-      panel.append(
-        el(
-          "details",
-          { class: "risk" },
-          el(
-            "summary",
-            {},
-            el("span", { class: "risk-name", text: row.label }),
-            bar,
-            el("span", { class: "muted risk-text", text: row.text }),
-          ),
-          el("p", { class: "muted", text: row.thresholds }),
-        ),
-      );
-    }
-    panel.append(
-      el(
-        "p",
-        { class: "risk-key muted" },
-        ...levels.flatMap(([, cls, name]) => [el("i", { class: cls }), ` ${name}  `]),
-      ),
-    );
-    if (view.unavailable.length) {
-      panel.append(
-        el("p", {
-          class: "muted",
-          text: `Not rated here: ${view.unavailable.join(", ")} (needs more data, or no code to rate).`,
-        }),
-      );
-    }
-    panel.append(el("h3", { text: "Hotspots" }));
-    if (view.hotspotsFromLatest) {
-      panel.append(
-        el("p", {
-          class: "muted",
-          text: "Hotspots of this frame. Suggested actions are computed for the latest frame only.",
-        }),
-      );
-    }
-    const link = (path: string) => {
-      const b = el("button", {
-        class: "link",
-        text: path,
-        title: `Go to ${path}`,
-        attrs: { type: "button" },
-      });
-      b.addEventListener("click", () => this.goToFile(path));
-      return b;
-    };
-    if (view.hotspots.length === 0) {
-      if (view.hotspotPaths.length === 0) panel.append(el("p", { class: "muted", text: "No hotspot." }));
-      for (const path of view.hotspotPaths) panel.append(el("div", { class: "hotspot" }, link(path)));
-    }
-    for (const h of view.hotspots.slice(0, 5)) {
-      panel.append(
-        el(
-          "div",
-          { class: "hotspot" },
-          el(
-            "div",
-            {},
-            el("b", { text: `${h.rank}. ` }),
-            link(h.path),
-            el("span", { class: "muted", text: ` size ${h.size}` }),
-          ),
-          el("div", {
-            class: "muted",
-            text: h.exceeded.length
-              ? h.exceeded
-                  .map(
-                    (e) =>
-                      `${e.dimension} ${e.level === "veryHigh" ? "very high" : e.level} (${format.number(e.value)})`,
-                  )
-                  .join(", ")
-              : "ranks by complexity and activity",
-          }),
-          el("ul", {}, ...h.actions.map((a) => el("li", { text: a.text }))),
-        ),
-      );
-    }
-    if (view.hiddenLinks.length) {
-      panel.append(el("h3", { text: "Hidden links (experimental)" }));
-      for (const l of view.hiddenLinks)
-        panel.append(el("p", { class: "muted", text: `${l.files.join(" and ")}: ${l.detail}` }));
-    }
+    renderHealthPanel(this.healthPanel, view, (path) => this.goToFile(path));
   }
 
   /** What sits on the stage and hides the city, relative to the stage: district names keep clear of it. */
