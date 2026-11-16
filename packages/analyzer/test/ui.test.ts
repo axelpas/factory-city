@@ -549,4 +549,28 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
     expect(r.ref).not.toBe("");
     expect(r.inBar).toBe(true);
   });
+
+  it("shows a pointer cursor over a building and the default one elsewhere", async () => {
+    const r = await inPage<Record<string, unknown>>(`
+      await wait(300);
+      const canvas = document.querySelector(".stage canvas");
+      const box_ = box(canvas);
+      const at = async (fx, fy) => {
+        canvas.dispatchEvent(new PointerEvent("pointermove", { clientX: box_.x + box_.w * fx, clientY: box_.y + box_.h * fy, bubbles: true, pointerId: 1 }));
+        await wait(120);
+        return { over: getComputedStyle(canvas).cursor === "pointer", cursor: getComputedStyle(canvas).cursor };
+      };
+      let onBuilding;
+      // scan the picture until a building is under the pointer
+      for (let fy = 0.3; fy < 0.7 && !onBuilding; fy += 0.05)
+        for (let fx = 0.3; fx < 0.7 && !onBuilding; fx += 0.05) {
+          const hit = await at(fx, fy);
+          if (hit.over) onBuilding = hit;
+        }
+      const away = await at(0.02, 0.98);
+      return { onBuilding, away };
+    `);
+    expect(r.onBuilding).toEqual({ over: true, cursor: "pointer" });
+    expect((r.away as { cursor: string }).cursor).not.toBe("pointer");
+  });
 });

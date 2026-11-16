@@ -1318,7 +1318,7 @@ export class App {
     const pick = this.scene.pick(x, y);
     s.hover = pick;
     // a building can be clicked: the cursor says so
-    this.scene.canvas.classList.toggle("over-file", pick?.kind === "file");
+    this.scene.canvas.style.cursor = pick?.kind === "file" ? "pointer" : "";
     if (!pick) {
       this.scene.setHover(null);
       this.hideCard();

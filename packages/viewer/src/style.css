@@ -79,9 +79,6 @@ body {
   position: absolute;
   inset: 0;
 }
-.stage canvas.over-file {
-  cursor: pointer;
-}
 .stage canvas {
   display: block;
   touch-action: none;
