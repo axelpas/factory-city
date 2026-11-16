@@ -21,6 +21,22 @@ export interface FramePlan {
   warnings: string[];
 }
 
+/** The GitHub data for issue mode; when it cannot be loaded, the timeline goes on without it and says so. */
+async function tryLoadForge(opts: TimelineOptions, folder: string, dataDir: string) {
+  try {
+    const forge = await loadForge(opts.gh ?? systemGh(folder), join(dataDir, "cache", "forge.json"));
+    return { forge, warnings: [] as string[] };
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
+    return {
+      forge: undefined,
+      warnings: [
+        `GitHub data could not be loaded (${why}): issue titles are unavailable. Issues are still found from commit messages and branch names.`,
+      ],
+    };
+  }
+}
+
 /** Picks the revisions that become frames, from the history, by commit, by day or by issue. */
 export async function planFrames(input: {
   topLevel: string;
@@ -40,13 +56,9 @@ export async function planFrames(input: {
   let forge: ForgeData | undefined;
   if (mode === "issue") {
     if (!opts.offline) {
-      try {
-        forge = await loadForge(opts.gh ?? systemGh(folder), join(dataDir, "cache", "forge.json"));
-      } catch (err) {
-        warnings.push(
-          `GitHub data could not be loaded (${err instanceof Error ? err.message : String(err)}): issue titles are unavailable. Issues are still found from commit messages and branch names.`,
-        );
-      }
+      const loaded = await tryLoadForge(opts, folder, dataDir);
+      forge = loaded.forge;
+      warnings.push(...loaded.warnings);
     }
     const plan = await planIssueFrames(topLevel, opts, branch, forge, config.issuePatterns, scope);
     revs = plan.revs;
