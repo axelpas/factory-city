@@ -1013,7 +1013,7 @@ export class App {
     const a = this.animator;
     if (!a) return false;
     const moving = a.tick(dtMs);
-    this.bar.update(a.position, a.playing, dtMs);
+    this.bar.update(a.playhead, a.playing, dtMs);
     this.updateFrameViews();
     if (this.fpsBox)
       this.fpsBox.textContent = `${format.integer(Math.round(this.scene.fps))} images per second`;

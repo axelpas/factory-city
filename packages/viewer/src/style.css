@@ -27,6 +27,7 @@
   --radius-pill: 999px;
   /* controls: one height for selects, inputs and buttons */
   --control-h: 28px;
+  --tick-hit: 12px;
   --control-pad: 10px;
   --icon-size: 24px;
   --glyph-size: 16px;
@@ -1073,21 +1074,51 @@ button[aria-pressed="true"] {
 .frame-info {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: var(--s-16);
   margin-bottom: var(--s-6);
 }
+/* reading order: position, then the title of the frame, then its date */
 .frame-label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-8);
+  min-width: 0;
+}
+.frame-position {
+  flex: none;
+}
+.frame-title {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.frame-label .muted {
+  flex: none;
+}
 .frame-totals {
   flex: none;
+  font-size: var(--text-sm);
   color: var(--c-text-muted);
 }
 .controls {
   display: flex;
   align-items: center;
+  gap: var(--s-8);
+}
+.transport {
+  display: flex;
+  gap: var(--s-4);
+}
+.timeline-options > .menu-list {
+  top: auto;
+  bottom: calc(100% + var(--s-4));
+}
+.timeline-options .field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--s-8);
 }
 .track {
@@ -1119,6 +1150,16 @@ button[aria-pressed="true"] {
   background: var(--c-building-edge);
   border-radius: var(--radius-1);
 }
+/* the mark is thin, its hit area is not: at least --tick-hit wide */
+.tick::after {
+  content: "";
+  position: absolute;
+  top: calc(-1 * var(--s-6));
+  bottom: calc(-1 * var(--s-6));
+  left: 50%;
+  width: var(--tick-hit);
+  transform: translateX(-50%);
+}
 .head {
   position: absolute;
   top: 3px;
@@ -1138,6 +1179,17 @@ button[aria-pressed="true"] {
   flex: 1;
   height: 30px;
 }
+.strip.empty {
+  visibility: hidden;
+}
+.strip-label {
+  flex: none;
+}
+.strip-svg .hover {
+  stroke: var(--c-accent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
 .strip-svg polyline {
   fill: none;
   stroke: var(--c-accent);
@@ -1151,7 +1203,7 @@ button[aria-pressed="true"] {
 }
 .strip-value {
   flex: none;
-  min-width: 48px;
+  min-width: 72px;
   text-align: right;
 }
 .kind-feature {

@@ -3,6 +3,9 @@ import { clear, el } from "../lib/dom";
 import { format } from "../lib/format";
 import { trendPoints } from "../view/health";
 import { frameCardRows, frameMarkers, type SeriesState, seriesStates } from "../view/lenses";
+import { frameAtShare, frameTitle } from "../view/transport";
+import { icon } from "./icons";
+import { POPOVER_CLASS } from "./popovers";
 
 export interface TimelineBarHandlers {
   onPlayPause(): void;
@@ -17,6 +20,8 @@ export interface TimelineBarHandlers {
 }
 
 const MAX_TICKS = 400;
+/** Pointer travel (px) from which a press on the track is a drag and no more a click. */
+const DRAG_PX = 4;
 const SPEEDS = [0.5, 1, 2, 4];
 const STRIP_WIDTH = 1000;
 const STRIP_HEIGHT = 26;
@@ -38,16 +43,17 @@ export class TimelineBar {
   private readonly label = el("div", { class: "frame-label" });
   private readonly totals = el("div", { class: "frame-totals" });
   private readonly play = el("button", {
-    text: "Play",
-    title: "Play or pause (space)",
-    class: "primary",
-    attrs: { type: "button" },
+    title: "Play (space)",
+    class: "primary icon",
+    attrs: { type: "button", "aria-label": "Play" },
   });
+  private playing = false;
   private readonly strip = el("div", { class: "strip" });
   private readonly stripSelect = el("select", {
     title: "Series drawn above the bar",
-    attrs: { "aria-label": "Trend series" },
+    attrs: { id: "trend-series" },
   });
+  private readonly stripHover = document.createElementNS(SVG, "line");
   private readonly stripLine = document.createElementNS(SVG, "polyline");
   private readonly stripNow = document.createElementNS(SVG, "line");
   private readonly stripValue = el("span", { class: "strip-value muted" });
@@ -56,15 +62,20 @@ export class TimelineBar {
   private series: SeriesState[] = [];
   private shown = { files: 0, rloc: 0, mcc: 0 };
   private wanted = { files: 0, rloc: 0, mcc: 0 };
-  private dragging = false;
+  private pressed: { x: number; moved: boolean } | undefined;
+  /** The frame under the pointer on the trend strip, when it is over it. */
+  private stripAt: number | undefined;
+  private index = 0;
 
   constructor(handlers: TimelineBarHandlers) {
-    const button = (text: string, title: string, onClick: () => void) => {
-      const b = el("button", { text, title, attrs: { type: "button" } });
+    const button = (name: "prev" | "next", title: string, onClick: () => void) => {
+      const b = el("button", { title, class: "icon", attrs: { type: "button", "aria-label": title } });
+      b.append(icon(name));
       b.addEventListener("click", onClick);
       return b;
     };
     this.play.addEventListener("click", () => handlers.onPlayPause());
+    this.renderPlay();
     const speed = el("select", { title: "Playback speed", attrs: { "aria-label": "Speed" } });
     for (const s of SPEEDS) {
       const o = el("option", { text: `${format.number(s)}×`, attrs: { value: String(s) } });
@@ -77,6 +88,22 @@ export class TimelineBar {
       input.addEventListener("change", () => onChange(input.checked));
       return el("label", { class: "check", title }, input, ` ${text}`);
     };
+    const options = el(
+      "details",
+      { class: `${POPOVER_CLASS} menu timeline-options` },
+      el(
+        "summary",
+        { class: "icon", title: "Playback options", attrs: { "aria-label": "Playback options" } },
+        icon("sliders"),
+      ),
+      el(
+        "div",
+        { class: "menu-list" },
+        el("label", { class: "field" }, el("span", { text: "Speed" }), speed),
+        check("Loop", "Start again from the first frame at the end", handlers.onLoop),
+        check("Orbit", "Turn slowly around the city", handlers.onOrbit),
+      ),
+    );
 
     const svg = document.createElementNS(SVG, "svg");
     svg.setAttribute("viewBox", `0 -2 ${STRIP_WIDTH} ${STRIP_HEIGHT + 4}`);
@@ -87,27 +114,59 @@ export class TimelineBar {
     this.stripNow.setAttribute("class", "now");
     this.stripNow.setAttribute("y1", "-2");
     this.stripNow.setAttribute("y2", String(STRIP_HEIGHT + 2));
-    svg.append(this.stripLine, this.stripNow);
-    this.stripSelect.addEventListener("change", () => this.drawStrip());
-    this.strip.append(this.stripSelect, svg, this.stripValue);
+    this.stripHover.setAttribute("class", "hover");
+    this.stripHover.setAttribute("y1", "-2");
+    this.stripHover.setAttribute("y2", String(STRIP_HEIGHT + 2));
+    this.stripHover.setAttribute("visibility", "hidden");
+    svg.append(this.stripLine, this.stripNow, this.stripHover);
+    this.stripSelect.addEventListener("change", () => {
+      this.drawStrip();
+      this.renderStripValue();
+    });
+    svg.addEventListener("pointermove", (e) => {
+      const rect = svg.getBoundingClientRect();
+      this.stripAt = frameAtShare((e.clientX - rect.left) / Math.max(rect.width, 1), this.frames.length);
+      const x = String((this.stripAt / Math.max(this.frames.length - 1, 1)) * STRIP_WIDTH);
+      this.stripHover.setAttribute("x1", x);
+      this.stripHover.setAttribute("x2", x);
+      this.stripHover.removeAttribute("visibility");
+      this.renderStripValue();
+    });
+    svg.addEventListener("pointerleave", () => {
+      this.stripAt = undefined;
+      this.stripHover.setAttribute("visibility", "hidden");
+      this.renderStripValue();
+    });
+    this.strip.append(
+      el("label", { class: "strip-label muted", text: "Trend", attrs: { for: "trend-series" } }),
+      this.stripSelect,
+      svg,
+      this.stripValue,
+    );
 
     this.track.append(this.ticks, this.head);
+    // a press without a move is a click: the playhead travels to the frame with the picture; a drag seeks
     this.track.addEventListener("pointerdown", (e) => {
-      this.dragging = true;
+      this.pressed = { x: e.clientX, moved: false };
       this.card.hidden = true;
       this.track.setPointerCapture(e.pointerId);
-      handlers.onSeek(this.positionAt(e.clientX));
     });
     this.track.addEventListener("pointermove", (e) => {
-      if (this.dragging) handlers.onSeek(this.positionAt(e.clientX));
-      else this.showCard(Math.round(this.positionAt(e.clientX)), e.clientX);
+      const press = this.pressed;
+      if (!press) {
+        this.showCard(Math.round(this.positionAt(e.clientX)), e.clientX);
+        return;
+      }
+      if (!press.moved && Math.abs(e.clientX - press.x) < DRAG_PX) return;
+      press.moved = true;
+      handlers.onSeek(this.positionAt(e.clientX));
     });
     this.track.addEventListener("pointerleave", () => {
       this.card.hidden = true;
     });
     const release = (e: PointerEvent) => {
-      if (!this.dragging) return;
-      this.dragging = false;
+      if (!this.pressed) return;
+      this.pressed = undefined;
       this.track.releasePointerCapture(e.pointerId);
       // settle on the nearest frame, with a move
       handlers.onJump(Math.round(this.positionAt(e.clientX)));
@@ -117,19 +176,28 @@ export class TimelineBar {
     this.element.append(
       this.card,
       el("div", { class: "frame-info" }, this.label, this.totals),
-      this.strip,
       el(
         "div",
         { class: "controls" },
-        button("Previous", "Previous frame (left arrow)", () => handlers.onStep(-1)),
-        this.play,
-        button("Next", "Next frame (right arrow)", () => handlers.onStep(1)),
-        speed,
-        check("loop", "Start again from the first frame at the end", handlers.onLoop),
-        check("orbit", "Turn slowly around the city", handlers.onOrbit),
+        el(
+          "div",
+          { class: "transport" },
+          button("prev", "Previous frame (left arrow)", () => handlers.onStep(-1)),
+          this.play,
+          button("next", "Next frame (right arrow)", () => handlers.onStep(1)),
+        ),
         this.track,
+        options,
       ),
+      this.strip,
     );
+  }
+
+  private renderPlay(): void {
+    const label = this.playing ? "Pause (space)" : "Play (space)";
+    this.play.title = label;
+    this.play.setAttribute("aria-label", this.playing ? "Pause" : "Play");
+    this.play.replaceChildren(icon(this.playing ? "pause" : "play"));
   }
 
   private positionAt(clientX: number): number {
@@ -171,7 +239,8 @@ export class TimelineBar {
     for (const s of this.series.filter((x) => x.available)) {
       this.stripSelect.append(el("option", { text: s.series.label, attrs: { value: s.series.id } }));
     }
-    this.strip.hidden = this.stripSelect.options.length === 0;
+    // the strip keeps its room when there is nothing to draw: the stage does not jump
+    this.strip.classList.toggle("empty", this.stripSelect.options.length === 0);
     this.drawStrip();
   }
 
@@ -193,12 +262,7 @@ export class TimelineBar {
     }
     clear(this.card);
     this.card.append(
-      el("div", {
-        class: "card-title",
-        text: frame.issue
-          ? `#${frame.issue.number}${frame.issue.title ? ` ${frame.issue.title}` : ""}`
-          : frame.label,
-      }),
+      el("div", { class: "card-title", text: frameTitle(frame) }),
       el("div", { class: "muted", text: format.date(frame.date) }),
       ...frameCardRows(frame, format).map((r) =>
         el(
@@ -226,9 +290,13 @@ export class TimelineBar {
     void this.label.offsetWidth;
     this.label.classList.add("swap");
     clear(this.label);
+    this.index = index;
     this.label.append(
-      el("b", { text: `${format.integer(index + 1)} / ${format.integer(this.frames.length)}` }),
-      ` ${frame.label} `,
+      el("b", {
+        class: "frame-position",
+        text: `${format.integer(index + 1)} / ${format.integer(this.frames.length)}`,
+      }),
+      el("span", { class: "frame-title", text: frameTitle(frame), title: frameTitle(frame) }),
       el("span", { class: "muted", text: format.date(frame.date) }),
     );
     this.wanted = { ...frame.totals };
@@ -236,10 +304,15 @@ export class TimelineBar {
     this.track.setAttribute("aria-valuenow", String(index + 1));
     this.track.setAttribute("aria-valuetext", frame.label);
     this.renderTotals();
-    const state = this.current();
-    const value = state?.values[index];
-    this.stripValue.textContent =
-      value !== undefined && Number.isFinite(value) ? format.number(value, 2) : "n/a";
+    this.renderStripValue();
+  }
+
+  /** The value of the series under the pointer on the strip, else at the playhead. */
+  private renderStripValue(): void {
+    const at = this.stripAt ?? this.index;
+    const value = this.current()?.values[at];
+    const text = value !== undefined && Number.isFinite(value) ? format.number(value, 2) : "n/a";
+    this.stripValue.textContent = this.stripAt === undefined ? text : `${format.integer(at + 1)}: ${text}`;
   }
 
   /** Called on every image: moves the playhead, lets the strip follow it and the totals count up or down. */
@@ -250,8 +323,10 @@ export class TimelineBar {
     const x = String(share * STRIP_WIDTH);
     this.stripNow.setAttribute("x1", x);
     this.stripNow.setAttribute("x2", x);
-    const text = playing ? "Pause" : "Play";
-    if (this.play.textContent !== text) this.play.textContent = text;
+    if (playing !== this.playing) {
+      this.playing = playing;
+      this.renderPlay();
+    }
     const k = Math.min(1, dtMs / 180);
     let changed = false;
     for (const key of ["files", "rloc", "mcc"] as const) {

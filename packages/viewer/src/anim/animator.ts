@@ -49,7 +49,7 @@ export class Animator {
   private frames = 1;
   private stateOf: (frame: number) => Float32Array = () => new Float32Array(0);
   private segment = -1;
-  private tween: { elapsed: number; frame: number; resume: boolean } | undefined;
+  private tween: { elapsed: number; frame: number; resume: boolean; from: number } | undefined;
   private u = 1;
   private shownFrame = -1;
 
@@ -73,6 +73,15 @@ export class Animator {
   /** The frame the playhead is on (the nearest one). */
   get frame(): number {
     return this.tween ? this.tween.frame : Math.min(Math.round(this.position), this.frames - 1);
+  }
+
+  /**
+   * Where the playhead is drawn, in frames. During an animated jump it travels from where it was to the
+   * target with the picture; otherwise it is the position.
+   */
+  get playhead(): number {
+    if (!this.tween) return this.position;
+    return this.tween.from + (this.tween.frame - this.tween.from) * this.u;
   }
 
   /** True while buildings are moving. */
@@ -176,6 +185,7 @@ export class Animator {
   }
 
   private startTween(from: Float32Array, frame: number, resume: boolean): void {
+    const fromPlayhead = this.playhead;
     const target = this.stateOf(frame);
     if (this.reducedMotion) {
       this.transition.setStates(target, target);
@@ -185,7 +195,7 @@ export class Animator {
       this.transition.setStates(from, target);
       this.sink.states(this.transition.start, this.transition.target);
     }
-    this.tween = { elapsed: 0, frame, resume };
+    this.tween = { elapsed: 0, frame, resume, from: fromPlayhead };
     this.segment = -1;
     this.setProgress(this.reducedMotion ? 1 : 0);
   }

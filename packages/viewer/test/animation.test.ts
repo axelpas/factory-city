@@ -232,6 +232,29 @@ describe("continuous animation", () => {
     expect(a.frame).toBe(4);
   });
 
+  it("moves the playhead with the picture during an animated jump", () => {
+    const { a } = animator();
+    expect(a.playhead).toBe(0);
+    a.goTo(4);
+    expect(a.playhead).toBe(0);
+    const seen: number[] = [];
+    while (a.tick(50)) seen.push(a.playhead);
+    // it travels from 0 to 4 without going backwards or past the target, and lands on it
+    expect(seen.some((p) => p > 0 && p < 4)).toBe(true);
+    expect(seen.every((p, i) => p >= (seen[i - 1] ?? 0) && p <= 4)).toBe(true);
+    expect(a.playhead).toBe(4);
+  });
+
+  it("starts an interrupting jump from where the playhead is drawn", () => {
+    const { a } = animator();
+    a.goTo(4);
+    for (let k = 0; k < 8; k++) a.tick(50);
+    const drawn = a.playhead;
+    expect(drawn).toBeGreaterThan(0);
+    a.goTo(1);
+    expect(a.playhead).toBeCloseTo(drawn, 6);
+  });
+
   it("continues from what is on screen when a jump is itself interrupted", () => {
     const { a } = animator();
     a.goTo(4);

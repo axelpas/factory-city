@@ -28,6 +28,11 @@ const PATHS = {
   marker: ["M3 3h10v10H3z", "M5.8 5.8h4.4v4.4H5.8z"],
   tint: ["M2 11l6-2.5 6 2.5-6 2.5z", "M2 7.5l6-2.5 6 2.5"],
   close: ["M4 4l8 8", "M12 4l-8 8"],
+  /** Transport: back one frame, play, pause, forward one frame. */
+  prev: ["M11.5 3.5L6 8l5.5 4.5z", "M4 3v10"],
+  next: ["M4.5 3.5L10 8l-5.5 4.5z", "M12 3v10"],
+  play: ["M5 3l8 5-8 5z"],
+  pause: ["M5 3v10", "M11 3v10"],
 } as const;
 
 export type IconName = keyof typeof PATHS;
