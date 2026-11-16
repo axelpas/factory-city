@@ -40,6 +40,23 @@ function linesRow(current: TimelineData["frames"][number], path: string, fmt: Fo
   return [{ label: "Lines, this frame", value: `+${fmt.integer(lines[0])} −${fmt.integer(lines[1])}` }];
 }
 
+/** The rows about the file itself: added in this frame, and the change of the mapped values. */
+function valueRows(
+  data: TimelineData,
+  frame: number,
+  union: number,
+  mapping: Mapping,
+  fmt: Formatter,
+): CardRow[] {
+  const current = data.frames[frame] as TimelineData["frames"][number];
+  const now = current.model.files[current.modelIndex[union] as number];
+  const previous = frame > 0 ? data.frames[frame - 1] : undefined;
+  const before = previous ? previous.model.files[previous.modelIndex[union] as number] : undefined;
+  if (!now) return [];
+  if (previous && !before) return [{ label: "This frame", value: "added the file" }];
+  return before ? mappedChanges(current.model, before.values, now.values, mapping, fmt) : [];
+}
+
 /** What the current frame did to a file: change of the mapped values, lines added and deleted, first appearance. */
 export function frameChangeRows(
   data: TimelineData,
@@ -50,13 +67,9 @@ export function frameChangeRows(
 ): CardRow[] {
   const current = data.frames[frame];
   if (!current || data.frames.length < 2) return [];
-  const now = current.model.files[current.modelIndex[union] as number];
-  const previous = frame > 0 ? data.frames[frame - 1] : undefined;
-  const before = previous ? previous.model.files[previous.modelIndex[union] as number] : undefined;
   const first = data.firstFrame[union] as number;
   return [
-    ...(now && previous && !before ? [{ label: "This frame", value: "added the file" }] : []),
-    ...(now && before ? mappedChanges(current.model, before.values, now.values, mapping, fmt) : []),
+    ...valueRows(data, frame, union, mapping, fmt),
     ...linesRow(current, data.paths[union] as string, fmt),
     ...(first >= 0 ? [{ label: "Appeared at", value: frameName(data, first) }] : []),
   ];

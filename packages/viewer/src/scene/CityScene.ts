@@ -190,35 +190,44 @@ export class CityScene {
     this.resize();
     const loop = (time: number) => {
       this.frame = requestAnimationFrame(loop);
-      const dt = this.lastTime ? Math.min(time - this.lastTime, 100) : 0;
-      this.lastTime = time;
-      const animating = this.onTick?.(dt) ?? false;
-      const flying = this.rig.stepFly(dt) || this.outlines.step(dt);
-      const moved = this.controls.update();
-      const moving = moved || animating || flying;
-      if (moving) {
-        this.lastMotion = time;
-        if (this.pixelRatio !== this.governor.ratio) this.setPixelRatio(this.governor.ratio);
-      } else if (time - this.lastMotion > REST_DELAY_MS) {
-        // at rest: draw the still picture once more, as sharp as the screen allows
-        const rest = restRatio(this.governor.ratio, this.governor.ms, this.maxRatio());
-        if (rest > this.pixelRatio + 0.01) this.setPixelRatio(rest);
-      }
-      if (this.dirty || moving) {
-        this.dirty = false;
-        this.outlines.sync();
-        this.renderer.render(this.scene, this.camera);
-        this.onRendered?.();
-        this.fpsFrames++;
-        if (moving) this.adaptResolution(dt);
-      }
-      if (time - this.fpsSince >= 1000) {
-        this.fps = (this.fpsFrames * 1000) / (time - this.fpsSince);
-        this.fpsFrames = 0;
-        this.fpsSince = time;
-      }
+      this.tick(time);
     };
     this.frame = requestAnimationFrame(loop);
+  }
+
+  /** One animation frame: advance what moves, pick the render scale, draw when something changed. */
+  private tick(time: number): void {
+    const dt = this.lastTime ? Math.min(time - this.lastTime, 100) : 0;
+    this.lastTime = time;
+    const animating = this.onTick?.(dt) ?? false;
+    const flying = this.rig.stepFly(dt) || this.outlines.step(dt);
+    const moving = this.controls.update() || animating || flying;
+    this.chooseResolution(moving, time);
+    if (this.dirty || moving) {
+      this.dirty = false;
+      this.outlines.sync();
+      this.renderer.render(this.scene, this.camera);
+      this.onRendered?.();
+      this.fpsFrames++;
+      if (moving) this.adaptResolution(dt);
+    }
+    if (time - this.fpsSince >= 1000) {
+      this.fps = (this.fpsFrames * 1000) / (time - this.fpsSince);
+      this.fpsFrames = 0;
+      this.fpsSince = time;
+    }
+  }
+
+  /** While something moves the scale is the one that keeps motion fluid; at rest it is as sharp as the screen allows. */
+  private chooseResolution(moving: boolean, time: number): void {
+    if (moving) {
+      this.lastMotion = time;
+      if (this.pixelRatio !== this.governor.ratio) this.setPixelRatio(this.governor.ratio);
+    } else if (time - this.lastMotion > REST_DELAY_MS) {
+      // draw the still picture once more, as sharp as the screen allows
+      const rest = restRatio(this.governor.ratio, this.governor.ms, this.maxRatio());
+      if (rest > this.pixelRatio + 0.01) this.setPixelRatio(rest);
+    }
   }
 
   /** Draws at a lower resolution when images take too long, and back when they are fast again. */

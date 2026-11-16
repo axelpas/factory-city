@@ -44,6 +44,14 @@ export class Picker {
     return null;
   }
 
+  /** The district or the empty lot under a ground hit. */
+  private groundAt(hit: THREE.Intersection, state: Float32Array | undefined): Pick {
+    const lot = state ? this.lotAt(hit.point.x, hit.point.z, state) : null;
+    if (lot) return lot;
+    const path = hit.instanceId === undefined ? undefined : this.host.plinthPaths()[hit.instanceId];
+    return path === undefined ? null : { kind: "folder", path };
+  }
+
   /** What is under the pointer: a building as drawn right now, else an empty lot, else the district. */
   pick(clientX: number, clientY: number): Pick {
     const plinths = this.host.plinths();
@@ -51,15 +59,10 @@ export class Picker {
     const rect = this.host.renderer.domElement.getBoundingClientRect();
     const { origin, direction } = this.aim(clientX - rect.left, clientY - rect.top, rect.width, rect.height);
     const state = this.host.state();
-    const plinthHit = this.raycaster.intersectObject(plinths, false)[0];
+    const ground = this.raycaster.intersectObject(plinths, false)[0];
     const hit = state ? pickBuilding(origin, direction, state) : undefined;
-    if (hit && (!plinthHit || hit.distance <= plinthHit.distance + 1e-3))
-      return { kind: "file", index: hit.index };
-    if (!plinthHit || plinthHit.instanceId === undefined) return null;
-    const lot = state ? this.lotAt(plinthHit.point.x, plinthHit.point.z, state) : null;
-    if (lot) return lot;
-    const path = this.host.plinthPaths()[plinthHit.instanceId];
-    return path === undefined ? null : { kind: "folder", path };
+    if (hit && (!ground || hit.distance <= ground.distance + 1e-3)) return { kind: "file", index: hit.index };
+    return ground ? this.groundAt(ground, state) : null;
   }
 
   /** True when a building, as drawn right now, is under a pixel of the picture. */

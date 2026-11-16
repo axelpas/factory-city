@@ -88,6 +88,16 @@ const EMPTY: Omit<HealthView, "frame"> = {
   hiddenLinks: [],
 };
 
+/** The hotspots and hidden links: the details are those of the latest frame, so other frames show paths only. */
+function hotspotFields(report: Report, current: FrameHealth | undefined, isLatest: boolean) {
+  return {
+    hotspots: isLatest ? report.hotspots : [],
+    hotspotPaths: current?.hotspots ?? report.hotspots.slice(0, 5).map((h) => h.path),
+    hotspotsFromLatest: !isLatest,
+    hiddenLinks: isLatest ? report.hiddenLinks : [],
+  };
+}
+
 /** Everything the Health panel shows for the frame under the playhead. */
 export function healthView(
   data: TimelineData,
@@ -119,10 +129,7 @@ export function healthView(
     trend: isTimeline ? frames.map((h) => h?.score ?? Number.NaN) : [],
     profile: rows,
     unavailable,
-    hotspots: isLatest ? report.hotspots : [],
-    hotspotPaths: current?.hotspots ?? report.hotspots.slice(0, 5).map((h) => h.path),
-    hotspotsFromLatest: !isLatest,
-    hiddenLinks: isLatest ? report.hiddenLinks : [],
+    ...hotspotFields(report, current, isLatest),
     ...(movement ? { movement } : {}),
   };
 }
