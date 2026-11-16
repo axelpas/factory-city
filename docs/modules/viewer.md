@@ -56,3 +56,11 @@ A theme is one token file in `themes/` (palette, ramps, lighting, camera, typogr
 - Video (`export/video.ts`): `planVideo` puts the film on a virtual clock (images per second, seconds per frame, a hold at the end, an optional slow orbit); `encodeVideo` draws each image and encodes it. The film carries the same interpolated animation as the live view, and reduced motion never applies to it. The Export menu offers it at 30 or 60 images per second.
 - Standalone file (`data/embedded.ts`): when the page holds embedded data it is read from the page and nothing is fetched.
 - `window.factoryCity` is the hook for headless rendering: `ready`, `capture(width, height, overlay)`, `video(options)`, `imageHashes(positions, width, height)`.
+
+## UX follow-ups (2026-11-16)
+Decisions in `decisions/2026-11-16-viewer-ux-followups.md`.
+- `ui/status-chip.ts`, `view/status.ts`: the bottom line is a chip ("Level 1 · history", file count, a mark for warnings) that opens what the level gives, the next level, what was left out and the warnings.
+- `ui/timeline-bar.ts`, `view/transport.ts`: reading order (position, title, date; totals muted), icon transport, playback options in a menu, 12 px hit area per tick, a labeled trend strip that reads the value under the pointer, and a fixed bar height. `Animator.playhead` follows the picture during an animated jump; a click on the track is a jump, a drag is a seek.
+- `ui/district-labels.ts`, `view/district-labels.ts`: district names, switchable in the Appearance menu (remembered). The selected building keeps an outline (`CityScene.setSelection`); the inspector shows the path as a breadcrumb that frames a district (`CityScene.frameDistrict`), as does a double click.
+- `ui/file-finder.ts`, `view/finder.ts`, `view/describe.ts`: the finder (`/`), and the canvas description a screen reader gets.
+- `ui/popovers.ts`, `ui/inspector.ts`: focus moves in when something opens and comes back when it closes.
