@@ -3,7 +3,7 @@ import { categoryLabel, type Model } from "../data/model";
 import type { Mapping } from "../presets/index";
 import type { Theme } from "../themes/index";
 import { parseHex, type Rgb, rampColor } from "./color";
-import { isMarked } from "./marker";
+import { isMarked, markStrength } from "./marker";
 import { makeScale } from "./scales";
 
 export const PLINTH_THICKNESS = 0.35;
@@ -26,6 +26,8 @@ export interface Placement {
   ramp?: number;
   /** True when the file is above the marker's threshold: it carries a mark on its roof. */
   marked: boolean;
+  /** Steepness of the roof, 0 to 1 (see `markStrength`). */
+  markStrength: number;
   /** 0..1: which roof mark a category carries, so that color is never the only cue. */
   roofMark: number;
   /** True when the height metric has no value for this file. */
@@ -103,7 +105,9 @@ export function computePlacements(
     const inset = PARCEL_INSET;
     const hv = file.values[mapping.height];
     const footprint = { w: rect.w * (1 - inset * 2), d: rect.h * (1 - inset * 2) };
-    const marked = mapping.marker ? isMarked(file.values[mapping.marker.metric], mapping.marker) : false;
+    const markerValue = mapping.marker ? file.values[mapping.marker.metric] : undefined;
+    const marked = mapping.marker ? isMarked(markerValue, mapping.marker) : false;
+    const roofSteepness = markStrength(markerValue, mapping.marker);
     let color = building;
     let ramp: number | undefined;
     let colorUnavailable = false;
@@ -128,6 +132,7 @@ export function computePlacements(
       w: footprint.w,
       d: footprint.d,
       marked,
+      markStrength: roofSteepness,
       h: hv === undefined ? MIN_HEIGHT : MIN_HEIGHT + heightScale(hv) * maxHeight,
       baseY: plinthTop(folderDepth(file.dir)),
       color,

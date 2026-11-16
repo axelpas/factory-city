@@ -7,7 +7,14 @@ import { DEFAULT_THEME } from "../src/themes/index";
 import { fileCard, folderCard } from "../src/view/card";
 import { fileDetails } from "../src/view/details";
 import { legendLines } from "../src/view/legend";
-import { isMarked, type Marker, markedCount, resolveMarker } from "../src/view/marker";
+import {
+  isMarked,
+  type Marker,
+  MIN_ROOF,
+  markedCount,
+  markStrength,
+  resolveMarker,
+} from "../src/view/marker";
 import { computePlacements, computeTints, PARCEL_INSET } from "../src/view/placements";
 import { buildState } from "../src/view/state";
 import { type FileSpec, makeModel } from "./helpers";
@@ -101,7 +108,7 @@ describe("design presets", () => {
     const withRisk = presetStatus(model, PRESETS.find((p) => p.id === "three-cs") as never, [
       { metric: "cohesion_groups", bounds: [1, 2, 4] },
     ]).mapping;
-    expect(withRisk?.marker).toEqual({ metric: "cohesion_groups", threshold: 2, source: "risk" });
+    expect(withRisk?.marker).toMatchObject({ metric: "cohesion_groups", threshold: 2, source: "risk" });
     expect(get("shortcuts")).toMatchObject({ color: "escape_hatch_density" });
   });
 
@@ -140,7 +147,7 @@ describe("marker", () => {
       .filter((p) => p !== undefined);
 
   it("takes its threshold from the risk dimension of the metric: above the bound where high starts", () => {
-    expect(cohesion).toEqual({ metric: "cohesion_groups", threshold: 2, source: "risk" });
+    expect(cohesion).toMatchObject({ metric: "cohesion_groups", threshold: 2, source: "risk" });
     // 4 groups is above 2; 2 groups is moderate, not marked
     expect(marked({ ...mapping, marker: cohesion ?? null })).toEqual(["core/a.ts"]);
   });
@@ -154,9 +161,29 @@ describe("marker", () => {
     expect(markedCount(flat, resolveMarker(flat, "imports_out") as Marker)).toBe(0);
   });
 
+  it("makes the roof steeper as the value grows, from a visible minimum to a peak", () => {
+    const m: Marker = { metric: "cohesion_groups", threshold: 1, peak: 5, source: "chosen" };
+    expect(markStrength(1, m)).toBe(0); // at the threshold: not marked
+    expect(markStrength(undefined, m)).toBe(0); // no value: never a roof
+    expect(markStrength(2, m)).toBeCloseTo(MIN_ROOF + (1 - MIN_ROOF) * 0.25, 10);
+    expect(markStrength(3, m)).toBeGreaterThan(markStrength(2, m));
+    expect(markStrength(5, m)).toBe(1);
+    expect(markStrength(40, m)).toBe(1); // an outlier does not go past the peak
+    expect(markStrength(3, null)).toBe(0);
+    // no room between the threshold and the peak: every marked file gets the steepest roof
+    expect(markStrength(3, { ...m, peak: 1 })).toBe(1);
+  });
+
+  it("takes the peak from the 99th percentile of the metric, never below the threshold", () => {
+    const high = resolveMarker(model, "cohesion_groups", DIMENSIONS);
+    expect(high?.peak).toBeGreaterThanOrEqual(high?.threshold ?? 0);
+    const chosen = resolveMarker(model, "cohesion_groups", DIMENSIONS, 99);
+    expect(chosen?.peak).toBe(99);
+  });
+
   it("uses a chosen threshold as it is", () => {
     const chosen = resolveMarker(model, "cohesion_groups", DIMENSIONS, 1);
-    expect(chosen).toEqual({ metric: "cohesion_groups", threshold: 1, source: "chosen" });
+    expect(chosen).toMatchObject({ metric: "cohesion_groups", threshold: 1, source: "chosen" });
     expect(marked({ ...mapping, marker: chosen ?? null })).toEqual(["core/a.ts", "core/c.ts"]);
   });
 
@@ -219,7 +246,7 @@ describe("cards and legend for design metrics", () => {
   const m = {
     ...mapping,
     color: "imports_out",
-    marker: { metric: "cohesion_groups", threshold: 2, source: "risk" as const },
+    marker: { metric: "cohesion_groups", threshold: 2, peak: 6, source: "risk" as const },
   };
 
   it("shows the marker channel and the coupling on the file card", () => {
@@ -243,7 +270,7 @@ describe("cards and legend for design metrics", () => {
 
   it("explains the marker and the tint in plain language", () => {
     const text = legendLines(model, { ...m, tint: "folder_cohesion" }).map((l) => l.text);
-    expect(text).toContain("pyramid roof = above 2 (high risk) · 1 file");
+    expect(text).toContain("pyramid roof, steeper as it grows = above 2 (high risk) · 1 file");
     expect(text).toContain("darker ground = more self-contained");
   });
 });

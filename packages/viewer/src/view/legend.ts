@@ -64,7 +64,7 @@ export function legendLines(
       channel: "Marker",
       metricId: metric,
       metric: label(metric),
-      text: `pyramid roof = above ${formatNumber(threshold)}${why} · ${formatNumber(count)} file${count === 1 ? "" : "s"}`,
+      text: `pyramid roof, steeper as it grows = above ${formatNumber(threshold)}${why} · ${formatNumber(count)} file${count === 1 ? "" : "s"}`,
     });
   }
   if (mapping.tint) {
