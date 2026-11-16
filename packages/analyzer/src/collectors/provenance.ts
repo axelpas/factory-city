@@ -287,6 +287,7 @@ export async function replay(
   topLevel: string,
   provenance: Provenance,
   onStep?: (index: number) => void,
+  scope = "",
 ): Promise<number> {
   const steps = provenance.steps;
   const from = provenance.applied;
@@ -310,6 +311,9 @@ export async function replay(
       "--no-ext-diff",
       "--format=%x01%H",
       range,
+      // a folder narrows the diffs to what changed under it; steps that touched nothing there are
+      // not printed, and are applied as empty steps below
+      ...(scope ? ["--", scope] : []),
     ],
     { cwd: topLevel, stdio: ["ignore", "pipe", "pipe"] },
   );
@@ -347,6 +351,15 @@ export async function replay(
       replayed++;
     }
   };
+  /** The next step still to begin: steps skipped by a folder narrowing are applied empty, in order. */
+  let next = from;
+  const applyEmpty = (until: number) => {
+    for (; next < until; next++) {
+      provenance.beginStep(next);
+      onStep?.(next);
+      replayed++;
+    }
+  };
 
   for await (const line of lines) {
     if (body > 0 && (line.startsWith("+") || line.startsWith("-"))) {
@@ -358,7 +371,11 @@ export async function replay(
       flushStep();
       const index = indexOf.get(line.slice(1).trim());
       step = index ?? -1;
-      if (step >= 0) provenance.beginStep(step);
+      if (step >= 0) {
+        applyEmpty(step);
+        provenance.beginStep(step);
+        next = step + 1;
+      }
     } else if (line.startsWith("diff --git ")) {
       flushFile();
       body = 0;
@@ -385,6 +402,7 @@ export async function replay(
     }
   }
   flushStep();
+  applyEmpty(steps.length);
   const code: number = await new Promise((done) => child.on("close", done));
   if (code !== 0) throw new Error(`git log failed: ${stderr.trim().split("\n")[0]}`);
   return replayed;

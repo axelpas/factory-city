@@ -113,7 +113,12 @@ export interface HistoryLog {
   fixBranch: Set<string>;
 }
 
-export async function loadHistoryLog(topLevel: string, rev: string): Promise<HistoryLog> {
+/**
+ * The commits reachable from a revision with the files each one changed. A `scope` (a folder of the
+ * repository) narrows the log to the changes under it: on a partial clone, git then fetches only the blobs of
+ * that folder instead of every blob the history ever changed.
+ */
+export async function loadHistoryLog(topLevel: string, rev: string, scope = ""): Promise<HistoryLog> {
   const raw = await git(topLevel, [
     "log",
     rev,
@@ -123,6 +128,7 @@ export async function loadHistoryLog(topLevel: string, rev: string): Promise<His
     "--numstat",
     "-z",
     "--format=%x01%H%x02%ct%x02%ae%x02%s%x03",
+    ...(scope ? ["--", scope] : []),
   ]);
   return { commits: parseLog(raw), fixBranch: await fixBranchCommits(topLevel, rev) };
 }
@@ -142,8 +148,9 @@ export async function collectHistory(
   rev: string,
   files: ReadonlySet<string>,
   options: HistoryOptions,
+  scope = "",
 ): Promise<HistoryResult> {
-  const log = await loadHistoryLog(topLevel, rev);
+  const log = await loadHistoryLog(topLevel, rev, scope);
   return computeHistory(log, await revisionTime(topLevel, rev), undefined, prefix, files, options);
 }
 

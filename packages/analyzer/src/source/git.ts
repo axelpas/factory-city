@@ -18,6 +18,15 @@ export async function revParse(topLevel: string, rev: string): Promise<string> {
   return (await git(topLevel, ["rev-parse", `${rev}^{commit}`])).trim();
 }
 
+/**
+ * The folder of the repository that an analysis looks at: the folder it was started in and `--path` joined,
+ * as a path from the root of the repository ("" when it looks at all of it).
+ */
+export function scopeOf(prefix: string, path?: string): string {
+  const sub = (path ?? "").replace(/^\.\//, "").replace(/\/+$/, "");
+  return [prefix, sub].filter(Boolean).join("/");
+}
+
 /** Result of looking for a git repository around a folder. */
 export interface RepoInfo {
   topLevel: string;

@@ -20,7 +20,7 @@ import { buildImportGraph, folderCohesion, loadResolveContext } from "./resolve.
 import { bump, emptySummary, folderReason, makeFolderSkipper, selectEntries } from "./select.js";
 import { DiskSource } from "./source/disk.js";
 import type { RepoInfo } from "./source/git.js";
-import { findRepo, GitSource, revParse } from "./source/git.js";
+import { findRepo, GitSource, revParse, scopeOf } from "./source/git.js";
 import type { Source } from "./source/types.js";
 
 export const ANALYZER_VERSION = "0.5.0";
@@ -319,10 +319,17 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
         const historyFiles = new Set(attributesByPath.keys());
         const history = opts.shared?.history
           ? await opts.shared.history(opts.rev ?? "HEAD", historyFiles)
-          : await collectHistory(repo.topLevel, repo.prefix, opts.rev ?? "HEAD", historyFiles, {
-              recentDays: config.windows.recentDays,
-              fixPatterns: config.fixPatterns,
-            });
+          : await collectHistory(
+              repo.topLevel,
+              repo.prefix,
+              opts.rev ?? "HEAD",
+              historyFiles,
+              {
+                recentDays: config.windows.recentDays,
+                fixPatterns: config.fixPatterns,
+              },
+              scopeOf(repo.prefix, opts.path),
+            );
         coChange = history.coupled;
         for (const [path, h] of history.files) {
           const values = attributesByPath.get(path);
@@ -342,6 +349,7 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
           const lineage = await buildLineage(repo.topLevel, hash, {
             config: await loadConfig(resolve(opts.folder)),
             prefix: repo.prefix,
+            scope: scopeOf(repo.prefix, opts.path),
             checkpoints: [hash],
             analyzerVersion: ANALYZER_VERSION,
           });

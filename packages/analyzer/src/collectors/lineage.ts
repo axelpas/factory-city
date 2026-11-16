@@ -11,6 +11,8 @@ export interface LineageOptions {
   forge?: ForgeData;
   /** Folder of the analysis inside the repository ("" for the root): file paths are relative to it. */
   prefix: string;
+  /** A folder of the repository to narrow the diffs to (the prefix and `--path` joined); "" for all of it. */
+  scope?: string;
   /** Hashes of the steps whose file metrics are wanted (the frames). */
   checkpoints: readonly string[];
   /** Where to keep the state between runs, so that extending a timeline replays only the new steps. */
@@ -72,6 +74,7 @@ export async function buildLineage(topLevel: string, rev: string, options: Linea
   // what the metrics depend on besides the history itself
   const key = JSON.stringify([
     options.prefix,
+    options.scope ?? "",
     config.windows,
     config.fixPatterns,
     config.issuePatterns,
@@ -100,10 +103,15 @@ export async function buildLineage(topLevel: string, rev: string, options: Linea
     }
   }
 
-  const replayed = await replay(topLevel, provenance, (index) => {
-    const hash = (steps[index] as Step).hash;
-    if (wanted.has(hash)) at.set(hash, provenance.fileMetrics(options.prefix));
-  });
+  const replayed = await replay(
+    topLevel,
+    provenance,
+    (index) => {
+      const hash = (steps[index] as Step).hash;
+      if (wanted.has(hash)) at.set(hash, provenance.fileMetrics(options.prefix));
+    },
+    options.scope ?? "",
+  );
 
   if (options.cachePath) {
     const cache: Cache = {

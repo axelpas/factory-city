@@ -31,7 +31,7 @@ import { type Config, loadConfig } from "./config.js";
 import { computeFactory } from "./factory/kpis.js";
 import { resolveDimensions } from "./health/dimensions.js";
 import { frameHealth } from "./health/health.js";
-import { findRepo } from "./source/git.js";
+import { findRepo, scopeOf } from "./source/git.js";
 
 export interface TimelineOptions {
   folder: string;
@@ -335,7 +335,8 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
   revs = sample(revs, opts.maxFrames);
 
   const tip = revs[revs.length - 1] as Rev;
-  const log = await loadHistoryLog(repo.topLevel, opts.revs?.length ? "--all" : tip.hash);
+  const scope = scopeOf(repo.prefix, opts.path);
+  const log = await loadHistoryLog(repo.topLevel, opts.revs?.length ? "--all" : tip.hash, scope);
   const byHash = new Map(log.commits.map((c) => [c.hash, c]));
   const cachePath = join(dataDir, "cache", "files.json");
   const fileCache = await loadFileCache(cachePath);
@@ -347,6 +348,7 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
       config,
       forge,
       prefix: repo.prefix,
+      scope,
       checkpoints: revs.map((r) => r.hash),
       cachePath: join(dataDir, "cache", `provenance.${mode}.json`),
       analyzerVersion: ANALYZER_VERSION,
