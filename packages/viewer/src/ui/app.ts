@@ -25,12 +25,10 @@ import { makePathFilter } from "../lib/glob";
 import { defaultMapping, type Mapping, type Preset, presetStatuses } from "../presets/index";
 import { CityScene, type Pick } from "../scene/CityScene";
 import { applyTheme, DEFAULT_THEME, THEMES, type Theme, themeById } from "../themes/index";
-import { frameChangeRows } from "../view/card";
 import { biggestChanges, CHANGE, changePlacements, type FileChange } from "../view/change";
 import { parseHex } from "../view/color";
 import { projectContext } from "../view/context";
 import { describeCity } from "../view/describe";
-import { fileDetails } from "../view/details";
 import { factoryView } from "../view/factory";
 import { type Insets, NO_INSETS } from "../view/framing";
 import { healthView, scoreAt } from "../view/health";
@@ -42,7 +40,6 @@ import { buildDelays, buildState } from "../view/state";
 import { statusChip, statusDetails } from "../view/status";
 import { blockLegend, blockSize, voxelize } from "../view/voxel";
 import { AppearanceMenu, type MotionSetting } from "./appearance-menu";
-import { renderFileDetails } from "./details-view";
 import { DistrictLabelLayer } from "./district-labels";
 import { ExportMenu } from "./export-menu";
 import { Exporter, type ExporterHost } from "./exporter";
@@ -60,6 +57,7 @@ import { lensGroups, renderLensButton, renderLensList } from "./lens";
 import { PointerController } from "./pointer";
 import { closePopovers, watchPopovers } from "./popovers";
 import { ScoreBox } from "./score-box";
+import { Selection } from "./selection";
 import { renderStatusChip } from "./status-chip";
 import { TimelineBar } from "./timeline-bar";
 import { type TestsMode, ViewPanel } from "./view-panel";
@@ -114,7 +112,6 @@ export class App {
   /** The card that follows the pointer, and what the pointer does on the city. */
   private card!: HoverCard;
   private pointerController!: PointerController;
-  private readonly details = el("section", { attrs: { "aria-label": "File details", hidden: "" } });
   private readonly helpDialog = el("div", {
     class: "help",
     attrs: { role: "dialog", "aria-label": "How to read this city", hidden: "", tabindex: "-1" },
@@ -147,6 +144,15 @@ export class App {
     class: "legend",
     attrs: { "aria-label": "Legend", hidden: "" },
   });
+  /** The building the details are about. */
+  private readonly selection = new Selection({
+    scene: () => this.scene,
+    state: () => this.state,
+    animator: () => this.animator,
+    report: () => this.report,
+    modelIndex: (union) => this.modelIndex(union),
+    frameDistrict: (path) => this.frameDistrict(path),
+  });
   private readonly healthPanel = el("section", {
     class: "health",
     attrs: { "aria-label": "Code health", hidden: "" },
@@ -160,12 +166,12 @@ export class App {
   private readonly scoreBox = new ScoreBox();
   /** The one panel on the right, always there: the health, the file and the factory are its tabs. */
   private readonly inspector = new Inspector({
-    panes: { health: this.healthPanel, file: this.details, factory: this.factoryPanel },
+    panes: { health: this.healthPanel, file: this.selection.element, factory: this.factoryPanel },
     summary: this.scoreBox.element,
     onTab: (tab) => this.openTab(tab),
     onChange: (tab) => {
       // folding the inspector ends the selection
-      if (tab === undefined) this.clearSelection();
+      if (tab === undefined) this.selection.clearOutline();
     },
     width: Number(safeStorage(() => localStorage.getItem(INSPECTOR_KEY))) || undefined,
     onResize: (width) => safeStorage(() => localStorage.setItem(INSPECTOR_KEY, String(Math.round(width)))),
@@ -236,7 +242,7 @@ export class App {
   private readonly cityDescription = el("p", { class: "sr-only", attrs: { id: "city-description" } });
   private readonly finder = new FileFinder({
     files: () => this.finderFiles(),
-    onChoose: (entry) => this.openDetails(entry.union),
+    onChoose: (entry) => this.selection.open(entry.union),
   });
   /** What had the focus when the help opened. */
   private helpOpener: HTMLElement | null = null;
@@ -244,8 +250,6 @@ export class App {
   /** Pictures and films of the city. */
   private exporter!: Exporter;
   private film!: Film;
-  /** The building the details show, outlined in the city until another one is selected. */
-  private selectedUnion: number | null = null;
 
   constructor(root: HTMLElement) {
     applyTheme(this.theme, document.documentElement);
@@ -317,8 +321,8 @@ export class App {
       card: this.card,
       state: () => this.state,
       animator: () => this.animator,
-      openDetails: (union) => this.openDetails(union),
-      closeDetails: () => this.closeDetails(),
+      openDetails: (union) => this.selection.open(union),
+      closeDetails: () => this.selection.close(),
       frameDistrict: (path) => this.frameDistrict(path),
     });
     const exporterHost: ExporterHost = {
@@ -460,7 +464,7 @@ export class App {
     this.viewPanel.build();
     this.bar.setFrames(data.frames.map((f) => f.info));
     this.refresh();
-    this.closeDetails();
+    this.selection.close();
     if (!safeStorage(() => localStorage.getItem(HELP_KEY))) this.showHelp();
   }
 
@@ -789,7 +793,7 @@ export class App {
       go.addEventListener("click", () => {
         const rect = s.layout.files.get(path);
         if (rect) this.scene.focus(rect.x + rect.w / 2, rect.y + rect.h / 2);
-        if (this.modelIndex(c.union) >= 0) this.openDetails(c.union);
+        if (this.modelIndex(c.union) >= 0) this.selection.open(c.union);
       });
       const sign = c.delta > 0 ? "+" : "−";
       this.changesBox.append(
@@ -933,85 +937,14 @@ export class App {
 
   // --------------------------------------------------------------- details
 
-  private openDetails(union: number): void {
-    const s = this.state;
-    if (!s) return;
-    const index = this.modelIndex(union);
-    const file = s.model.files[index];
-    if (!file) return;
-    const frame = this.animator?.frame ?? 0;
-    const d = fileDetails(s.model, index, s.mapping, format, this.report?.dimensions);
-    clear(this.details);
-    this.selectedUnion = union;
-    this.scene.setSelection(union);
-
-    const changes = frameChangeRows(s.data, frame, union, s.mapping, format);
-    const touching = s.data.frames
-      .map((f) => f.info)
-      .filter(
-        (i): i is NonNullable<typeof i> =>
-          i !== undefined && (i.added.includes(file.path) || i.modified.includes(file.path)),
-      );
-    renderFileDetails(this.details, {
-      details: d,
-      trail: this.breadcrumb(d.path),
-      changes,
-      touching,
-      timeline: s.data.frames.length >= 2,
-      onGoToFrame: (target) => this.animator?.goTo(target),
-    });
-    this.details.hidden = false;
-  }
-
   /** Integration hook: selects the first file of the frame, as a click on it does. */
   selectFirstFile(): boolean {
-    const s = this.state;
-    if (!s) return false;
-    for (let union = 0; union < s.data.paths.length; union++) {
-      if (this.modelIndex(union) < 0) continue;
-      this.openDetails(union);
-      return true;
-    }
-    return false;
+    return this.selection.selectFirst();
   }
 
   /** Integration hook: the index of the selected file, or null. */
   selected(): number | null {
-    return this.selectedUnion;
-  }
-
-  private closeDetails(): void {
-    this.details.hidden = true;
-    this.clearSelection();
-  }
-
-  private clearSelection(): void {
-    if (this.selectedUnion === null) return;
-    this.selectedUnion = null;
-    this.scene.setSelection(null);
-  }
-
-  /** The path of a file as a trail of folders: a click on one frames that district in the city. */
-  private breadcrumb(path: string): HTMLElement {
-    const parts = path.split("/");
-    const trail = el("nav", { class: "breadcrumb", attrs: { "aria-label": "Path" } });
-    parts.forEach((part, i) => {
-      if (i > 0) trail.append(el("span", { class: "muted sep", text: "/" }));
-      if (i === parts.length - 1) {
-        trail.append(el("span", { class: "muted", text: part }));
-        return;
-      }
-      const folder = parts.slice(0, i + 1).join("/");
-      const button = el("button", {
-        class: "link",
-        text: part,
-        title: `Frame ${folder} in the city`,
-        attrs: { type: "button" },
-      });
-      button.addEventListener("click", () => this.frameDistrict(folder));
-      trail.append(button);
-    });
-    return trail;
+    return this.selection.selected;
   }
 
   /** Brings a district to the middle of the free stage. */
@@ -1027,11 +960,11 @@ export class App {
     } else if (tab === "factory") {
       if (this.factoryPanel.hidden) this.toggleFactory();
     } else {
-      if (!this.details.hasChildNodes())
-        this.details.append(
+      if (!this.selection.element.hasChildNodes())
+        this.selection.element.append(
           el("p", { class: "muted", text: "Click a building to see all the metrics of its file." }),
         );
-      this.details.hidden = false;
+      this.selection.element.hidden = false;
     }
   }
 
@@ -1087,7 +1020,7 @@ export class App {
     if (closePopovers(document)) return;
     this.healthPanel.hidden = true;
     this.factoryPanel.hidden = true;
-    this.closeDetails();
+    this.selection.close();
     // an open view panel overlays the stage in a medium window: it folds the same way
     if (this.medium.matches) this.viewPanel.fold();
     if (!this.helpDialog.hidden) this.hideHelp();
@@ -1136,7 +1069,7 @@ export class App {
     this.factoryPanel.hidden = !this.factoryPanel.hidden;
     if (!this.factoryPanel.hidden) {
       this.healthPanel.hidden = true;
-      this.closeDetails();
+      this.selection.close();
       this.renderFactory();
     }
   }
@@ -1158,7 +1091,7 @@ export class App {
     this.healthPanel.hidden = !this.healthPanel.hidden;
     if (!this.healthPanel.hidden) {
       this.factoryPanel.hidden = true;
-      this.closeDetails();
+      this.selection.close();
       this.renderHealth();
     }
   }
