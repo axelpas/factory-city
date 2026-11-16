@@ -577,23 +577,78 @@ button[aria-pressed="true"] {
 .status {
   position: absolute;
   left: var(--gutter);
-  right: var(--gutter);
-  bottom: 10px;
+  bottom: var(--s-8);
+  z-index: 20;
   display: flex;
-  gap: var(--s-16);
+  align-items: center;
+  gap: var(--s-12);
   font-size: var(--text-sm);
   color: var(--c-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
 }
-.status > span {
-  flex: 0 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* the chip: level and file count; its details open upward, over the stage */
+.status-chip {
+  position: relative;
 }
-.status > .level {
-  flex: 0 0 auto;
+.status-chip > summary {
+  height: var(--icon-size);
+  font-size: var(--text-sm);
+  background-color: color-mix(in srgb, var(--c-panel) 92%, transparent);
+}
+.status-level {
   color: var(--c-text);
+  font-weight: 600;
+}
+.status-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--glyph-size);
+  height: var(--glyph-size);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--c-panel);
+  background: var(--c-risk-high);
+  border-radius: var(--radius-round);
+}
+.status-body {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + var(--s-4));
+  z-index: 48;
+  width: var(--legend-w);
+  max-height: 60vh;
+  overflow: auto;
+  padding: var(--s-8) var(--s-12);
+  color: var(--c-text);
+  background: var(--c-panel);
+  border: var(--line);
+  border-radius: var(--radius-4);
+  box-shadow: var(--shadow-2);
+}
+.status-section h4 {
+  margin: var(--s-8) 0 var(--s-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--c-text-muted);
+}
+.status-section p {
+  margin: var(--s-2) 0;
+}
+.status-body ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.status-left-out li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-12);
+}
+.status-warnings li::before {
+  content: "! ";
+  font-weight: 700;
+  color: var(--c-risk-high);
 }
 
 /* ---------------------------------------------------------------- hover card */

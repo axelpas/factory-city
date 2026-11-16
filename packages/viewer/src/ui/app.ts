@@ -47,12 +47,13 @@ import { type DetailRow, fileDetails } from "../view/details";
 import { factoryView } from "../view/factory";
 import { freeRect, type Insets, NO_INSETS } from "../view/framing";
 import { healthView, trendPoints } from "../view/health";
-import { dataLevelLine, hiddenContentLine, type LegendModel, legendModel } from "../view/legend";
+import { type LegendModel, legendModel } from "../view/legend";
 import { hiddenLensesLine } from "../view/lenses";
 import { resolveMarker } from "../view/marker";
 import { type ColorLegend, computePlacements, computeTints } from "../view/placements";
 import { SCALE_KINDS, type ScaleKind } from "../view/scales";
 import { buildDelays, buildState } from "../view/state";
+import { statusChip, statusDetails } from "../view/status";
 import { blockLegend, blockSize, voxelize } from "../view/voxel";
 import { type IconName, icon } from "./icons";
 import { Inspector, type InspectorTab } from "./inspector";
@@ -60,6 +61,7 @@ import { renderLegendBox } from "./legend-box";
 import { lensGroups, renderLensButton, renderLensList } from "./lens";
 import { drawOverlay } from "./overlay";
 import { closePopovers, watchPopovers } from "./popovers";
+import { renderStatusChip } from "./status-chip";
 import { TimelineBar } from "./timeline-bar";
 
 function dirOf(path: string): string {
@@ -1102,30 +1104,26 @@ export class App {
   private renderStatus(): void {
     const s = this.state;
     if (!s) return;
-    clear(this.status);
-    const hiddenLine = hiddenContentLine(s.model, format.integer);
-    this.status.append(
-      el("span", {
-        class: "level",
-        text: dataLevelLine(s.model),
-        title: "What the data level means: 0 files, 1 git history, 2 forge, 3 facts",
-      }),
-      el("span", { text: `${format.integer(s.model.files.length)} files` }),
+    const manifest = s.data.manifest;
+    const coverage = manifest?.kind === "timeline" ? manifest.coverage : undefined;
+    const by = coverage?.byStrategy;
+    renderStatusChip(
+      this.status,
+      statusChip(s.model, format.integer),
+      statusDetails(
+        s.model,
+        format.integer,
+        coverage && by
+          ? {
+              linked: coverage.linked,
+              commits: coverage.commits,
+              issues: coverage.issues,
+              detail: `By closing keyword: ${by["closing-keyword"]}, by pull request: ${by["pull-request"]}, by reference: ${by.reference}, by branch name: ${by.branch}, unlinked: ${by.unlinked}`,
+            }
+          : undefined,
+      ),
+      ...(this.fpsBox ? [this.fpsBox] : []),
     );
-    if (hiddenLine) this.status.append(el("span", { class: "muted", text: hiddenLine }));
-    const coverage = s.data.manifest?.kind === "timeline" ? s.data.manifest.coverage : undefined;
-    if (coverage) {
-      this.status.append(
-        el("span", {
-          class: "muted",
-          text: `${format.integer(coverage.linked)} of ${format.integer(coverage.commits)} commits linked to ${format.integer(coverage.issues)} issues`,
-          title: `By closing keyword: ${coverage.byStrategy["closing-keyword"]}, by pull request: ${coverage.byStrategy["pull-request"]}, by reference: ${coverage.byStrategy.reference}, by branch name: ${coverage.byStrategy.branch}, unlinked: ${coverage.byStrategy.unlinked}`,
-        }),
-      );
-    }
-    if (this.fpsBox) this.status.append(this.fpsBox);
-    for (const w of s.model.manifest?.warnings ?? [])
-      this.status.append(el("span", { class: "muted", text: w }));
   }
 
   // ------------------------------------------------------------ hover card
