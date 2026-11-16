@@ -1,12 +1,7 @@
-import { computeLayout } from "@factory-city/layout";
 import { describe, expect, it } from "vitest";
 import { MARK, STRIDE } from "../src/anim/transition";
-import { createFormat } from "../src/lib/format";
 import { defaultMapping, PRESETS, presetStatus, presetStatuses } from "../src/presets/index";
 import { DEFAULT_THEME } from "../src/themes/index";
-import { fileCard, folderCard } from "../src/view/card";
-import { fileDetails } from "../src/view/details";
-import { legendLines } from "../src/view/legend";
 import {
   isMarked,
   type Marker,
@@ -17,66 +12,8 @@ import {
 } from "../src/view/marker";
 import { computePlacements, computeTints, PARCEL_INSET } from "../src/view/placements";
 import { buildState } from "../src/view/state";
-import { type FileSpec, makeModel } from "./helpers";
-
-const fmt = createFormat(["en-US"]);
-
-const FILES: FileSpec[] = [
-  {
-    path: "core/a.ts",
-    values: {
-      rloc: 200,
-      mcc: 40,
-      imports_out: 6,
-      imports_in: 1,
-      cohesion_groups: 4,
-      lack_of_cohesion: 1,
-      escape_hatches: 6,
-      escape_hatch_density: 30,
-    },
-  },
-  {
-    path: "core/b.ts",
-    values: {
-      rloc: 100,
-      mcc: 10,
-      imports_out: 2,
-      imports_in: 3,
-      cohesion_groups: 1,
-      lack_of_cohesion: 0,
-      escape_hatches: 0,
-      escape_hatch_density: 0,
-    },
-  },
-  {
-    path: "core/c.ts",
-    values: {
-      rloc: 50,
-      mcc: 6,
-      imports_out: 1,
-      imports_in: 2,
-      cohesion_groups: 2,
-      lack_of_cohesion: 0.5,
-      escape_hatches: 1,
-      escape_hatch_density: 20,
-    },
-  },
-  {
-    path: "ui/x.ts",
-    values: {
-      rloc: 80,
-      mcc: 9,
-      imports_out: 3,
-      imports_in: 0,
-      cohesion_groups: 1,
-      lack_of_cohesion: 0,
-      escape_hatches: 0,
-      escape_hatch_density: 0,
-    },
-  },
-];
-const model = makeModel(FILES, undefined, { core: { folder_cohesion: 0.8 }, ui: { folder_cohesion: 0.2 } });
-const layout = computeLayout(model.files.map((f) => ({ path: f.path, weight: f.values.rloc ?? 1 })));
+import { FILES, layout, model } from "./design-helpers";
+import { makeModel } from "./helpers";
 
 describe("design presets", () => {
   it("offers the four code presets when their metrics are present", () => {
@@ -238,39 +175,5 @@ describe("district tint", () => {
   it("is empty when the channel is off", () => {
     const { mapping } = defaultMapping(model);
     expect(computeTints(model, mapping, DEFAULT_THEME).size).toBe(0);
-  });
-});
-
-describe("cards and legend for design metrics", () => {
-  const { mapping } = defaultMapping(model);
-  const m = {
-    ...mapping,
-    color: "imports_out",
-    marker: { metric: "cohesion_groups", threshold: 2, peak: 6, source: "risk" as const },
-  };
-
-  it("shows the marker channel and the coupling on the file card", () => {
-    const card = fileCard(model, model.filesByPath.get("core/a.ts") as number, m, fmt);
-    expect(card.channels.map((c) => c.label)).toContain("Marker: Cohesion groups");
-    // the other metrics are no longer on the card: they are in the details
-    const details = fileDetails(model, model.filesByPath.get("core/a.ts") as number, mapping, fmt);
-    const coupling = details.groups.find((g) => g.name === "Coupling and cohesion");
-    expect(coupling?.rows.map((r) => r.label)).toEqual(
-      expect.arrayContaining(["Imported by", "Cohesion groups"]),
-    );
-  });
-
-  it("shows folder cohesion on the folder card", () => {
-    expect(folderCard(model, "core", fmt).rows).toContainEqual(
-      expect.objectContaining({ label: "Folder cohesion", value: "0.8" }),
-    );
-    const noValue = makeModel(FILES, undefined, { core: { folder_cohesion: 0.8 } });
-    expect(folderCard(noValue, "ui", fmt).rows).toContainEqual(expect.objectContaining({ value: "n/a" }));
-  });
-
-  it("explains the marker and the tint in plain language", () => {
-    const text = legendLines(model, { ...m, tint: "folder_cohesion" }).map((l) => l.text);
-    expect(text).toContain("pyramid roof, steeper as it grows = above 2 (high risk) · 1 file");
-    expect(text).toContain("darker ground = more self-contained");
   });
 });

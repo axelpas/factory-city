@@ -1,46 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type CcJson, validateCcJson } from "@factory-city/schema";
+import { validateCcJson } from "@factory-city/schema";
 import { describe, expect, it } from "vitest";
-import { buildTimeline, kindOfSubject, lastOfEachDay, sample } from "../src/timeline.js";
+import { buildTimeline, sample } from "../src/timeline.js";
 import { commitAt, git, initRepo, makeTree } from "./helpers.js";
-
-const body = (n: number) =>
-  `${Array.from({ length: n }, (_, i) => `export const v${i} = ${i};`).join("\n")}\n`;
-
-function repo() {
-  const dir = initRepo();
-  const write = (path: string, text: string) => {
-    mkdirSync(join(dir, path, ".."), { recursive: true });
-    writeFileSync(join(dir, path), text);
-  };
-  write("src/a.ts", body(2));
-  commitAt(dir, "2026-01-01T09:00:00Z", "feat: start");
-  write("src/b.ts", body(3));
-  commitAt(dir, "2026-01-01T15:00:00Z", "feat(core): add b");
-  write("src/a.ts", body(5));
-  commitAt(dir, "2026-01-02T10:00:00Z", "fix: repair a");
-  rmSync(join(dir, "src/b.ts"));
-  write("src/c.ts", body(1));
-  commitAt(dir, "2026-01-04T10:00:00Z", "refactor: replace b by c");
-  return dir;
-}
-
-function attrsByPath(cc: CcJson): Map<string, Record<string, number>> {
-  const out = new Map<string, Record<string, number>>();
-  const walk = (nodes: CcJson["files"], prefix: string) => {
-    for (const n of nodes) {
-      const p = prefix ? `${prefix}/${n.name}` : n.name;
-      if (n.type === "File") out.set(p.replace(/^root\//, ""), cc.lenses.metrics.attributes[n.id] ?? {});
-      else walk(n.children ?? [], p);
-    }
-  };
-  walk(cc.files, "");
-  return out;
-}
-
-const read = (dir: string, rel: string) => JSON.parse(readFileSync(join(dir, rel), "utf8")) as CcJson;
+import { attrsByPath, body, read, repo } from "./timeline-helpers.js";
 
 describe("timeline per commit", () => {
   it("writes one valid snapshot per commit, in order, with what each frame changed", async () => {
@@ -221,25 +186,5 @@ describe("frame selection", () => {
     await expect(
       buildTimeline({ folder: makeTree({ "a.ts": body(1) }), by: "commit" }, makeTree({})),
     ).rejects.toThrow(/needs a git repository/);
-  });
-});
-
-describe("helpers", () => {
-  it("reads the kind from the conventional type", () => {
-    expect(kindOfSubject("feat(ui): x")).toBe("feature");
-    expect(kindOfSubject("fix!: y")).toBe("fix");
-    expect(kindOfSubject("docs: z")).toBe("docs");
-    expect(kindOfSubject("Update readme")).toBe("unknown");
-  });
-
-  it("keeps the last commit of each day", () => {
-    const day = (iso: string) => ({ hash: iso, time: Date.parse(iso) / 1000, subject: iso });
-    expect(
-      lastOfEachDay([
-        day("2026-01-01T01:00:00Z"),
-        day("2026-01-01T23:00:00Z"),
-        day("2026-01-02T00:30:00Z"),
-      ]).map((r) => r.hash),
-    ).toEqual(["2026-01-01T23:00:00Z", "2026-01-02T00:30:00Z"]);
   });
 });

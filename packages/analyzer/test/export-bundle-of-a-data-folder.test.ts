@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import type { TimelineManifest } from "@factory-city/schema";
@@ -7,7 +7,6 @@ import { validateCcJson } from "@factory-city/schema";
 import { describe, expect, it } from "vitest";
 import { type Bundle, listSources, loadBundle, writeBundle } from "../src/bundle.js";
 import { redactBundle } from "../src/redact.js";
-import { parseSize, probeImages, renderImage } from "../src/render.js";
 import { defaultViewerDir } from "../src/server.js";
 import {
   buildStandalone,
@@ -16,33 +15,8 @@ import {
   WARN_BYTES,
   writeStandalone,
 } from "../src/standalone.js";
-import { buildTimeline } from "../src/timeline.js";
-import { commitAt, initRepo, makeTree } from "./helpers.js";
-
-const TRAILER = "\n\nCo-Authored-By: Agent One <one@example.com>";
-const code = (n: number) =>
-  `${Array.from({ length: n }, (_, i) => `export function f${i}(x: number) { return x + ${i}; }`).join("\n")}\n`;
-
-/** A per-issue timeline of three frames, with a facts file: everything `--redact` has something to remove from. */
-async function sample() {
-  const dir = initRepo({
-    "src/a.ts": code(3),
-    "factory-city.config.json":
-      '{ "facts": { "columns": { "issue": "issue", "agent": "agent", "cost": "cost" } } }',
-  });
-  commitAt(dir, "2026-01-01T10:00:00Z", `feat: secret launch plan (#1)${TRAILER}`);
-  writeFileSync(join(dir, "src/b.ts"), code(6));
-  commitAt(dir, "2026-01-02T10:00:00Z", `feat: add the billing module (#2)${TRAILER}`);
-  writeFileSync(join(dir, "src/a.ts"), code(9));
-  commitAt(dir, "2026-01-03T10:00:00Z", "fix: repair the invoice total (#3)");
-  const facts = join(
-    makeTree({ "facts.csv": "issue,agent,cost\n1,agent-zed,4\n2,agent-zed,6\n3,agent-why,1" }),
-    "facts.csv",
-  );
-  const out = makeTree({});
-  await buildTimeline({ folder: dir, by: "issue", offline: true, facts }, out);
-  return out;
-}
+import { sample } from "./export-helpers.js";
+import { makeTree } from "./helpers.js";
 
 describe("bundle of a data folder", () => {
   it("lists the sources and loads the most recently written one, or the one asked for", async () => {
@@ -227,50 +201,3 @@ describe("render command", () => {
 });
 
 /** Google Chrome, when installed: the tests below drive a real browser and are skipped without one. */
-const CHROME = [
-  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-  "/usr/bin/google-chrome",
-  "/usr/bin/google-chrome-stable",
-  "/opt/google/chrome/chrome",
-].some((p) => existsSync(p));
-const canRender = CHROME && existsSync(join(defaultViewerDir(), "index.html"));
-
-describe.skipIf(!canRender)("headless rendering in a real browser", () => {
-  const entry = (dataDir: string) => ({
-    slug: "demo-render",
-    name: "demo",
-    dataDir,
-    updatedAt: "2026-01-01T00:00:00.000Z",
-  });
-  const size = { width: 320, height: 200 };
-
-  it("gives the same images for two renders of the same data, and in-between images within a step", async () => {
-    const out = await sample();
-    // start of the first step, two points inside its move, its hold, and the next frame
-    const positions = [0, 0.2, 0.45, 0.7, 1, 1.4];
-    const first = await probeImages({ entry: entry(out), source: "issue", ...size }, positions);
-    const second = await probeImages({ entry: entry(out), source: "issue", ...size }, positions);
-    expect(first).toHaveLength(positions.length);
-    expect(second).toEqual(first);
-    // the film is not one image per frame: the move shows pictures that are neither frame
-    expect(new Set([first[0], first[1], first[2], first[4]]).size).toBe(4);
-    // and the hold shows exactly the frame it settles on
-    expect(first[3]).toBe(first[4]);
-  }, 180_000);
-
-  it("writes a PNG of the requested size", async () => {
-    const out = await sample();
-    const file = join(makeTree({}), "city.png");
-    await renderImage({ entry: entry(out), source: "issue", width: 400, height: 240, out: file });
-    const png = readFileSync(file);
-    expect(png.subarray(1, 4).toString("latin1")).toBe("PNG");
-    expect(png.readUInt32BE(16)).toBe(400);
-    expect(png.readUInt32BE(20)).toBe(240);
-  }, 120_000);
-});
-
-describe("picture size", () => {
-  it("is parsed from WIDTHxHEIGHT", () => {
-    expect(parseSize("640x360")).toEqual([640, 360]);
-  });
-});

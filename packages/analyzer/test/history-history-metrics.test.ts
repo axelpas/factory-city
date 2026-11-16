@@ -1,52 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { analyze } from "../src/analyze.js";
 import { parseLog } from "../src/collectors/history.js";
-import { doctor } from "../src/doctor.js";
 import { commitAt, git, initRepo, makeTree } from "./helpers.js";
-
-type Result = Awaited<ReturnType<typeof analyze>>;
-
-function values(result: Result): Map<string, Record<string, number>> {
-  const out = new Map<string, Record<string, number>>();
-  const walk = (nodes: Result["snapshot"]["files"], prefix: string) => {
-    for (const n of nodes) {
-      const p = prefix ? `${prefix}/${n.name}` : n.name;
-      if (n.type === "File")
-        out.set(p.replace(/^root\//, ""), result.snapshot.lenses.metrics.attributes[n.id] ?? {});
-      else walk(n.children ?? [], p);
-    }
-  };
-  walk(result.snapshot.files, "");
-  return out;
-}
-
-const body = (n: number) =>
-  `${Array.from({ length: n }, (_, i) => `export const v${i} = ${i};`).join("\n")}\n`;
-
-/** Five dated commits; c1..c5 are their hashes. */
-function syntheticRepo() {
-  const dir = initRepo();
-  const write = (path: string, text: string) => {
-    mkdirSync(join(dir, path, ".."), { recursive: true });
-    writeFileSync(join(dir, path), text);
-  };
-  write("src/a.ts", body(2));
-  write("src/b.ts", body(2));
-  const c1 = commitAt(dir, "2026-01-01T10:00:00Z", "feat: start (#1)", "Ann <ann@example.com>");
-  write("src/a.ts", body(4));
-  const c2 = commitAt(dir, "2026-01-10T10:00:00Z", "fix(core): repair a (#2)", "Bob <bob@example.com>");
-  write("src/a.ts", body(5));
-  write("src/c.ts", body(1));
-  const c3 = commitAt(dir, "2026-03-01T10:00:00Z", "feat: add c (#3)", "Ann <ann@example.com>");
-  renameSync(join(dir, "src/b.ts"), join(dir, "src/renamed.ts"));
-  const c4 = commitAt(dir, "2026-03-05T10:00:00Z", "refactor: rename b", "Ann <ann@example.com>");
-  write("src/a.ts", body(6));
-  const c5 = commitAt(dir, "2026-03-20T10:00:00Z", "hotfix: urgent repair of a", "Bob <bob@example.com>");
-  return { dir, c1, c2, c3, c4, c5 };
-}
+import { body, syntheticRepo, values } from "./history-helpers.js";
 
 describe("history metrics", () => {
   it("counts commits, authors, fixes, age and recent changes at HEAD", async () => {
@@ -225,26 +184,5 @@ describe("git log parsing", () => {
       { path: "new.ts", oldPath: "old.ts", added: 0, deleted: 0 },
       { path: "img.png", added: 0, deleted: 0 },
     ]);
-  });
-});
-
-describe("doctor", () => {
-  it("reports level 0 and how to unlock history outside a repository", async () => {
-    const report = await doctor(makeTree({ "a.ts": body(1) }));
-    expect(report.level).toBe(0);
-    expect(report.next).toContain("level 1");
-  });
-
-  it("reports level 1 in a repository and names the next step", async () => {
-    const { dir } = syntheticRepo();
-    const report = await doctor(dir);
-    expect(report).toMatchObject({ level: 1, levelName: "History" });
-    expect(report.next).toContain("GitHub");
-  });
-
-  it("asks for a first commit in an empty repository", async () => {
-    const report = await doctor(initRepo());
-    expect(report.level).toBe(0);
-    expect(report.next).toContain("first commit");
   });
 });

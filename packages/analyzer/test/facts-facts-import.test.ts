@@ -1,44 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { importFacts, readTable, splitLine } from "../src/collectors/facts.js";
+import { importFacts } from "../src/collectors/facts.js";
 import { type FactsMapping, factsMapping } from "../src/config.js";
 
 /**
  * Synthetic file with the shape of a routing log: semicolon-separated, one row per attempt or review,
  * the issue written `#42`, the estimate carried by the `type` column. Every value is made up.
  */
-const HEADER = "date;project;issue;type;agent;model;result;blockers;majors;rework;minutes";
-const ROWS = [
-  "2026-01-05;demo;#1;issue-S;agent-a;model-x;succeeded;0;0;0;12",
-  "2026-01-06;demo;#1;review;reviewer;model-y;succeeded;1;2;0;4",
-  "2026-01-07;demo;#2;issue-M;agent-a;model-x;failed;0;0;0;30",
-  "2026-01-08;demo;#2;issue-M;agent-b;model-z;succeeded;0;0;2;45",
-  "2026-01-08;demo;#2;review;reviewer;model-y;succeeded;0;1;0;6",
-  "2026-01-09;other;#7;issue-L;agent-a;model-x;succeeded;0;0;0;99",
-  "2026-01-10;demo;#3;issue-L;agent-b;model-z;abandoned;0;0;1;80",
-  "2026-01-11;demo;;issue-S;agent-b;model-z;succeeded;0;0;0;5",
-];
-
-const MAPPING: FactsMapping = {
-  delimiter: ";",
-  columns: {
-    date: "date",
-    issue: "issue",
-    agent: "agent",
-    model: "model",
-    outcome: "result",
-    estimate: "type",
-    review_blockers: "blockers",
-    review_majors: "majors",
-    rework_rounds: "rework",
-    minutes: "minutes",
-  },
-  filter: { column: "project", values: ["demo"] },
-  values: { estimate: { "issue-S": "S", "issue-M": "M", "issue-L": "L" } },
-  attempts: { column: "type", not: ["review"] },
-};
-
-const NOW = new Date("2026-02-01T00:00:00Z");
-const text = (header = true) => [...(header ? [HEADER] : []), ...ROWS].join("\n");
+import { HEADER, MAPPING, NOW, text } from "./facts-helpers.js";
 
 describe("facts import", () => {
   it("imports the log through configuration alone", () => {
@@ -218,21 +186,5 @@ describe("facts mapping in the configuration", () => {
       /unknown field "colour"/,
     );
     expect(() => factsMapping({}, "cfg")).toThrow(/must be an object with "columns"/);
-  });
-});
-
-describe("delimited text", () => {
-  it("splits lines with quotes and escaped quotes", () => {
-    expect(splitLine('a;"b;c";"say ""hi""";d', ";")).toEqual(["a", "b;c", 'say "hi"', "d"]);
-    expect(splitLine("a,,c", ",")).toEqual(["a", "", "c"]);
-  });
-
-  it("guesses the delimiter and the header", () => {
-    expect(readTable("a;b\n1;2", { columns: { issue: 1 } })).toEqual({
-      names: ["a", "b"],
-      rows: [["1", "2"]],
-    });
-    expect(readTable("1;2\n3;4", { columns: { issue: 1 } }).rows).toHaveLength(2);
-    expect(readTable("#1,x", { columns: { issue: 1 } }).names).toEqual([]);
   });
 });
