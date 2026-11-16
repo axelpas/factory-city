@@ -22,14 +22,7 @@ import type { EncodedVideo, VideoOptions } from "../export/video";
 import { clear, el } from "../lib/dom";
 import { format } from "../lib/format";
 import { makePathFilter } from "../lib/glob";
-import {
-  defaultMapping,
-  type Mapping,
-  MIN_COVERAGE,
-  PRESETS,
-  type Preset,
-  presetStatuses,
-} from "../presets/index";
+import { defaultMapping, type Mapping, type Preset, presetStatuses } from "../presets/index";
 import { CityScene, type Pick } from "../scene/CityScene";
 import { applyTheme, DEFAULT_THEME, THEMES, type Theme, themeById } from "../themes/index";
 import { fileCard, folderCard, frameChangeRows, lastChangeRow, lotCard } from "../view/card";
@@ -44,9 +37,8 @@ import { freeRect, type Insets, NO_INSETS } from "../view/framing";
 import { healthView, scoreAt } from "../view/health";
 import { type LegendModel, legendModel } from "../view/legend";
 import { hiddenLensesLine } from "../view/lenses";
-import { resolveMarker } from "../view/marker";
 import { type ColorLegend, computePlacements, computeTints } from "../view/placements";
-import { SCALE_KINDS, type ScaleKind } from "../view/scales";
+import type { ScaleKind } from "../view/scales";
 import { buildDelays, buildState } from "../view/state";
 import { statusChip, statusDetails } from "../view/status";
 import { blockLegend, blockSize, voxelize } from "../view/voxel";
@@ -66,14 +58,11 @@ import { closePopovers, watchPopovers } from "./popovers";
 import { ScoreBox } from "./score-box";
 import { renderStatusChip } from "./status-chip";
 import { TimelineBar } from "./timeline-bar";
+import { type TestsMode, ViewPanel } from "./view-panel";
 
 function dirOf(path: string): string {
   return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
 }
-
-type TestsMode = "show" | "dim" | "hide";
-
-type Role = "area" | "height" | "color" | "marker" | "tint";
 
 interface State {
   data: TimelineData;
@@ -134,20 +123,30 @@ export class App {
   private readonly panel = el("aside", { class: "panel", attrs: { "aria-label": "View settings" } });
   /** What the bar, the panels and the timeline cover, as last measured. */
   private insets: Insets = NO_INSETS;
-  private readonly panelState = el("p", { class: "panel-state", attrs: { hidden: "" } });
-  /** Folded to a rail unless the user opened it: a preset is enough for most sessions. */
-  private panelOpen =
-    safeStorage(() => localStorage.getItem(PANEL_KEY)) === "open" && !window.matchMedia(MEDIUM_QUERY).matches;
   /** Under this width the panels overlay the stage instead of taking room from the city. */
   private readonly medium = window.matchMedia(MEDIUM_QUERY);
-  private moreOpen = false;
+  private readonly changesBox = el("section", { class: "changes", attrs: { hidden: "" } });
   /** The preset in force before a channel was changed by hand: the way back. */
   private lastPreset: string | undefined;
+  /** The view panel: the channels, the marker, the scale and the filter. */
+  private readonly viewPanel = new ViewPanel(
+    this.panel,
+    {
+      state: () => this.state,
+      report: () => this.report,
+      lastPreset: () => this.lastPreset,
+      changesBox: this.changesBox,
+      setMapping: (patch) => this.setMapping(patch),
+      choosePreset: (id) => this.choosePreset(id),
+      refresh: () => this.refresh(),
+      onOpenChange: (open) => safeStorage(() => localStorage.setItem(PANEL_KEY, open ? "open" : "rail")),
+    },
+    safeStorage(() => localStorage.getItem(PANEL_KEY)) === "open" && !window.matchMedia(MEDIUM_QUERY).matches,
+  );
   private readonly legendBox = el("section", {
     class: "legend",
     attrs: { "aria-label": "Legend", hidden: "" },
   });
-  private readonly changesBox = el("section", { class: "changes", attrs: { hidden: "" } });
   private readonly healthPanel = el("section", {
     class: "health",
     attrs: { "aria-label": "Code health", hidden: "" },
@@ -317,10 +316,7 @@ export class App {
     this.reducedQuery.addEventListener("change", () => this.applyMotion());
     this.medium.addEventListener("change", () => {
       // a window made narrower folds the panel (the choice remembered is left alone)
-      if (this.medium.matches && this.panelOpen) {
-        this.panelOpen = false;
-        this.buildPanel();
-      }
+      if (this.medium.matches) this.viewPanel.fold();
       this.updateFreeArea();
     });
     if (this.fpsBox) {
@@ -436,7 +432,7 @@ export class App {
     document.title = `${data.project} · Factory City`;
     this.animator = undefined;
     this.buildCity(false);
-    this.buildPanel();
+    this.viewPanel.build();
     this.bar.setFrames(data.frames.map((f) => f.info));
     this.refresh();
     this.closeDetails();
@@ -628,256 +624,6 @@ export class App {
 
   // ----------------------------------------------------------------- panel
 
-  /** Opens the view panel or folds it to a rail; the choice is remembered. */
-  private setPanelOpen(open: boolean): void {
-    this.panelOpen = open;
-    safeStorage(() => localStorage.setItem(PANEL_KEY, open ? "open" : "rail"));
-    this.buildPanel();
-  }
-
-  /**
-   * The view panel. Folded, it is a rail with one button: a preset is enough for most sessions. Open, it
-   * shows the three main channels, then the rest (marker, tint, scale) in a section closed by default, then
-   * the filter.
-   */
-  private buildPanel(): void {
-    const s = this.state;
-    if (!s) return;
-    clear(this.panel);
-    this.panel.classList.toggle("rail", !this.panelOpen);
-    if (!this.panelOpen) {
-      const open = el(
-        "button",
-        {
-          class: "icon quiet",
-          title: "Channels and filter: choose the metrics yourself, search files",
-          attrs: { type: "button", "aria-label": "Open the view panel", "aria-expanded": "false" },
-        },
-        icon("sliders"),
-      );
-      open.addEventListener("click", () => this.setPanelOpen(true));
-      this.panel.append(open);
-      if (!s.preset)
-        this.panel.append(el("i", { class: "rail-dot", title: "The mapping was changed by hand" }));
-      return;
-    }
-    const fold = el(
-      "button",
-      {
-        class: "icon quiet",
-        title: "Fold the panel",
-        attrs: { type: "button", "aria-label": "Fold the view panel", "aria-expanded": "true" },
-      },
-      icon("fold"),
-    );
-    fold.addEventListener("click", () => this.setPanelOpen(false));
-    this.panel.append(el("div", { class: "panel-head" }, el("h2", { text: "View" }), fold), this.panelState);
-    this.renderPanelState();
-    this.panel.append(this.picker("area", "Area", "Metric that sets how much ground a file gets"));
-    this.panel.append(this.picker("height", "Height", "Metric that sets how tall a building is"));
-    this.panel.append(this.picker("color", "Color", "Metric that colors a building"));
-
-    const scale = el("select", {
-      title: "How values become heights",
-      attrs: { "aria-label": "Height scale" },
-    });
-    for (const kind of SCALE_KINDS) {
-      const o = el("option", { text: kind, attrs: { value: kind } });
-      if (kind === s.mapping.scale) o.selected = true;
-      scale.append(o);
-    }
-    scale.addEventListener("change", () => this.setMapping({ scale: scale.value as ScaleKind }));
-    const clamp = el("input", { attrs: { type: "checkbox" } });
-    clamp.checked = s.mapping.clampP99;
-    clamp.addEventListener("change", () => this.setMapping({ clampP99: clamp.checked }));
-    const more = el(
-      "details",
-      { class: "more" },
-      el("summary", { text: "More: marker, district tint, scale" }),
-      this.picker("marker", "Marker", "Optional: marks the roof of the files above a threshold on a metric"),
-      this.markerThreshold(),
-      this.picker("tint", "District tint", "Optional: tints the plinth of a district by a folder metric"),
-      el(
-        "div",
-        { class: "row" },
-        el("label", { text: "Scale", title: "Linear, square root or logarithmic" }),
-        scale,
-      ),
-      el(
-        "label",
-        {
-          class: "check",
-          title:
-            "Values above the 99th percentile all get the maximum, so one outlier does not flatten the city",
-        },
-        clamp,
-        " clamp outliers (99th percentile)",
-      ),
-    );
-    // open when it holds something in use, or when the user opened it
-    more.open = this.moreOpen || s.mapping.marker !== null || s.mapping.tint !== null;
-    more.addEventListener("toggle", () => {
-      this.moreOpen = more.open;
-    });
-    this.panel.append(more);
-
-    this.panel.append(el("h2", { text: "Filter" }));
-    const search = el("input", {
-      attrs: {
-        type: "search",
-        placeholder: "Search path or glob: src/**/*.ts",
-        "aria-label": "Search by path or glob",
-      },
-      title: "Plain text matches anywhere in the path; * and ? make it a glob",
-    });
-    search.value = s.search;
-    search.addEventListener("input", () => {
-      s.search = search.value;
-      this.refresh();
-    });
-    const tests = el("div", {
-      class: "segmented",
-      title: "Test files: show, dim or hide",
-      attrs: { role: "group", "aria-label": "Test files" },
-    });
-    for (const mode of ["show", "dim", "hide"] as const) {
-      const b = el("button", {
-        text: mode,
-        attrs: { type: "button", "aria-pressed": String(mode === s.tests) },
-      });
-      b.addEventListener("click", () => {
-        s.tests = mode;
-        for (const other of tests.children) other.setAttribute("aria-pressed", String(other === b));
-        this.refresh();
-      });
-      tests.append(b);
-    }
-    this.panel.append(search, el("div", { class: "row" }, el("label", { text: "Tests" }), tests));
-    this.panel.append(this.changesBox);
-  }
-
-  /** Says when the channels no longer match a preset, and offers the way back. */
-  private renderPanelState(): void {
-    const s = this.state;
-    clear(this.panelState);
-    this.panelState.hidden = !s || s.preset !== undefined;
-    if (!s || s.preset) return;
-    const last = PRESETS.find((p) => p.id === this.lastPreset);
-    this.panelState.append(el("span", { class: "badge", text: "modified" }));
-    if (last) {
-      const back = el("button", {
-        class: "link",
-        text: `Back to ${last.label}`,
-        title: `Drop your changes and show the ${last.label} preset again`,
-        attrs: { type: "button" },
-      });
-      back.addEventListener("click", () => this.choosePreset(last.id));
-      this.panelState.append(back);
-    }
-  }
-
-  private usable(role: Role): string[] {
-    const s = this.state;
-    if (!s) return [];
-    return [...s.ref.metrics.values()]
-      .filter((m) => m.id !== "is_test")
-      .filter((m) => (role === "tint" ? m.scope === "folder" : m.scope === "file"))
-      .filter((m) => role === "color" || m.kind !== "category")
-      .filter((m) => (s.ref.coverage.get(m.id) ?? 0) >= MIN_COVERAGE)
-      .map((m) => m.id);
-  }
-
-  private picker(role: Role, label: string, title: string): HTMLElement {
-    const s = this.state as State;
-    const select = el("select", { title, attrs: { "aria-label": label } });
-    if (role === "color") select.append(el("option", { text: "none (white)", attrs: { value: "" } }));
-    if (role === "marker" || role === "tint")
-      select.append(el("option", { text: "none", attrs: { value: "" } }));
-    const current = role === "marker" ? (s.mapping.marker?.metric ?? null) : s.mapping[role];
-    for (const id of this.usable(role)) {
-      const m = s.model.metrics.get(id);
-      const o = el("option", { text: m?.label ?? id, attrs: { value: id } });
-      if (id === current) o.selected = true;
-      select.append(o);
-    }
-    select.addEventListener("change", () => {
-      if (role === "marker") {
-        const marker = select.value ? resolveMarker(s.ref, select.value, this.report?.dimensions) : undefined;
-        this.setMapping({ marker: marker ?? null });
-        this.buildPanel();
-        return;
-      }
-      const optional = role === "color" || role === "tint";
-      this.setMapping({ [role]: optional ? select.value || null : select.value });
-    });
-    const help = el(
-      "details",
-      { class: "metric-help popover" },
-      el("summary", { text: "?", title: `What does this ${label.toLowerCase()} metric mean?` }),
-      this.metricHelp(current),
-    );
-    select.addEventListener("change", () => {
-      const next = role === "color" ? select.value : select.value;
-      help.replaceChildren(
-        el("summary", { text: "?", title: `What does this ${label.toLowerCase()} metric mean?` }),
-        this.metricHelp(next || null),
-      );
-    });
-    return el(
-      "div",
-      { class: "picker" },
-      el("div", { class: "row" }, el("label", { text: label }), select, help),
-    );
-  }
-
-  /** The threshold of the marker: the automatic one is shown, and can be replaced by a value typed in. */
-  private markerThreshold(): HTMLElement | undefined {
-    const s = this.state;
-    const marker = s?.mapping.marker;
-    if (!s || !marker) return undefined;
-    const automatic = resolveMarker(s.ref, marker.metric, this.report?.dimensions);
-    const input = el("input", {
-      title: "Files above this value are marked. Leave empty for the automatic threshold.",
-      attrs: {
-        type: "number",
-        step: "any",
-        "aria-label": "Marker threshold",
-        placeholder: automatic ? format.number(automatic.threshold) : "",
-      },
-    });
-    if (marker.source === "chosen") input.value = String(marker.threshold);
-    input.addEventListener("change", () => {
-      const chosen = input.value.trim() === "" ? undefined : Number(input.value);
-      const next = resolveMarker(s.ref, marker.metric, this.report?.dimensions, chosen);
-      this.setMapping({ marker: next ?? null });
-    });
-    return el("div", { class: "row" }, el("label", { text: "above" }), input);
-  }
-
-  /** Definition, computation, why it matters, direction and limits: all from the registry. */
-  private metricHelp(id: string | null): HTMLElement {
-    const m = id ? this.state?.model.metrics.get(id) : undefined;
-    if (!m) return el("div", { class: "help-body", text: "Buildings stay white." });
-    const direction = {
-      "higher-is-worse": "A higher value is worse.",
-      "higher-is-better": "A higher value is better.",
-      neutral: "Neither high nor low is good or bad.",
-    }[m.direction];
-    return el(
-      "div",
-      { class: "help-body" },
-      el("p", { text: m.definition }),
-      el("p", {}, el("b", { text: "How: " }), m.computation),
-      el("p", {}, el("b", { text: "Why: " }), m.why),
-      el("p", { text: direction }),
-      el("p", {}, el("b", { text: "Limits: " }), m.limits),
-      el("p", {
-        class: "muted",
-        text: `Data level ${m.level}${m.experimental ? " · experimental" : ""}${m.retrospective ? " · retrospective" : ""}`,
-      }),
-    );
-  }
-
   private choosePreset(id: string): void {
     const s = this.state;
     if (!s) return;
@@ -886,7 +632,7 @@ export class App {
     s.preset = status.preset;
     s.mapping = status.mapping;
     this.relayoutAndRefresh();
-    this.buildPanel();
+    this.viewPanel.build();
   }
 
   private setMapping(patch: Partial<Mapping>): void {
@@ -899,7 +645,7 @@ export class App {
     if (areaChanged) this.relayoutAndRefresh();
     else this.refresh();
     this.updatePresetSelect();
-    this.renderPanelState();
+    this.viewPanel.renderState();
   }
 
   private layoutFor(data: TimelineData, mapping: Mapping): Layout {
@@ -1572,10 +1318,7 @@ export class App {
         this.factoryPanel.hidden = true;
         this.closeDetails();
         // an open view panel overlays the stage in a medium window: it folds the same way
-        if (this.medium.matches && this.panelOpen) {
-          this.panelOpen = false;
-          this.buildPanel();
-        }
+        if (this.medium.matches) this.viewPanel.fold();
         if (!this.helpDialog.hidden) this.hideHelp();
         break;
       default:
@@ -1604,7 +1347,7 @@ export class App {
       s.mapping = { ...s.mapping, scale: theme.scale };
     }
     this.buildCity(!cameraChanged);
-    this.buildPanel();
+    this.viewPanel.build();
     this.refresh();
   }
 
