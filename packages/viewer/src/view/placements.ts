@@ -1,5 +1,6 @@
 import type { Layout, Rect } from "@factory-city/layout";
-import { categoryLabel, type Model } from "../data/model";
+import type { MetricDefinition } from "@factory-city/schema/registry";
+import { categoryLabel, type MetricStats, type Model } from "../data/model";
 import type { Mapping } from "../presets/index";
 import type { Theme } from "../themes/index";
 import { parseHex, type Rgb, rampColor } from "./color";
@@ -79,76 +80,48 @@ export function categoryPalette(model: Model, metricId: string, theme: Theme) {
   };
 }
 
-export function computePlacements(
-  model: Model,
-  layout: Layout,
-  mapping: Mapping,
-  theme: Theme,
-): { placements: Array<Placement | undefined>; legend: ColorLegend } {
-  const heightStats = model.stats.get(mapping.height);
-  const heightScale = heightStats ? makeScale(heightStats, mapping.scale, mapping.clampP99) : () => 0.5;
-  const maxHeight = theme.heightScale * layout.width;
-  const sequential = theme.ramps.sequential.map(parseHex);
-  const building = parseHex(theme.colors.building as string);
-  const unavailable = parseHex(theme.colors.unavailable as string);
+type Cats = ReturnType<typeof categoryPalette>;
 
-  const colorMetric = mapping.color ? model.metrics.get(mapping.color) : undefined;
-  const colorStats = colorMetric ? model.stats.get(colorMetric.id) : undefined;
-  const colorScale =
-    colorStats && colorMetric?.kind !== "category" ? makeScale(colorStats, "linear", true) : undefined;
-  const cats = colorMetric?.kind === "category" ? categoryPalette(model, colorMetric.id, theme) : undefined;
+/** How the color of a building is decided: a category palette, a sequential scale, or nothing. */
+interface ColorPlan {
+  metricId: string | undefined;
+  cats: Cats | undefined;
+  scale: ((v: number) => number) | undefined;
+  building: Rgb;
+  unavailable: Rgb;
+  sequential: Rgb[];
+}
 
-  const placements = model.files.map((file): Placement | undefined => {
-    const rect = layout.files.get(file.path);
-    if (!rect) return undefined;
-    const { x, z } = parcelCenter(rect);
-    const inset = PARCEL_INSET;
-    const hv = file.values[mapping.height];
-    const footprint = { w: rect.w * (1 - inset * 2), d: rect.h * (1 - inset * 2) };
-    const markerValue = mapping.marker ? file.values[mapping.marker.metric] : undefined;
-    const marked = mapping.marker ? isMarked(markerValue, mapping.marker) : false;
-    const roofSteepness = markStrength(markerValue, mapping.marker);
-    let color = building;
-    let ramp: number | undefined;
-    let colorUnavailable = false;
-    let roofMark = 0;
-    if (colorMetric) {
-      const cv = file.values[colorMetric.id];
-      if (cv === undefined) {
-        color = unavailable;
-        colorUnavailable = true;
-      } else if (cats) {
-        const slot = cats.slots.get(cv);
-        color = slot === undefined ? cats.other : (cats.palette[slot] as Rgb);
-        roofMark = slot === undefined ? 1 : slot / Math.max(cats.palette.length, 1);
-      } else if (colorScale) {
-        ramp = colorScale(cv);
-        color = rampColor(sequential, ramp);
-      }
-    }
+/** The color of a building, and what it says on its roof; a file without a value is drawn as unavailable. */
+function colorOf(value: number | undefined, plan: ColorPlan) {
+  const { cats, scale } = plan;
+  if (plan.metricId === undefined) return { color: plan.building, roofMark: 0 };
+  if (value === undefined) return { color: plan.unavailable, roofMark: 0, colorUnavailable: true };
+  if (cats) {
+    const slot = cats.slots.get(value);
     return {
-      x,
-      z,
-      w: footprint.w,
-      d: footprint.d,
-      marked,
-      markStrength: roofSteepness,
-      h: hv === undefined ? MIN_HEIGHT : MIN_HEIGHT + heightScale(hv) * maxHeight,
-      baseY: plinthTop(folderDepth(file.dir)),
-      color,
-      ramp,
-      roofMark,
-      heightUnavailable: hv === undefined,
-      colorUnavailable,
+      color: slot === undefined ? cats.other : (cats.palette[slot] as Rgb),
+      roofMark: slot === undefined ? 1 : slot / Math.max(cats.palette.length, 1),
     };
-  });
+  }
+  if (!scale) return { color: plan.building, roofMark: 0 };
+  const ramp = scale(value);
+  return { color: rampColor(plan.sequential, ramp), ramp, roofMark: 0 };
+}
 
-  let legend: ColorLegend = { kind: "none", metric: null };
-  if (cats && colorMetric) {
+/** What the legend says about the color: the categories with their counts, or the range of values. */
+function legendOf(
+  model: Model,
+  metric: MetricDefinition | undefined,
+  stats: MetricStats | undefined,
+  cats: Cats | undefined,
+): ColorLegend {
+  if (!metric) return { kind: "none", metric: null };
+  if (cats) {
     const entries = [...cats.slots.entries()]
       .sort((a, b) => a[1] - b[1])
       .map(([value, slot]) => ({
-        label: categoryLabel(model, colorMetric.id, value),
+        label: categoryLabel(model, metric.id, value),
         color: cats.palette[slot] as Rgb,
         roofMark: slot / Math.max(cats.palette.length, 1),
         count: cats.counts.get(value) ?? 0,
@@ -159,17 +132,63 @@ export function computePlacements(
       const rest = [...cats.counts.entries()].filter(([v]) => !used.has(v)).reduce((n, [, c]) => n + c, 0);
       entries.push({ label: "other", color: cats.other, roofMark: 1, count: rest, isOther: true });
     }
-    legend = { kind: "categorical", metric: colorMetric.id, categories: entries };
-  } else if (colorMetric && colorStats) {
-    legend = {
-      kind: "sequential",
-      metric: colorMetric.id,
-      min: colorStats.min,
-      max: colorStats.p99,
-      clamped: colorStats.p99 < colorStats.max,
-    };
+    return { kind: "categorical", metric: metric.id, categories: entries };
   }
-  return { placements, legend };
+  if (!stats) return { kind: "none", metric: null };
+  return {
+    kind: "sequential",
+    metric: metric.id,
+    min: stats.min,
+    max: stats.p99,
+    clamped: stats.p99 < stats.max,
+  };
+}
+
+export function computePlacements(
+  model: Model,
+  layout: Layout,
+  mapping: Mapping,
+  theme: Theme,
+): { placements: Array<Placement | undefined>; legend: ColorLegend } {
+  const heightStats = model.stats.get(mapping.height);
+  const heightScale = heightStats ? makeScale(heightStats, mapping.scale, mapping.clampP99) : () => 0.5;
+  const maxHeight = theme.heightScale * layout.width;
+  const colorMetric = mapping.color ? model.metrics.get(mapping.color) : undefined;
+  const colorStats = colorMetric ? model.stats.get(colorMetric.id) : undefined;
+  const cats = colorMetric?.kind === "category" ? categoryPalette(model, colorMetric.id, theme) : undefined;
+  const plan: ColorPlan = {
+    metricId: colorMetric?.id,
+    cats,
+    scale: colorStats && colorMetric?.kind !== "category" ? makeScale(colorStats, "linear", true) : undefined,
+    building: parseHex(theme.colors.building as string),
+    unavailable: parseHex(theme.colors.unavailable as string),
+    sequential: theme.ramps.sequential.map(parseHex),
+  };
+
+  const placements = model.files.map((file): Placement | undefined => {
+    const rect = layout.files.get(file.path);
+    if (!rect) return undefined;
+    const { x, z } = parcelCenter(rect);
+    const hv = file.values[mapping.height];
+    const markerValue = mapping.marker ? file.values[mapping.marker.metric] : undefined;
+    const look = colorOf(colorMetric ? file.values[colorMetric.id] : undefined, plan);
+    return {
+      x,
+      z,
+      w: rect.w * (1 - PARCEL_INSET * 2),
+      d: rect.h * (1 - PARCEL_INSET * 2),
+      marked: mapping.marker ? isMarked(markerValue, mapping.marker) : false,
+      markStrength: markStrength(markerValue, mapping.marker),
+      h: hv === undefined ? MIN_HEIGHT : MIN_HEIGHT + heightScale(hv) * maxHeight,
+      baseY: plinthTop(folderDepth(file.dir)),
+      color: look.color,
+      ramp: look.ramp,
+      roofMark: look.roofMark,
+      heightUnavailable: hv === undefined,
+      colorUnavailable: look.colorUnavailable ?? false,
+    };
+  });
+  return { placements, legend: legendOf(model, colorMetric, colorStats, cats) };
 }
 
 /** Light tint of a district's plinth from a folder-scope metric; folders without a value keep the plain plinth. */

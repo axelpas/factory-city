@@ -1,3 +1,4 @@
+import type { MetricDefinition } from "@factory-city/schema/registry";
 import { categoryLabel, type MetricStats, type Model } from "../data/model";
 import type { Formatter } from "../lib/format";
 import type { Mapping } from "../presets/index";
@@ -134,20 +135,13 @@ export function risksOf(
   return found.sort((a, b) => b.level - a.level || (a.text < b.text ? -1 : 1)).map((f) => f.text);
 }
 
-/**
- * Everything known about a file, ordered for reading: the mapped channels, then the metrics by family. A
- * family whose values are all zero folds into one line; a metric without a value is listed apart with the
- * reason, never as zero.
- */
-export function fileDetails(
+/** The mapped channels (area, height, color, marker) with their values, for the metrics that have a row. */
+function channelRows(
   model: Model,
-  index: number,
+  file: Model["files"][number],
   mapping: Mapping,
   fmt: Formatter,
-  dimensions: ReadonlyArray<Bounded & { label?: string }> = [],
-): FileDetails {
-  const file = model.files[index];
-  if (!file) throw new Error(`No file at index ${index}`);
+): CardRow[] {
   const channels: CardRow[] = [];
   for (const [role, id] of [
     ["Area", mapping.area],
@@ -159,7 +153,27 @@ export function fileDetails(
     const row = metricRow(model, id, file.values, fmt);
     if (row) channels.push({ ...row, label: `${role}: ${row.label}` });
   }
+  return channels;
+}
 
+/** The row of one metric of a file: a label for a category, a quantity and where it stands for a number. */
+function detailRow(model: Model, metric: MetricDefinition, value: number, fmt: Formatter): DetailRow {
+  const title = `${metric.definition} ${metric.limits}`;
+  if (metric.kind === "category")
+    return { id: metric.id, label: metric.label, value: categoryLabel(model, metric.id, value), title };
+  const stats = model.stats.get(metric.id);
+  const stand = stats ? standing(stats, value) : undefined;
+  return {
+    id: metric.id,
+    label: metric.label,
+    value: fmt.quantity(value, metric.unit),
+    title,
+    ...(stand && stand.same <= COMMON_SHARE ? { rank: stand.below } : {}),
+  };
+}
+
+/** The metrics of a file by family, which families are all zero, and the metrics without a value. */
+function bucketRows(model: Model, file: Model["files"][number], fmt: Formatter) {
   const buckets = new Map<number, DetailRow[]>();
   const zeros = new Map<number, boolean>();
   const unavailable: FileDetails["unavailable"] = [];
@@ -171,28 +185,15 @@ export function fileDetails(
       continue;
     }
     const family = familyOf(metric.id);
-    const title = `${metric.definition} ${metric.limits}`;
-    let row: DetailRow;
-    if (metric.kind === "category") {
-      row = { id: metric.id, label: metric.label, value: categoryLabel(model, metric.id, value), title };
-    } else {
-      const stats = model.stats.get(metric.id);
-      const stand = stats ? standing(stats, value) : undefined;
-      row = {
-        id: metric.id,
-        label: metric.label,
-        value: fmt.quantity(value, metric.unit),
-        title,
-        ...(stand && stand.same <= COMMON_SHARE ? { rank: stand.below } : {}),
-      };
-      zeros.set(family, (zeros.get(family) ?? true) && value === 0);
-    }
-    if (metric.kind === "category") zeros.set(family, false);
-    const rows = buckets.get(family) ?? [];
-    rows.push(row);
-    buckets.set(family, rows);
+    const isNumber = metric.kind !== "category";
+    zeros.set(family, isNumber && (zeros.get(family) ?? true) && value === 0);
+    buckets.set(family, [...(buckets.get(family) ?? []), detailRow(model, metric, value, fmt)]);
   }
+  return { buckets, zeros, unavailable };
+}
 
+/** The families in order, each with its rows in the order of the family's list. */
+function groupsOf(buckets: Map<number, DetailRow[]>, zeros: Map<number, boolean>): DetailGroup[] {
   const groups: DetailGroup[] = [];
   for (const family of [...FAMILIES.keys(), -1]) {
     const rows = buckets.get(family);
@@ -211,15 +212,33 @@ export function fileDetails(
       zeroText: def?.zero ?? "All zero.",
     });
   }
+  return groups;
+}
+
+/**
+ * Everything known about a file, ordered for reading: the mapped channels, then the metrics by family. A
+ * family whose values are all zero folds into one line; a metric without a value is listed apart with the
+ * reason, never as zero.
+ */
+export function fileDetails(
+  model: Model,
+  index: number,
+  mapping: Mapping,
+  fmt: Formatter,
+  dimensions: ReadonlyArray<Bounded & { label?: string }> = [],
+): FileDetails {
+  const file = model.files[index];
+  if (!file) throw new Error(`No file at index ${index}`);
+  const { buckets, zeros, unavailable } = bucketRows(model, file, fmt);
   const language = file.values.language;
   return {
     title: file.name,
     path: file.path,
     language: language === undefined ? "Unknown language" : categoryLabel(model, "language", language),
     isTest: file.isTest,
-    channels,
+    channels: channelRows(model, file, mapping, fmt),
     risks: risksOf(model, file.values, dimensions, fmt),
-    groups,
+    groups: groupsOf(buckets, zeros),
     unavailable: unavailable.sort((a, b) => (a.label < b.label ? -1 : 1)),
   };
 }
