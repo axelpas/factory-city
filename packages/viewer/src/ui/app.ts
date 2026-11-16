@@ -18,14 +18,7 @@ import {
 import type { Model } from "../data/model";
 import { syntheticSnapshots } from "../data/synthetic";
 import { buildTimelineData, layoutWeights, type TimelineData } from "../data/timeline";
-import {
-  type EncodedVideo,
-  encodeVideo,
-  pixelHash,
-  planVideo,
-  secondsPerFrameAt,
-  type VideoOptions,
-} from "../export/video";
+import type { EncodedVideo, VideoOptions } from "../export/video";
 import { clear, el } from "../lib/dom";
 import { format } from "../lib/format";
 import { makePathFilter } from "../lib/glob";
@@ -37,7 +30,7 @@ import {
   type Preset,
   presetStatuses,
 } from "../presets/index";
-import { type CameraState, CityScene, type Pick } from "../scene/CityScene";
+import { CityScene, type Pick } from "../scene/CityScene";
 import { applyTheme, DEFAULT_THEME, THEMES, type Theme, themeById } from "../themes/index";
 import { fileCard, folderCard, frameChangeRows, lastChangeRow, lotCard } from "../view/card";
 import { placeCard } from "../view/card-place";
@@ -61,13 +54,13 @@ import { fileCardView, folderCardView } from "./card-view";
 import { renderFileDetails } from "./details-view";
 import { DistrictLabelLayer } from "./district-labels";
 import { ExportMenu } from "./export-menu";
+import { Exporter } from "./exporter";
 import { FileFinder } from "./file-finder";
 import { fillHelp } from "./help";
 import { type IconName, icon } from "./icons";
 import { Inspector, type InspectorTab } from "./inspector";
 import { renderLegendBox } from "./legend-box";
 import { lensGroups, renderLensButton, renderLensList } from "./lens";
-import { drawOverlay } from "./overlay";
 import { renderFactoryPanel, renderHealthPanel } from "./panels";
 import { closePopovers, watchPopovers } from "./popovers";
 import { ScoreBox } from "./score-box";
@@ -130,7 +123,6 @@ export class App {
   private readonly stage: HTMLElement;
   private readonly header: HTMLElement;
   /** The camera view of a running export sequence (a video): pictures use it as it is. */
-  private exportCamera: CameraState | undefined;
   private readonly scene: CityScene;
   private readonly card = el("div", { class: "card", attrs: { role: "tooltip" } });
   private readonly details = el("section", { attrs: { "aria-label": "File details", hidden: "" } });
@@ -206,8 +198,8 @@ export class App {
   private readonly appearanceList = el("div", { class: "menu-list" });
   /** The Export menu, which also keeps the options of the film. */
   private readonly exportMenu = new ExportMenu({
-    onPicture: (size, overlay) => this.exportPng(size, overlay),
-    onVideo: () => void this.exportVideo(),
+    onPicture: (size, overlay) => this.exporter.exportPng(size, overlay),
+    onVideo: () => void this.exporter.exportVideo(),
     frameCount: () => this.state?.data.frames.length ?? 1,
   });
   private readonly presetQuestion = el("span", { class: "question" });
@@ -216,7 +208,6 @@ export class App {
     attrs: { "aria-label": "Theme" },
   });
   private glow = true;
-  private exporting = false;
   private scaleBeforeTheme: ScaleKind | undefined;
   private readonly bar: TimelineBar;
   private state: State | undefined;
@@ -243,6 +234,8 @@ export class App {
   /** What had the focus when the help opened. */
   private helpOpener: HTMLElement | null = null;
   private districtLabels!: DistrictLabelLayer;
+  /** Pictures and films of the city. */
+  private exporter!: Exporter;
   private labelsOn = safeStorage(() => localStorage.getItem(LABELS_KEY)) !== "off";
   /** The building the details show, outlined in the city until another one is selected. */
   private selectedUnion: number | null = null;
@@ -306,6 +299,19 @@ export class App {
     this.districtLabels = new DistrictLabelLayer(this.scene, () => this.coveredBoxes());
     this.districtLabels.setEnabled(this.labelsOn);
     this.stage.append(this.districtLabels.element);
+    this.exporter = new Exporter({
+      state: () => this.state,
+      animator: () => this.animator,
+      scene: this.scene,
+      stage: this.stage,
+      theme: () => this.theme,
+      report: () => this.report,
+      legend: () => this.legend(),
+      districtLabels: this.districtLabels,
+      exportMenu: this.exportMenu,
+      stateOf: (frame) => this.stateOf(frame),
+      updateFrameViews: (force) => this.updateFrameViews(force),
+    });
     this.scene.onTick = (dt) => this.tick(dt);
     this.scene.readState = () => this.onScreen();
     this.reducedQuery.addEventListener("change", () => this.applyMotion());
@@ -1107,6 +1113,22 @@ export class App {
     }
   }
 
+  /** For a theme made of blocks: what one block is worth. */
+  private blockNote(): string | undefined {
+    const s = this.state;
+    const block = s ? blockSize(this.theme, s.layout.width) : undefined;
+    if (!s || block === undefined) return undefined;
+    return blockLegend(
+      s.model.metrics.get(s.mapping.height)?.label ?? s.mapping.height,
+      s.model.stats.get(s.mapping.height),
+      s.mapping.scale,
+      s.mapping.clampP99,
+      this.theme.heightScale * s.layout.width,
+      block,
+      (n) => format.number(n, 1),
+    );
+  }
+
   private legend(): LegendModel | undefined {
     const s = this.state;
     if (!s) return undefined;
@@ -1526,7 +1548,7 @@ export class App {
         break;
       case "e":
       case "E":
-        this.exportPng(2, true);
+        this.exporter.exportPng(2, true);
         break;
       case "h":
       case "H":
@@ -1703,215 +1725,24 @@ export class App {
 
   /** Lets every running move finish at once, so that a picture shows the settled city. */
   settle(): void {
-    const a = this.animator;
-    if (!a) return;
-    a.pause();
-    for (let i = 0; i < 20 && a.tick(100000); i++);
-    this.updateFrameViews(true);
+    this.exporter.settle();
   }
 
   /** The current view as a PNG data URL at an exact size, for headless rendering. */
   capture(width: number, height: number, withOverlay = true, frame?: number): string | undefined {
-    // a frame asked for (0 to the last) is shown, whole, before the picture is taken
-    if (frame !== undefined) this.animator?.setPosition(frame);
-    this.settle();
-    return this.picture(width, height, withOverlay)?.toDataURL("image/png");
+    return this.exporter.capture(width, height, withOverlay, frame);
   }
 
-  private exportPng(size: number | "4k", withOverlay: boolean): void {
-    const s = this.state;
-    if (!s) return;
-    const base = this.stage.getBoundingClientRect();
-    const width = size === "4k" ? 3840 : Math.round(base.width * size);
-    const height = size === "4k" ? 2160 : Math.round(base.height * size);
-    const canvas = this.picture(width, height, withOverlay);
-    if (!canvas) return;
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = el("a", { attrs: { href: url, download: `${s.model.project}-city.png` } });
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-    }, "image/png");
-  }
-
-  /** For a theme made of blocks: what one block is worth. */
-  private blockNote(): string | undefined {
-    const s = this.state;
-    const block = s ? blockSize(this.theme, s.layout.width) : undefined;
-    if (!s || block === undefined) return undefined;
-    return blockLegend(
-      s.model.metrics.get(s.mapping.height)?.label ?? s.mapping.height,
-      s.model.stats.get(s.mapping.height),
-      s.mapping.scale,
-      s.mapping.clampP99,
-      this.theme.heightScale * s.layout.width,
-      block,
-      (n) => format.number(n, 1),
-    );
-  }
-
-  /** Label of the frame under the playhead, for exported pictures; undefined for a single snapshot. */
-  /** The score at the playhead, for the overlay of an exported picture or film. */
-  private exportScore(): { health?: string } {
-    const s = this.state;
-    const score = s ? scoreAt(s.data, this.report, this.animator?.playhead ?? 0) : undefined;
-    return score === undefined ? {} : { health: format.score(score) };
-  }
-
-  private frameText(): string | undefined {
-    const s = this.state;
-    const info = s?.data.frames[this.animator?.frame ?? 0]?.info;
-    if (!s || !info || s.data.frames.length < 2) return undefined;
-    return `${info.label} · ${format.date(info.date)}`;
-  }
-
-  /** Paints the image of the film at a playhead position on a canvas. A pure function of its arguments. */
-  private paintAt(
-    target: CanvasRenderingContext2D,
-    position: number,
-    width: number,
-    height: number,
-    overlay: boolean,
-  ): void {
-    const a = this.animator;
-    if (!a) return;
-    a.setPosition(position);
-    this.updateFrameViews();
-    const picture = this.picture(width, height, overlay);
-    if (picture) target.drawImage(picture, 0, 0);
-  }
-
-  /**
-   * Renders the timelapse offline, image by image, on a virtual clock: never a screen recording. The film
-   * carries the same interpolated animation as the live view.
-   */
-  async video(
+  /** Renders the timelapse offline, image by image, on a virtual clock. */
+  video(
     options: VideoOptions,
     onProgress?: (done: number, total: number) => void,
   ): Promise<EncodedVideo | undefined> {
-    const s = this.state;
-    const a = this.animator;
-    if (!s || !a) return undefined;
-    this.settle();
-    const before = { position: a.position, camera: this.scene.cameraState(), reduced: a.reducedMotion };
-    // one view for the whole film, framed for its size
-    const view = this.scene.exportView(options.width, options.height);
-    this.exportCamera = view;
-    // a film is made of in-between images: movement is never replaced by cuts here
-    a.reducedMotion = false;
-    const canvas = document.createElement("canvas");
-    canvas.width = options.width;
-    canvas.height = options.height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return undefined;
-    const plan = planVideo(s.data.frames.length, options);
-    try {
-      a.reset(s.data.frames.length, (f) => this.stateOf(f), 0);
-      return await encodeVideo(
-        canvas,
-        plan,
-        (i) => {
-          this.scene.setCameraState(view, plan.angleAt(i));
-          this.paintAt(ctx, plan.positionAt(i), options.width, options.height, options.overlay);
-        },
-        onProgress,
-      );
-    } finally {
-      a.reducedMotion = before.reduced;
-      this.exportCamera = undefined;
-      this.scene.setCameraState(before.camera);
-      a.reset(s.data.frames.length, (f) => this.stateOf(f), before.position);
-      this.updateFrameViews(true);
-    }
+    return this.exporter.video(options, onProgress);
   }
 
-  /** Fingerprints of the images at some playhead positions: lets a test compare two renders image for image. */
+  /** Fingerprints of the images at some playhead positions, to compare two renders image for image. */
   imageHashes(positions: number[], width: number, height: number): string[] {
-    const s = this.state;
-    const a = this.animator;
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!s || !a || !ctx) return [];
-    this.settle();
-    const reduced = a.reducedMotion;
-    a.reducedMotion = false;
-    a.reset(s.data.frames.length, (f) => this.stateOf(f), 0);
-    const out = positions.map((p) => {
-      this.paintAt(ctx, p, width, height, false);
-      return pixelHash(ctx.getImageData(0, 0, width, height).data);
-    });
-    a.reducedMotion = reduced;
-    return out;
-  }
-
-  /** Asks for the video options, renders the film and offers it for download. */
-  private async exportVideo(): Promise<void> {
-    const s = this.state;
-    if (!s || this.exporting) return;
-    this.exporting = true;
-    const note = el("div", { class: "export-note", text: "Rendering the video…" });
-    this.stage.append(note);
-    try {
-      const result = await this.video(
-        {
-          width: 1920,
-          height: 1080,
-          fps: this.exportMenu.fps,
-          secondsPerFrame: secondsPerFrameAt(this.exportMenu.speed),
-          overlay: true,
-          orbit: this.exportMenu.orbit,
-        },
-        (done, total) => {
-          note.textContent = `Rendering the video: image ${format.integer(done)} of ${format.integer(total)}`;
-        },
-      );
-      if (!result) return;
-      const url = URL.createObjectURL(new Blob([result.bytes.slice().buffer], { type: result.mime }));
-      const link = el("a", {
-        attrs: {
-          href: url,
-          download: `${s.model.project}-timelapse.${result.mime === "video/mp4" ? "mp4" : "webm"}`,
-        },
-      });
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-    } catch (err) {
-      note.textContent = `The video could not be rendered: ${err instanceof Error ? err.message : String(err)}`;
-      await new Promise((wait) => setTimeout(wait, 4000));
-    } finally {
-      note.remove();
-      this.exporting = false;
-    }
-  }
-
-  private picture(width: number, height: number, withOverlay: boolean): HTMLCanvasElement | undefined {
-    const s = this.state;
-    if (!s) return undefined;
-    // a single picture is framed for its own size; a film sets its view once for all its images
-    const saved = this.exportCamera ? undefined : this.scene.cameraState();
-    if (saved) this.scene.setCameraState(this.scene.exportView(width, height));
-    // the names are placed with the camera of the picture, at the same relative size as on screen
-    const k = width / Math.max(this.stage.clientWidth, 1);
-    const canvas = this.scene.renderToCanvas(width, height, (ctx) =>
-      this.districtLabels.draw(ctx, width, height, this.theme, k),
-    );
-    if (saved) this.scene.setCameraState(saved);
-    if (withOverlay) {
-      const ctx = canvas.getContext("2d");
-      const legend = this.legend();
-      if (ctx && legend)
-        drawOverlay(ctx, width, height, {
-          theme: this.theme,
-          project: s.model.project,
-          preset: s.preset?.label ?? "Custom",
-          legend,
-          frame: this.frameText(),
-          ...this.exportScore(),
-        });
-    }
-    return canvas;
+    return this.exporter.imageHashes(positions, width, height);
   }
 }
