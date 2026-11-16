@@ -45,7 +45,7 @@ import { Film } from "./film";
 import { FrameNotes } from "./frame-notes";
 import { measureFreeArea } from "./free-area";
 import { renderHealthPanel } from "./health-panel";
-import { fillHelp } from "./help";
+import { DropZone, HelpDialog } from "./help-dialog";
 import { HoverCard } from "./hover-card";
 import { type IconName, icon } from "./icons";
 import { Inspector, type InspectorTab } from "./inspector";
@@ -108,11 +108,11 @@ export class App {
   /** The card that follows the pointer, and what the pointer does on the city. */
   private card!: HoverCard;
   private pointerController!: PointerController;
-  private readonly helpDialog = el("div", {
-    class: "help",
-    attrs: { role: "dialog", "aria-label": "How to read this city", hidden: "", tabindex: "-1" },
+  private readonly help = new HelpDialog({
+    hiddenLenses: () => hiddenLensesLine(this.bar.lenses) || undefined,
+    onSeen: () => safeStorage(() => localStorage.setItem(HELP_KEY, "1")),
   });
-  private readonly dropZone = el("div", { class: "drop" });
+  private readonly dropZone = new DropZone();
   private readonly panel = el("aside", { class: "panel", attrs: { "aria-label": "View settings" } });
   /** What the bar, the panels and the timeline cover, as last measured. */
   private insets: Insets = NO_INSETS;
@@ -238,8 +238,6 @@ export class App {
     files: () => this.finderFiles(),
     onChoose: (entry) => this.selection.open(entry.union),
   });
-  /** What had the focus when the help opened. */
-  private helpOpener: HTMLElement | null = null;
   private districtLabels!: DistrictLabelLayer;
   /** Pictures and films of the city. */
   private exporter!: Exporter;
@@ -286,8 +284,8 @@ export class App {
       this.notes.status,
       this.card.element,
       this.inspector.element,
-      this.helpDialog,
-      this.dropZone,
+      this.help.element,
+      this.dropZone.element,
       this.notes.description,
     );
     this.scene = new CityScene(this.stage, this.theme);
@@ -349,7 +347,7 @@ export class App {
       ).factoryCityBenchmark = (images, options) => this.scene.benchmark(images, options);
     }
     this.wireEvents();
-    this.renderDropZone("Loading…");
+    this.dropZone.say("Loading…");
   }
 
   /** Loads the project list, then the current project; falls back to the drop zone. */
@@ -371,7 +369,7 @@ export class App {
     this.fillProjectSelect(list.projects, params.get("project") ?? list.current);
     this.slug = params.get("project") ?? list.current;
     if (!this.slug) {
-      this.renderDropZone(
+      this.dropZone.say(
         "No analyzed project found. Run factory-city in a folder, or drop a snapshot.cc.json file here.",
       );
       return;
@@ -384,7 +382,7 @@ export class App {
         ? wanted
         : defaultSource(this.available);
     if (!source) {
-      this.renderDropZone(`No data found for "${this.slug}". Run factory-city analyze or timeline first.`);
+      this.dropZone.say(`No data found for "${this.slug}". Run factory-city analyze or timeline first.`);
       return;
     }
     await this.openSource(source);
@@ -395,16 +393,14 @@ export class App {
     if (!manifest || !this.slug) return;
     this.fillSources(source);
     try {
-      this.renderDropZone("Loading…");
+      this.dropZone.say("Loading…");
       const loaded = await loadSource(this.slug, manifest, (done, total) => {
         if (total > 1)
-          this.renderDropZone(`Loading frame ${format.integer(done)} of ${format.integer(total)}…`);
+          this.dropZone.say(`Loading frame ${format.integer(done)} of ${format.integer(total)}…`);
       });
       this.open(loaded);
     } catch (err) {
-      this.renderDropZone(
-        `Could not load "${this.slug}": ${err instanceof Error ? err.message : String(err)}`,
-      );
+      this.dropZone.say(`Could not load "${this.slug}": ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -413,7 +409,7 @@ export class App {
     this.renderContext(loaded, data.project);
     const last = data.frames[data.frames.length - 1];
     if (!last) {
-      this.renderDropZone("This data holds no frame.");
+      this.dropZone.say("This data holds no frame.");
       return;
     }
     const params = new URLSearchParams(location.search);
@@ -459,7 +455,7 @@ export class App {
     this.bar.setFrames(data.frames.map((f) => f.info));
     this.refresh();
     this.selection.close();
-    if (!safeStorage(() => localStorage.getItem(HELP_KEY))) this.showHelp();
+    if (!safeStorage(() => localStorage.getItem(HELP_KEY))) this.help.show();
   }
 
   /** Builds the scene for the current layout and a new animator; keeps what is on screen when there is something. */
@@ -529,7 +525,12 @@ export class App {
       iconButton("reset", "Reset the view", "Reset the view (R)", () => this.scene.resetCamera()),
       this.appearance.element,
       this.exportMenu.element,
-      button("?", "How to read this city, and keyboard shortcuts (?)", () => this.toggleHelp(), "icon quiet"),
+      button(
+        "?",
+        "How to read this city, and keyboard shortcuts (?)",
+        () => this.help.toggle(),
+        "icon quiet",
+      ),
     );
   }
 
@@ -750,8 +751,7 @@ export class App {
     watchPopovers(document);
     window.addEventListener("dragover", (e) => {
       e.preventDefault();
-      this.dropZone.hidden = false;
-      this.renderDropZone("Drop snapshot.cc.json and analysis.json");
+      this.dropZone.say("Drop snapshot.cc.json and analysis.json");
     });
     window.addEventListener("dragleave", (e) => {
       if (e.target === document.documentElement || !(e.relatedTarget instanceof Node))
@@ -764,7 +764,7 @@ export class App {
       try {
         this.open(await readDropped(files));
       } catch (err) {
-        this.renderDropZone(err instanceof Error ? err.message : String(err));
+        this.dropZone.say(err instanceof Error ? err.message : String(err));
       }
     });
   }
@@ -811,34 +811,6 @@ export class App {
 
   // ------------------------------------------------------------ help, drop
 
-  private showHelp(): void {
-    fillHelp(this.helpDialog, hiddenLensesLine(this.bar.lenses) || undefined, () => this.hideHelp());
-    const active = document.activeElement;
-    this.helpOpener = active instanceof HTMLElement && active !== document.body ? active : null;
-    this.helpDialog.hidden = false;
-    this.helpDialog.focus({ preventScroll: true });
-  }
-
-  private hideHelp(): void {
-    this.helpDialog.hidden = true;
-    if (this.helpOpener?.isConnected) this.helpOpener.focus({ preventScroll: true });
-    this.helpOpener = null;
-    safeStorage(() => localStorage.setItem(HELP_KEY, "1"));
-  }
-
-  private toggleHelp(): void {
-    if (this.helpDialog.hidden) this.showHelp();
-    else this.hideHelp();
-  }
-
-  private renderDropZone(message: string): void {
-    this.dropZone.hidden = false;
-    clear(this.dropZone);
-    this.dropZone.append(
-      el("div", { class: "drop-box" }, el("h2", { text: "Factory City" }), el("p", { text: message })),
-    );
-  }
-
   // -------------------------------------------------------------- keyboard
 
   private readonly keyActions: KeyActions = {
@@ -852,7 +824,7 @@ export class App {
     toggleHealth: () => this.toggleHealth(),
     toggleFactory: () => this.toggleFactory(),
     openFinder: () => this.finder.open(),
-    toggleHelp: () => this.toggleHelp(),
+    toggleHelp: () => this.help.toggle(),
     escape: () => this.escape(),
   };
 
@@ -864,7 +836,7 @@ export class App {
     this.selection.close();
     // an open view panel overlays the stage in a medium window: it folds the same way
     if (this.medium.matches) this.viewPanel.fold();
-    if (!this.helpDialog.hidden) this.hideHelp();
+    if (!this.help.hidden) this.help.hide();
   }
 
   /** Switches theme at runtime: same data, same mapping, another look. Buildings move from the current view. */
