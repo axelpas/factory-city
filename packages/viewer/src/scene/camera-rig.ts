@@ -11,7 +11,8 @@ import {
   type Vec3,
 } from "../view/framing";
 import { plinthTop } from "../view/placements";
-import { districtView, easeInOut, moveProgress } from "../view/scene-logic";
+import { districtView } from "../view/scene-logic";
+import { CameraFly } from "./camera-fly";
 
 /** A camera view that can be saved and restored. */
 export interface CameraState {
@@ -54,15 +55,8 @@ export class CameraRig {
   private shift = { x: 0, y: 0 };
   /** What the bar, the panels and the timeline cover: the city is framed in what is left. */
   private insets: Insets = NO_INSETS;
-  /** A camera move toward a district, in progress. */
-  private fly:
-    | {
-        elapsed: number;
-        ms: number;
-        from: { position: THREE.Vector3; target: THREE.Vector3; zoom: number };
-        to: { position: THREE.Vector3; target: THREE.Vector3; zoom: number };
-      }
-    | undefined;
+  /** The move toward a district, in progress or not. */
+  private readonly fly = new CameraFly({ camera: () => this.camera, controls: () => this.controls });
 
   constructor(
     private readonly host: RigHost,
@@ -97,41 +91,12 @@ export class CameraRig {
       zoom: view.zoom,
     };
     this.framed = null;
-    if (ms <= 0) {
-      this.fly = undefined;
-      this.controls.target.copy(to.target);
-      this.camera.position.copy(to.position);
-      this.camera.zoom = to.zoom;
-      this.camera.updateProjectionMatrix();
-      this.controls.update();
-      this.host.requestRender();
-      return;
-    }
-    this.fly = {
-      elapsed: 0,
-      ms,
-      from: {
-        position: this.camera.position.clone(),
-        target: this.controls.target.clone(),
-        zoom: this.camera.zoom,
-      },
-      to,
-    };
+    if (this.fly.start(to, ms)) this.host.requestRender();
   }
 
   /** Advances a camera move; true while it runs. */
   stepFly(dtMs: number): boolean {
-    const f = this.fly;
-    if (!f) return false;
-    f.elapsed += dtMs;
-    const t = moveProgress(f.elapsed, f.ms);
-    const e = easeInOut(t);
-    this.controls.target.lerpVectors(f.from.target, f.to.target, e);
-    this.camera.position.lerpVectors(f.from.position, f.to.position, e);
-    this.camera.zoom = f.from.zoom + (f.to.zoom - f.from.zoom) * e;
-    this.camera.updateProjectionMatrix();
-    if (t >= 1) this.fly = undefined;
-    return true;
+    return this.fly.step(dtMs);
   }
 
   /** Moves the view to a point of the map, keeping the viewing direction and coming closer. */
@@ -258,7 +223,7 @@ export class CameraRig {
 
   /** The camera as a three-quarter view of the whole city. */
   resetCamera(): void {
-    this.fly = undefined;
+    this.fly.cancel();
     const s = this.host.size();
     const dir = new THREE.Vector3(
       ...(this.host.theme().camera.direction as [number, number, number]),
@@ -273,7 +238,7 @@ export class CameraRig {
 
   /** Straight from above, without perspective: a plan of the city, framed in the free area. */
   topView(): void {
-    this.fly = undefined;
+    this.fly.cancel();
     const s = this.host.size();
     this.useCamera(true);
     this.controls.target.set(s / 2, 0, s / 2);
