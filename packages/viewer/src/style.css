@@ -1304,6 +1304,16 @@ button[aria-pressed="true"] {
 
 /* ---------------------------------------------------------------- small windows and motion */
 
+/* medium windows: the view panel is a rail, and what opens overlays the stage */
+@media (max-width: 1100px) {
+  .panel:not(.rail),
+  .inspector {
+    box-shadow: var(--shadow-2);
+  }
+  .panel:not(.rail) {
+    z-index: 26;
+  }
+}
 @media (max-width: 820px) {
   .panel {
     width: calc(100vw - 2 * var(--gutter));

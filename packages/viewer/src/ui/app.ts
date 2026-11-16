@@ -94,6 +94,8 @@ type MotionSetting = "auto" | "full" | "reduced";
 const HELP_KEY = "fc.help.seen";
 const THEME_KEY = "fc.theme";
 const PANEL_KEY = "fc.panel";
+/** Medium windows: the view panel is a rail and the inspector overlays the stage. */
+const MEDIUM_QUERY = "(max-width: 1100px)";
 const INSPECTOR_KEY = "fc.inspector";
 
 /** The theme to start with: `?theme=` in the address, else the last one chosen, else the default. */
@@ -133,7 +135,10 @@ export class App {
   private insets: Insets = NO_INSETS;
   private readonly panelState = el("p", { class: "panel-state", attrs: { hidden: "" } });
   /** Folded to a rail unless the user opened it: a preset is enough for most sessions. */
-  private panelOpen = safeStorage(() => localStorage.getItem(PANEL_KEY)) === "open";
+  private panelOpen =
+    safeStorage(() => localStorage.getItem(PANEL_KEY)) === "open" && !window.matchMedia(MEDIUM_QUERY).matches;
+  /** Under this width the panels overlay the stage instead of taking room from the city. */
+  private readonly medium = window.matchMedia(MEDIUM_QUERY);
   private moreOpen = false;
   /** The preset in force before a channel was changed by hand: the way back. */
   private lastPreset: string | undefined;
@@ -282,6 +287,14 @@ export class App {
     this.scene.onTick = (dt) => this.tick(dt);
     this.scene.readState = () => this.onScreen();
     this.reducedQuery.addEventListener("change", () => this.applyMotion());
+    this.medium.addEventListener("change", () => {
+      // a window made narrower folds the panel (the choice remembered is left alone)
+      if (this.medium.matches && this.panelOpen) {
+        this.panelOpen = false;
+        this.buildPanel();
+      }
+      this.updateFreeArea();
+    });
     if (this.fpsBox) {
       // performance check from the console: milliseconds per image during a move
       (
@@ -1710,6 +1723,11 @@ export class App {
         this.healthPanel.hidden = true;
         this.factoryPanel.hidden = true;
         this.closeDetails();
+        // an open view panel overlays the stage in a medium window: it folds the same way
+        if (this.medium.matches && this.panelOpen) {
+          this.panelOpen = false;
+          this.buildPanel();
+        }
         if (!this.helpDialog.hidden) this.hideHelp();
         break;
       default:
@@ -2060,10 +2078,12 @@ export class App {
     const right = this.rightPanels()
       .map(shown)
       .filter((r) => r !== undefined);
+    // in a medium window the panels overlay the stage: the city keeps the whole width
+    const overlay = this.medium.matches;
     const insets = {
       top: header ? header.bottom - stage.top : 0,
-      left: left ? left.right - stage.left : 0,
-      right: right.length ? stage.right - Math.min(...right.map((r) => r.left)) : 0,
+      left: left && !overlay ? left.right - stage.left : 0,
+      right: right.length && !overlay ? stage.right - Math.min(...right.map((r) => r.left)) : 0,
       bottom: bottom ? stage.bottom - bottom.top : 0,
     };
     // what sits on the stage (the legend) places itself in the free area through these
