@@ -6,6 +6,7 @@ import type { Insets } from "../view/framing";
 import { folderDepth } from "../view/placements";
 import { edgeWidth, REST_DELAY_MS, restRatio } from "../view/resolution";
 import { CameraRig, type CameraState } from "./camera-rig";
+import { benchmark, type CaptureHost, renderToCanvas } from "./capture";
 import { buildBuildings, buildPlinths, buildRoofs, writeStates } from "./city-meshes";
 import { buildLots } from "./lots";
 import { Outlines } from "./outlines";
@@ -484,31 +485,9 @@ export class CityScene {
     this.rig.topView();
   }
 
-  /**
-   * Performance check: draws `images` pictures of a running move one after the other, waiting for the GPU
-   * each time, and returns the mean time of one picture in milliseconds.
-   */
+  /** Average time of one image in milliseconds, for performance checks. */
   benchmark(images = 60, options: { shadows?: boolean; pixelRatio?: number } = {}): number {
-    const gl = this.renderer.getContext();
-    const hadShadows = this.sun.castShadow;
-    const ratio = this.renderer.getPixelRatio();
-    if (options.shadows !== undefined) this.sun.castShadow = options.shadows;
-    if (options.pixelRatio !== undefined) this.renderer.setPixelRatio(options.pixelRatio);
-    const pixel = new Uint8Array(4);
-    const before = this.uniforms.uProgress.value;
-    const started = performance.now();
-    for (let i = 0; i < images; i++) {
-      this.uniforms.uProgress.value = (i % 30) / 30;
-      this.renderer.shadowMap.needsUpdate = true;
-      this.renderer.render(this.scene, this.camera);
-      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-    }
-    const elapsed = performance.now() - started;
-    this.sun.castShadow = hadShadows;
-    this.renderer.setPixelRatio(ratio);
-    this.uniforms.uProgress.value = before;
-    this.requestRender();
-    return elapsed / images;
+    return benchmark(this.capture(), images, options);
   }
 
   /** Renders the current view at an exact size and returns it as a canvas. */
@@ -517,29 +496,19 @@ export class CityScene {
     height: number,
     after?: (ctx: CanvasRenderingContext2D) => void,
   ): HTMLCanvasElement {
-    const prevRatio = this.renderer.getPixelRatio();
-    const prevSize = this.renderer.getSize(new THREE.Vector2());
-    this.renderer.setPixelRatio(1);
-    this.uniforms.uEdgeWidth.value = edgeWidth(1);
-    this.renderer.setSize(width, height, false);
-    this.rig.setAspect(width / height);
-    this.rig.applyShift(width, height);
-    this.renderer.shadowMap.needsUpdate = true;
-    this.renderer.render(this.scene, this.camera);
-    const out = document.createElement("canvas");
-    out.width = width;
-    out.height = height;
-    const ctx = out.getContext("2d");
-    ctx?.drawImage(this.renderer.domElement, 0, 0);
-    // what is laid over the picture is placed with the camera of this picture
-    if (ctx) after?.(ctx);
-    this.renderer.setPixelRatio(prevRatio);
-    this.uniforms.uEdgeWidth.value = edgeWidth(prevRatio);
-    this.renderer.setSize(prevSize.x, prevSize.y, false);
-    this.rig.setAspect(prevSize.x / Math.max(prevSize.y, 1));
-    this.rig.applyShift(prevSize.x, prevSize.y);
-    this.requestRender();
-    return out;
+    return renderToCanvas(this.capture(), width, height, after);
+  }
+
+  private capture(): CaptureHost {
+    return {
+      renderer: this.renderer,
+      scene: this.scene,
+      camera: () => this.camera,
+      rig: this.rig,
+      sun: this.sun,
+      uniforms: this.uniforms,
+      requestRender: () => this.requestRender(),
+    };
   }
 
   private resize(): void {
