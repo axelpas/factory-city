@@ -2,7 +2,7 @@
 // Builds every picture of the README and the demo files of examples/, from public repositories only:
 // this repository (its own per-issue timeline) and one pinned module of an open-source project.
 // Run `pnpm build` first. Options: --skip-twenty (this repository only), --twenty-only, --work <dir> (scratch folder).
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -105,6 +105,13 @@ const OPEN_TAB = (tab) => `
   await new Promise((done) => setTimeout(done, 400));
 `;
 
+/** The film as a looping GIF (a palette per film keeps the colors); skipped, with a note, without ffmpeg. */
+function filmToGif(film, gif) {
+  const filter = "fps=12,scale=720:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse";
+  const result = spawnSync("ffmpeg", ["-y", "-loglevel", "error", "-i", film, "-vf", filter, "-loop", "0", gif]);
+  if (result.error || result.status !== 0) say("ffmpeg not available: docs/assets/timelapse.gif was not updated");
+}
+
 const twentyOnly = args.includes("--twenty-only");
 if (!twentyOnly) {
   const self = join(work, "self");
@@ -119,8 +126,6 @@ if (!twentyOnly) {
   picture(self, "preset-waste", { preset: "waste" });
   for (const theme of ["architect", "isometric", "blocks", "hologram"])
     picture(self, `theme-${theme}`, { preset: "hotspots", theme, size: "1000x600" });
-  for (const [i, frame] of [1, Math.round(frames / 3), Math.round((2 * frames) / 3), frames].entries())
-    picture(self, `timelapse-${i + 1}`, { preset: "hotspots", frame, size: "1000x600" });
   await screenshot(self, "factory-city", "hover-card", POINT_AT_A_BUILDING, { preset: "hotspots" });
   await screenshot(self, "factory-city", "panel-health", OPEN_TAB("health"), { preset: "hotspots" });
   await screenshot(self, "factory-city", "panel-factory", OPEN_TAB("factory"), { preset: "hotspots" });
@@ -157,6 +162,8 @@ if (!twentyOnly) {
     "--seconds-per-frame",
     "0.35",
   ]);
+  // a README shows a picture that moves, not a link: the film as a looping GIF, when ffmpeg is there
+  filmToGif(join(examples, "factory-city.mp4"), join(assets, "timelapse.gif"));
 }
 
 // ------------------------------------------------------------------ one module of a public project

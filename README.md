@@ -11,7 +11,7 @@ It is two independent programs that share nothing but data files: an **analyzer*
 - **Local first.** No backend, no database, no telemetry, no upload. The only network use is optional `gh` calls for issue and CI metadata (`--offline` turns them off).
 - **Read-only.** It never checks out, modifies or writes into the code it analyzes. Its output holds paths, metrics, git and issue metadata, never source code.
 - **Honest.** A value that cannot be computed is stored and shown as unavailable, never as zero.
-- **No Java, no native build at install time.** Pure JavaScript and WebAssembly.
+- **Installs with Node alone.** Pure JavaScript and WebAssembly, no native build at install time.
 
 [Open the standalone demo](examples/factory-city.html) (one file, works offline) · [Watch the film](examples/factory-city.mp4)
 
@@ -77,10 +77,9 @@ The same data, the same legend, four looks. Two are sober, one is made of blocks
 
 A timeline is a list of frames: a commit, an issue or a day. Every file keeps the same parcel, so nothing moves on the map. A file that does not exist yet, or no longer does, leaves an empty lot. Between two frames every building is interpolated on the GPU, so it is an animation, never a slideshow.
 
-![Four frames of the timelapse of this repository, from its first issue to the last.](docs/assets/timelapse-1.png)
-![A third of the way through the timelapse.](docs/assets/timelapse-2.png)
-![Two thirds of the way through the timelapse.](docs/assets/timelapse-3.png)
-![The last frame of the timelapse.](docs/assets/timelapse-4.png)
+![The timelapse of this repository, one frame per issue: buildings grow and shrink in place, empty lots wait for files that do not exist yet.](docs/assets/timelapse.gif)
+
+[Watch it as a film](examples/factory-city.mp4) (MP4, 960×540)
 
 The same, on one module of a public project (the MIT-licensed `packages/twenty-ui` of [twentyhq/twenty](https://github.com/twentyhq/twenty), pinned to the tag `twenty/v2.58.0`):
 
@@ -167,8 +166,6 @@ The contracts are described in [`docs/data-model.md`](docs/data-model.md) and va
 - **A facts mapping:** in `factory-city.config.json`, under `facts`: `columns` (field to header name or position), `filter`, `values` (raw value to a known outcome) and `attempts`.
 
 ## FAQ
-
-**Why no Java?** A code-city tool should install with Node alone. Parsing uses tree-sitter compiled to WebAssembly, and no dependency needs Python or a C toolchain.
 
 **Does anything leave my machine?** No. Nothing is uploaded and there is no telemetry. With `gh` signed in, the tool reads issue, pull request and CI metadata from GitHub; `--offline` turns that off. Source code never appears in the output.
 
