@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import type { ForgeData, Link } from "./issues.js";
-import { type CommitMessage, kindOf, linkStep } from "./issues.js";
+import { type CommitMessage, kindOf } from "./issues.js";
+import { linkStep } from "./link-step.js";
 
 /** One step of the first-parent history: a commit, or a merge commit with the commits it brought. */
 export interface Step {
