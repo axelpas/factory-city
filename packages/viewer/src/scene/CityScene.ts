@@ -200,6 +200,19 @@ export class CityScene {
   private readonly ground: THREE.Mesh;
   private readonly hoverBuilding: THREE.LineSegments;
   private readonly hoverFolder: THREE.LineSegments;
+  /** The outline of the selected building: it stays until another is selected or the details close. */
+  private readonly selection = new THREE.Group();
+  private readonly selectionMaterial = new THREE.LineBasicMaterial({ depthTest: false });
+  private selected: number | null = null;
+  /** A camera move toward a district, in progress. */
+  private fly:
+    | {
+        elapsed: number;
+        ms: number;
+        from: { position: THREE.Vector3; target: THREE.Vector3; zoom: number };
+        to: { position: THREE.Vector3; target: THREE.Vector3; zoom: number };
+      }
+    | undefined;
   private readonly uniforms = {
     uProgress: { value: 1 },
     uRamp: { value: Array.from({ length: MAX_RAMP }, () => new THREE.Vector3()) },
@@ -237,6 +250,8 @@ export class CityScene {
   onTick: ((dtMs: number) => boolean) | undefined;
   /** Reads the buildings as currently drawn (from the animator), for picking and outlines. */
   readState: (() => Float32Array) | undefined;
+  /** Called after each image drawn on screen: whatever is laid over the canvas follows the camera. */
+  onRendered: (() => void) | undefined;
   /** Current render scale: `motionRatio` while something moves, as sharp as the screen allows at rest. */
   private pixelRatio = 1;
   /** Render scale while something moves: lowered when images take too long, raised back when there is room. */
@@ -309,6 +324,15 @@ export class CityScene {
       o.renderOrder = 10;
       this.scene.add(o);
     }
+    // two nested outlines read as one heavier line
+    for (const grow of [1, 1.03]) {
+      const outline = new THREE.LineSegments(this.unitEdges, this.selectionMaterial);
+      outline.scale.setScalar(grow);
+      outline.renderOrder = 11;
+      this.selection.add(outline);
+    }
+    this.selection.visible = false;
+    this.scene.add(this.selection);
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
@@ -319,8 +343,9 @@ export class CityScene {
       const dt = this.lastTime ? Math.min(time - this.lastTime, 100) : 0;
       this.lastTime = time;
       const animating = this.onTick?.(dt) ?? false;
+      const flying = this.stepFly(dt);
       const moved = this.controls.update();
-      const moving = moved || animating;
+      const moving = moved || animating || flying;
       if (moving) {
         this.lastMotion = time;
         if (this.pixelRatio !== this.motionRatio) this.setPixelRatio(this.motionRatio);
@@ -331,7 +356,9 @@ export class CityScene {
       }
       if (this.dirty || moving) {
         this.dirty = false;
+        this.syncSelection();
         this.renderer.render(this.scene, this.camera);
+        this.onRendered?.();
         this.fpsFrames++;
         if (moving) this.adaptResolution(dt);
       }
@@ -402,6 +429,7 @@ export class CityScene {
     (this.ground.material as THREE.MeshLambertMaterial).color = c("ground");
     (this.hoverBuilding.material as THREE.LineBasicMaterial).color = c("hover");
     (this.hoverFolder.material as THREE.LineBasicMaterial).color = c("folderHover");
+    this.selectionMaterial.color = c("accent");
     this.uniforms.uEdgeColor.value = v("buildingEdge");
     this.uniforms.uTouchColor.value = v("accent");
     this.uniforms.uMarkColor.value = v("marker");
@@ -866,6 +894,129 @@ export class CityScene {
     this.requestRender();
   }
 
+  /** Outlines a building until another is selected, or null. The outline follows the building as it moves. */
+  setSelection(index: number | null): void {
+    this.selected = index;
+    this.syncSelection();
+    this.requestRender();
+  }
+
+  private syncSelection(): void {
+    const state = this.readState?.();
+    const i = this.selected;
+    if (i === null || !state) {
+      this.selection.visible = false;
+      return;
+    }
+    const o = i * STRIDE;
+    const h = state[o + H] as number;
+    // a building that is not there in this frame has no outline
+    if ((state[o + PRESENCE] as number) < 0.5 || h < 1e-3) {
+      this.selection.visible = false;
+      return;
+    }
+    this.selection.position.set(
+      state[o + X] as number,
+      (state[o + Y] as number) + h / 2,
+      state[o + Z] as number,
+    );
+    this.selection.scale.set((state[o + W] as number) * 1.01, h * 1.01, (state[o + D] as number) * 1.01);
+    this.selection.visible = true;
+  }
+
+  /** Where a point of the world lands on the picture, in pixels from its top left corner. */
+  project(x: number, y: number, z: number): { x: number; y: number } {
+    this.camera.updateMatrixWorld();
+    const size = this.renderer.getSize(new THREE.Vector2());
+    const v = new THREE.Vector3(x, y, z).project(this.camera);
+    return { x: ((v.x + 1) / 2) * size.x, y: ((1 - v.y) / 2) * size.y };
+  }
+
+  /** True when a building, as drawn right now, is under a pixel of the picture. */
+  blocked(px: number, py: number): boolean {
+    const state = this.readState?.();
+    if (!state) return false;
+    const size = this.renderer.getSize(new THREE.Vector2());
+    this.raycaster.setFromCamera(
+      new THREE.Vector2((px / size.x) * 2 - 1, -(py / size.y) * 2 + 1),
+      this.camera,
+    );
+    const { origin, direction } = this.raycaster.ray;
+    return (
+      pickBuilding([origin.x, origin.y, origin.z], [direction.x, direction.y, direction.z], state) !==
+      undefined
+    );
+  }
+
+  /** The part of the picture the panels leave free, in pixels. */
+  freeArea(): { x: number; y: number; w: number; h: number } {
+    const size = this.renderer.getSize(new THREE.Vector2());
+    return freeRect({ w: size.x, h: size.y }, this.insets);
+  }
+
+  /**
+   * Brings a district to the middle of the free area, close enough to fill it, along the current viewing
+   * direction. `ms` is the duration of the move; 0 is a cut.
+   */
+  frameDistrict(rect: { x: number; y: number; w: number; h: number }, ms: number): void {
+    const target = new THREE.Vector3(rect.x + rect.w / 2, 0, rect.y + rect.h / 2);
+    const offset = this.camera.position.clone().sub(this.controls.target);
+    const diag = Math.hypot(rect.w, rect.h) * 1.3;
+    let zoom = this.camera.zoom;
+    let distance = offset.length();
+    if (this.camera === this.perspective) {
+      const free = this.freeArea();
+      const aspect = Math.min(free.w / Math.max(free.h, 1), 1);
+      distance = Math.max(
+        diag / 2 / Math.tan(THREE.MathUtils.degToRad(this.perspective.fov) / 2) / aspect,
+        this.size * 0.06,
+      );
+    } else {
+      zoom = (this.size * ORTHO_HEIGHT) / Math.max(diag, this.size * 0.05);
+    }
+    const to = {
+      position: target.clone().add(offset.setLength(distance)),
+      target,
+      zoom,
+    };
+    this.framed = null;
+    if (ms <= 0) {
+      this.fly = undefined;
+      this.controls.target.copy(to.target);
+      this.camera.position.copy(to.position);
+      this.camera.zoom = to.zoom;
+      this.camera.updateProjectionMatrix();
+      this.controls.update();
+      this.requestRender();
+      return;
+    }
+    this.fly = {
+      elapsed: 0,
+      ms,
+      from: {
+        position: this.camera.position.clone(),
+        target: this.controls.target.clone(),
+        zoom: this.camera.zoom,
+      },
+      to,
+    };
+  }
+
+  /** Advances a camera move; true while it runs. */
+  private stepFly(dtMs: number): boolean {
+    const f = this.fly;
+    if (!f) return false;
+    f.elapsed += dtMs;
+    const t = Math.min(f.elapsed / f.ms, 1);
+    const e = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+    this.controls.target.lerpVectors(f.from.target, f.to.target, e);
+    this.camera.position.lerpVectors(f.from.position, f.to.position, e);
+    this.camera.zoom = f.from.zoom + (f.to.zoom - f.from.zoom) * e;
+    this.camera.updateProjectionMatrix();
+    if (t >= 1) this.fly = undefined;
+    return true;
+  }
+
   /**
    * Performance check: draws `images` pictures of a running move one after the other, waiting for the GPU
    * each time, and returns the mean time of one picture in milliseconds.
@@ -1017,6 +1168,7 @@ export class CityScene {
 
   /** The camera as a three-quarter view of the whole city. */
   resetCamera(): void {
+    this.fly = undefined;
     const s = this.size;
     const dir = new THREE.Vector3(...(this.theme.camera.direction as [number, number, number])).normalize();
     this.useCamera(this.theme.camera.type === "orthographic");
@@ -1029,6 +1181,7 @@ export class CityScene {
 
   /** Straight from above, without perspective: a plan of the city, framed in the free area. */
   topView(): void {
+    this.fly = undefined;
     const s = this.size;
     this.useCamera(true);
     this.controls.target.set(s / 2, 0, s / 2);
@@ -1038,7 +1191,11 @@ export class CityScene {
   }
 
   /** Renders the current view at an exact size and returns it as a canvas. */
-  renderToCanvas(width: number, height: number): HTMLCanvasElement {
+  renderToCanvas(
+    width: number,
+    height: number,
+    after?: (ctx: CanvasRenderingContext2D) => void,
+  ): HTMLCanvasElement {
     const prevRatio = this.renderer.getPixelRatio();
     const prevSize = this.renderer.getSize(new THREE.Vector2());
     this.renderer.setPixelRatio(1);
@@ -1051,7 +1208,10 @@ export class CityScene {
     const out = document.createElement("canvas");
     out.width = width;
     out.height = height;
-    out.getContext("2d")?.drawImage(this.renderer.domElement, 0, 0);
+    const ctx = out.getContext("2d");
+    ctx?.drawImage(this.renderer.domElement, 0, 0);
+    // what is laid over the picture is placed with the camera of this picture
+    if (ctx) after?.(ctx);
     this.renderer.setPixelRatio(prevRatio);
     this.uniforms.uEdgeWidth.value = edgeWidth(prevRatio);
     this.renderer.setSize(prevSize.x, prevSize.y, false);

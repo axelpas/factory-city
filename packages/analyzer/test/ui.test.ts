@@ -270,4 +270,48 @@ describe.skipIf(!canRender)("viewer interface in a real browser", () => {
     `);
     expect(r).toEqual({ panelOpen: true, overlaps: true, onTop: true, panelStays: true, panelCloses: true });
   });
+
+  it("names the top-level districts on the stage, never over a panel, and lets the user switch the names off", async () => {
+    const r = await inPage<Record<string, unknown>>(`
+      await wait(300);
+      const shown = () => [...document.querySelectorAll(".district-label")].filter((l) => l.style.visibility === "visible");
+      const stage = box(document.querySelector(".stage"));
+      const before = shown().map((l) => l.textContent);
+      const inStage = shown().every((l) => { const b = box(l); return b.x >= stage.x && b.right <= stage.right && b.y >= stage.y && b.bottom <= stage.bottom; });
+      const toggle = [...document.querySelectorAll(".menu-list .check")].find((c) => c.textContent.includes("district names")).querySelector("input");
+      toggle.click();
+      await wait(80);
+      const off = { hidden: document.querySelector(".district-labels").hidden };
+      toggle.click();
+      await wait(120);
+      return { before, inStage, off, backOn: shown().length > 0 };
+    `);
+    expect(r.before).toContain("src");
+    expect(r.inStage).toBe(true);
+    expect(r.off).toEqual({ hidden: true });
+    expect(r.backOn).toBe(true);
+  });
+
+  it("shows the path of the selected file as a trail of folders, and keeps the file outlined until the inspector closes", async () => {
+    const r = await inPage<Record<string, unknown>>(`
+      const inspector = document.querySelector(".inspector");
+      inspector.querySelector('[data-tab="file"]').click();
+      await wait(60);
+      // select a building the way a click does, through the page hook
+      const hook = window.factoryCity;
+      const ok = hook.selectFirstFile?.() ?? false;
+      await wait(80);
+      const trail = [...document.querySelectorAll(".breadcrumb button")].map((b) => b.textContent);
+      document.querySelector(".breadcrumb button")?.click();
+      await wait(700);
+      const closeButton = inspector.querySelector('[aria-label="Close the inspector"]');
+      closeButton?.click();
+      await wait(60);
+      return { ok, trail, closed: inspector.hidden, selected: hook.selected?.() ?? null };
+    `);
+    expect(r.ok).toBe(true);
+    expect((r.trail as string[]).length).toBeGreaterThan(0);
+    expect(r.closed).toBe(true);
+    expect(r.selected).toBeNull();
+  });
 });

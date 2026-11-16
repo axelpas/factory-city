@@ -55,6 +55,7 @@ import { SCALE_KINDS, type ScaleKind } from "../view/scales";
 import { buildDelays, buildState } from "../view/state";
 import { statusChip, statusDetails } from "../view/status";
 import { blockLegend, blockSize, voxelize } from "../view/voxel";
+import { DistrictLabelLayer } from "./district-labels";
 import { type IconName, icon } from "./icons";
 import { Inspector, type InspectorTab } from "./inspector";
 import { renderLegendBox } from "./legend-box";
@@ -102,6 +103,7 @@ function initialTheme(): Theme {
   return themeById(asked) ?? themeById(stored) ?? DEFAULT_THEME;
 }
 const MOTION_KEY = "fc.motion";
+const LABELS_KEY = "fc.districtNames";
 
 function safeStorage<T>(fn: () => T): T | undefined {
   try {
@@ -154,6 +156,8 @@ export class App {
     panes: { file: this.details, health: this.healthPanel, factory: this.factoryPanel },
     onTab: (tab) => this.openTab(tab),
     onChange: (tab) => {
+      // closing the inspector ends the selection
+      if (tab === undefined) this.clearSelection();
       this.healthButton.setAttribute("aria-pressed", String(tab === "health"));
       this.factoryButton.setAttribute("aria-pressed", String(tab === "factory"));
     },
@@ -220,6 +224,10 @@ export class App {
   private readonly fpsBox = new URLSearchParams(location.search).has("fps")
     ? el("span", { class: "fps" })
     : undefined;
+  private districtLabels!: DistrictLabelLayer;
+  private labelsOn = safeStorage(() => localStorage.getItem(LABELS_KEY)) !== "off";
+  /** The building the details show, outlined in the city until another one is selected. */
+  private selectedUnion: number | null = null;
   private rafPending = false;
   private pointer = { x: 0, y: 0, down: false, moved: false, startX: 0, startY: 0 };
 
@@ -268,6 +276,9 @@ export class App {
       ...this.rightPanels(),
     ])
       covering.observe(node);
+    this.districtLabels = new DistrictLabelLayer(this.scene);
+    this.districtLabels.setEnabled(this.labelsOn);
+    this.stage.append(this.districtLabels.element);
     this.scene.onTick = (dt) => this.tick(dt);
     this.scene.readState = () => this.onScreen();
     this.reducedQuery.addEventListener("change", () => this.applyMotion());
@@ -394,6 +405,7 @@ export class App {
     const snapshot = before?.onScreen();
     const delays = buildDelays(s.data.paths, s.layout);
     this.scene.setCity(s.layout, s.data.paths, delays, keepCamera);
+    this.districtLabels.setLayout(s.layout);
     const ramp = this.theme.ramps.sequential.map(parseHex);
     const animator = new Animator(s.data.paths.length, delays, ramp, {
       states: (start, target) => {
@@ -561,6 +573,21 @@ export class App {
     this.appearanceList.replaceChildren(
       el("label", { class: "field" }, el("span", { text: "Theme" }), this.themeSelect),
       el("label", { class: "field" }, el("span", { text: "Motion" }), motion),
+    );
+    const names = el("input", { attrs: { type: "checkbox" } });
+    names.checked = this.labelsOn;
+    names.addEventListener("change", () => {
+      this.labelsOn = names.checked;
+      safeStorage(() => localStorage.setItem(LABELS_KEY, this.labelsOn ? "on" : "off"));
+      this.districtLabels.setEnabled(this.labelsOn);
+    });
+    this.appearanceList.append(
+      el(
+        "label",
+        { class: "check", title: "Write the name of the districts on the ground" },
+        names,
+        " district names",
+      ),
     );
     if (this.theme.effects?.glow) {
       const glow = el("input", { attrs: { type: "checkbox" } });
@@ -1159,6 +1186,13 @@ export class App {
       if (!wasClick) return;
       this.onClick(e);
     });
+    // a double click on a district (or on a building: its district) frames it; Reset comes back
+    canvas.addEventListener("dblclick", (e) => {
+      const s = this.state;
+      const pick = this.scene.pick(e.clientX, e.clientY);
+      if (!s || !pick) return;
+      this.frameDistrict(pick.kind === "folder" ? pick.path : dirOf(s.data.paths[pick.index] ?? ""));
+    });
     window.addEventListener("keydown", (e) => this.onKey(e));
     watchPopovers(document);
     window.addEventListener("dragover", (e) => {
@@ -1357,6 +1391,8 @@ export class App {
     const frame = this.animator?.frame ?? 0;
     const d = fileDetails(s.model, index, s.mapping, format, this.report?.dimensions);
     clear(this.details);
+    this.selectedUnion = union;
+    this.scene.setSelection(union);
 
     const copy = el("button", {
       class: "quiet copy",
@@ -1388,7 +1424,7 @@ export class App {
       );
     this.details.append(
       el("h2", { class: "pane-title", text: d.title }),
-      el("div", { class: "pane-path" }, el("span", { class: "muted", text: d.path }), copy),
+      el("div", { class: "pane-path" }, this.breadcrumb(d.path), copy),
       el("div", { class: "muted", text: `${d.language}${d.isTest ? " · test file" : ""}` }),
       ...(d.risks.length ? [el("p", { class: "risks", text: d.risks.join(" · ") })] : []),
       el("h3", { text: "Shown in the city" }),
@@ -1465,8 +1501,61 @@ export class App {
     this.details.hidden = false;
   }
 
+  /** Integration hook: selects the first file of the frame, as a click on it does. */
+  selectFirstFile(): boolean {
+    const s = this.state;
+    if (!s) return false;
+    for (let union = 0; union < s.data.paths.length; union++) {
+      if (this.modelIndex(union) < 0) continue;
+      this.openDetails(union);
+      return true;
+    }
+    return false;
+  }
+
+  /** Integration hook: the index of the selected file, or null. */
+  selected(): number | null {
+    return this.selectedUnion;
+  }
+
   private closeDetails(): void {
     this.details.hidden = true;
+    this.clearSelection();
+  }
+
+  private clearSelection(): void {
+    if (this.selectedUnion === null) return;
+    this.selectedUnion = null;
+    this.scene.setSelection(null);
+  }
+
+  /** The path of a file as a trail of folders: a click on one frames that district in the city. */
+  private breadcrumb(path: string): HTMLElement {
+    const parts = path.split("/");
+    const trail = el("nav", { class: "breadcrumb", attrs: { "aria-label": "Path" } });
+    parts.forEach((part, i) => {
+      if (i > 0) trail.append(el("span", { class: "muted sep", text: "/" }));
+      if (i === parts.length - 1) {
+        trail.append(el("span", { class: "muted", text: part }));
+        return;
+      }
+      const folder = parts.slice(0, i + 1).join("/");
+      const button = el("button", {
+        class: "link",
+        text: part,
+        title: `Frame ${folder} in the city`,
+        attrs: { type: "button" },
+      });
+      button.addEventListener("click", () => this.frameDistrict(folder));
+      trail.append(button);
+    });
+    return trail;
+  }
+
+  /** Brings a district to the middle of the free stage. */
+  private frameDistrict(path: string): void {
+    const rect = this.state?.layout.folders.get(path);
+    if (rect) this.scene.frameDistrict(rect, this.animator?.reducedMotion ? 0 : 600);
   }
 
   /** A tab asked for from the inspector's header. */
@@ -2167,7 +2256,11 @@ export class App {
     // a single picture is framed for its own size; a film sets its view once for all its images
     const saved = this.exportCamera ? undefined : this.scene.cameraState();
     if (saved) this.scene.setCameraState(this.scene.exportView(width, height));
-    const canvas = this.scene.renderToCanvas(width, height);
+    // the names are placed with the camera of the picture, at the same relative size as on screen
+    const k = width / Math.max(this.stage.clientWidth, 1);
+    const canvas = this.scene.renderToCanvas(width, height, (ctx) =>
+      this.districtLabels.draw(ctx, width, height, this.theme, k),
+    );
     if (saved) this.scene.setCameraState(saved);
     if (withOverlay) {
       const ctx = canvas.getContext("2d");

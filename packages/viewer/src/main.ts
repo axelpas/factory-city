@@ -20,6 +20,10 @@ const hook = {
     return { base64: btoa(binary), mime: result.mime, codec: result.codec, images: result.images };
   },
   /** Fingerprints of the images at some playhead positions, to compare two renders image for image. */
+  /** Selects the first file shown, as a click on it does; false when there is none. */
+  selectFirstFile: () => app.selectFirstFile(),
+  /** The selected file's index, or null. */
+  selected: () => app.selected(),
   imageHashes: (positions: number[], width: number, height: number) =>
     app.imageHashes(positions, width, height),
 };

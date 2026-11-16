@@ -786,6 +786,16 @@ button[aria-pressed="true"] {
 .pane-title {
   overflow-wrap: anywhere;
 }
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-2);
+  min-width: 0;
+}
+.breadcrumb .sep {
+  user-select: none;
+}
 .pane-path {
   display: flex;
   align-items: center;
@@ -1057,6 +1067,31 @@ button[aria-pressed="true"] {
   border: var(--line);
   border-radius: var(--radius-4);
   box-shadow: var(--shadow-1);
+}
+
+/* ---------------------------------------------------------------- district names */
+
+.district-labels {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.district-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 0 var(--s-4);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: nowrap;
+  color: var(--c-text);
+  background: color-mix(in srgb, var(--c-panel) 80%, transparent);
+  border-radius: var(--radius-2);
+}
+.district-label.depth-1 {
+  font-size: var(--text-sm);
+  font-weight: 600;
 }
 
 /* ---------------------------------------------------------------- timeline */
