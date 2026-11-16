@@ -83,9 +83,6 @@ async function screenshot(
   say(name);
 }
 
-const frameCount = (dataDir, source) =>
-  JSON.parse(readFileSync(join(dataDir, `timeline.${source}.json`), "utf8")).frames.length;
-
 /** Moves the pointer over the canvas until a building is under it, so that its card shows. */
 const POINT_AT_A_BUILDING = `
   await new Promise((done) => setTimeout(done, 600));
@@ -105,9 +102,9 @@ const OPEN_TAB = (tab) => `
   await new Promise((done) => setTimeout(done, 400));
 `;
 
-/** The film as a looping GIF (a palette per film keeps the colors); skipped, with a note, without ffmpeg. */
-function filmToGif(film, gif) {
-  const filter = "fps=12,scale=720:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse";
+/** A film as a looping GIF (a palette per film keeps the colors); skipped, with a note, without ffmpeg. */
+function filmToGif(film, gif, { width = 720, fps = 12 } = {}) {
+  const filter = `fps=${fps},scale=${width}:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse`;
   const result = spawnSync("ffmpeg", [
     "-y",
     "-loglevel",
@@ -120,8 +117,7 @@ function filmToGif(film, gif) {
     "0",
     gif,
   ]);
-  if (result.error || result.status !== 0)
-    say("ffmpeg not available: docs/assets/timelapse.gif was not updated");
+  if (result.error || result.status !== 0) say(`ffmpeg not available: ${gif} was not updated`);
 }
 
 const twentyOnly = args.includes("--twenty-only");
@@ -131,10 +127,6 @@ if (!twentyOnly) {
   say("analyzing this repository (per-issue timeline)");
   factory(["timeline", root, "--by", "issue", "--offline", "-o", self]);
 
-  picture(self, "hero", { preset: "hotspots" });
-  picture(self, "preset-three-cs", { preset: "three-cs" });
-  picture(self, "preset-bug-magnets", { preset: "bug-magnets" });
-  picture(self, "preset-waste", { preset: "waste" });
   for (const theme of ["architect", "isometric", "blocks", "hologram"])
     picture(self, `theme-${theme}`, { preset: "hotspots", theme, size: "1000x600" });
   await screenshot(self, "factory-city", "hover-card", POINT_AT_A_BUILDING, { preset: "hotspots" });
@@ -236,11 +228,25 @@ if (!skipTwenty) {
     "-o",
     data,
   ]);
-  const n = frameCount(data, "issue");
-  picture(data, "twenty-ui-hero", { preset: "hotspots" });
-  picture(data, "twenty-ui-three-cs", { preset: "three-cs" });
-  picture(data, "twenty-ui-early", { preset: "hotspots", frame: Math.round(n / 4), size: "1000x600" });
-  picture(data, "twenty-ui-middle", { preset: "hotspots", frame: Math.round(n / 2), size: "1000x600" });
+  // the module's whole history as a looping GIF
+  const film = join(work, "twenty-ui.mp4");
+  say("film of the module");
+  factory([
+    "render",
+    data,
+    "--source",
+    "issue",
+    "--video",
+    film,
+    "--size",
+    "800x450",
+    "--seconds-per-frame",
+    "0.1",
+  ]);
+  filmToGif(film, join(assets, "twenty-ui-timelapse.gif"), { width: 640, fps: 10 });
+  // the page of a third-party project carries no commit subject, issue title or author label
+  say("standalone HTML of the module (redacted)");
+  factory(["render", data, "--source", "issue", "--redact", "--html", join(examples, "twenty-ui.html")]);
 }
 
 const size = (p) => `${(statSync(p).size / 1024 / 1024).toFixed(1)} MB`;

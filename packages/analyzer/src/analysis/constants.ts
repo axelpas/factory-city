@@ -1,4 +1,4 @@
-export const ANALYZER_VERSION = "0.5.0";
+export const ANALYZER_VERSION = "1.0.0";
 
 /** Shown with every score. */
 export const SCORE_NOTICE =

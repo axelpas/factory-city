@@ -2,7 +2,7 @@
 
 **Turn a codebase into a 3D city, to see what a software factory builds, how its quality evolves and what its process leaves behind.**
 
-![A 3D city of this repository: folders are districts, files are buildings; the code-health score is at the top right.](docs/assets/hero.png)
+![The city of this repository, played from its first issue to the last: folders are districts, files are buildings, and the code-health score is at the top right.](docs/assets/timelapse.gif)
 
 Folders are districts, files are buildings. Code metrics drive each building's ground area, height and color, and a pyramid roof marks the files that cross a threshold. The name comes from the "software factory": software produced by AI coding agents under human direction. Factory City is not affiliated with any company named Factory.
 
@@ -13,7 +13,7 @@ It is two independent programs that share nothing but data files: an **analyzer*
 - **Honest.** A value that cannot be computed is stored and shown as unavailable, never as zero.
 - **Installs with Node alone.** Pure JavaScript and WebAssembly, no native build at install time.
 
-[Open the standalone demo](examples/factory-city.html) (one file, works offline) · [Watch the film](examples/factory-city.mp4)
+[Open the standalone demo](examples/factory-city.html) (one file, works offline) · [Watch the film](examples/factory-city.mp4) · [The same on a public project](examples/twenty-ui.html) ([about the examples](examples/README.md))
 
 ## Quickstart
 
@@ -61,9 +61,6 @@ Every preset keeps ground area = real lines and height = complexity, so the skyl
 | Factory | Agents, Cost | Who wrote what? Where does the money go? |
 | Compare | Change | What did this step do to the city? |
 
-![The Three Cs preset: complexity, coupling and cohesion at once, with roofs on files that do several jobs.](docs/assets/preset-three-cs.png)
-![The Bug magnets preset: where fixes keep landing.](docs/assets/preset-bug-magnets.png)
-
 ### Four themes
 
 The same data, the same legend, four looks. Two are sober, one is made of blocks, one is futuristic. A theme is one token file; adding one touches no code.
@@ -83,10 +80,7 @@ A timeline is a list of frames: a commit, an issue or a day. Every file keeps th
 
 The same, on one module of a public project (the MIT-licensed `packages/twenty-ui` of [twentyhq/twenty](https://github.com/twentyhq/twenty), pinned to the tag `twenty/v2.58.0`):
 
-![The twenty-ui component library of the Twenty project, at the last frame of its timeline.](docs/assets/twenty-ui-hero.png)
-![The same module, with roofs on files that do several jobs.](docs/assets/twenty-ui-three-cs.png)
-![The same module, a quarter of the way through its history.](docs/assets/twenty-ui-early.png)
-![The same module, halfway through its history.](docs/assets/twenty-ui-middle.png)
+![The twenty-ui module, from the first issue to the last of its history, one frame per issue.](docs/assets/twenty-ui-timelapse.gif)
 
 ### Health, and the factory
 
@@ -118,6 +112,18 @@ factory-city render --html city.html --redact
 ```
 
 Images and videos need the optional `playwright-core` and a Chrome or Chromium on the machine. The core install never downloads a browser.
+
+## Supported languages
+
+Any text file gets a building; how much is measured depends on the language. `factory-city languages` prints the list.
+
+| Tier | Languages | What is measured |
+|---|---|---|
+| 1 | TypeScript, TSX, JavaScript | Size, complexity, nesting, coupling, cohesion and the full set of shortcuts (silenced checks) |
+| 2 | Python, Go, Java, C#, C, C++, Rust, PHP, Ruby, Kotlin, Swift | Size, complexity, nesting and shortcuts. Coupling and cohesion are unavailable. |
+| 3 | Any other text file, with `--all` | Lines and the git metrics only |
+
+A metric a language does not have is shown as unavailable, never as zero. The git metrics (change, fixes, rework, authorship) work for every language. Adding a language is a grammar and one JSON file: see [Extending it](#extending-it).
 
 ## Data levels
 
