@@ -74,6 +74,25 @@ export function makeFolderSkipper(options: SelectOptions) {
   };
 }
 
+/** Why a file is left out (counted in the summary), or nothing when it stays. A forced file always stays. */
+function ignoredReason(
+  path: string,
+  forced: boolean,
+  options: SelectOptions,
+  excludes: RegExp[],
+): string | undefined {
+  if (forced) return undefined;
+  if (excludes.length > 0 && matchesAny(path, excludes)) return "excluded_by_pattern";
+  if (options.all) return undefined;
+  const folder = path
+    .split("/")
+    .slice(0, -1)
+    .map(folderReason)
+    .find((r) => r !== undefined);
+  if (folder) return folder;
+  return isGeneratedName(path) ? "generated_or_vendored" : undefined;
+}
+
 /** Decides which entries are analyzed. File content checks (binary, generated marker) happen later. */
 export function selectEntries(
   entries: SourceEntry[],
@@ -92,21 +111,10 @@ export function selectEntries(
       continue;
     }
     const forced = includes.length > 0 && matchesAny(entry.path, includes);
-    if (!forced && excludes.length > 0 && matchesAny(entry.path, excludes)) {
-      bump(summary.files, "excluded_by_pattern");
+    const reason = ignoredReason(entry.path, forced, options, excludes);
+    if (reason) {
+      bump(summary.files, reason);
       continue;
-    }
-    if (!forced && !options.all) {
-      const folders = entry.path.split("/").slice(0, -1);
-      const hit = folders.map(folderReason).find((r) => r !== undefined);
-      if (hit) {
-        bump(summary.files, hit);
-        continue;
-      }
-      if (isGeneratedName(entry.path)) {
-        bump(summary.files, "generated_or_vendored");
-        continue;
-      }
     }
     const language = languageForPath(entry.path);
     if (!language && !options.all && !forced) {
@@ -118,6 +126,19 @@ export function selectEntries(
   return options.all ? candidates : dropMostlyNonSourceFolders(entries, candidates, sub, summary);
 }
 
+/** The folders above a file, from the top: `a/b/c.ts` gives `a` and `a/b`. */
+function ancestors(path: string): string[] {
+  const parts = path.split("/").slice(0, -1);
+  return parts.map((_, i) => parts.slice(0, i + 1).join("/"));
+}
+
+/** For each folder, the number of files under it, among those counted. */
+function countByFolder(paths: Iterable<string>): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const path of paths) for (const a of ancestors(path)) counts.set(a, (counts.get(a) ?? 0) + 1);
+  return counts;
+}
+
 /** A folder where almost no file is source code is treated as non-engineering. */
 function dropMostlyNonSourceFolders(
   entries: SourceEntry[],
@@ -125,30 +146,19 @@ function dropMostlyNonSourceFolders(
   sub: string,
   summary: IgnoreSummary,
 ): Candidate[] {
-  const total = new Map<string, number>();
-  const source = new Map<string, number>();
-  const ancestors = (path: string): string[] => {
-    const parts = path.split("/").slice(0, -1);
-    return parts.map((_, i) => parts.slice(0, i + 1).join("/"));
-  };
-  const bumpMap = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
-  for (const e of entries) {
-    if (e.kind !== "file" || (sub && !e.path.startsWith(sub))) continue;
-    for (const a of ancestors(e.path)) bumpMap(total, a);
-  }
-  for (const c of candidates) if (c.language) for (const a of ancestors(c.entry.path)) bumpMap(source, a);
-
+  const total = countByFolder(
+    entries.filter((e) => e.kind === "file" && (!sub || e.path.startsWith(sub))).map((e) => e.path),
+  );
+  const source = countByFolder(candidates.filter((c) => c.language).map((c) => c.entry.path));
   const sparse = new Set<string>();
   for (const [dir, n] of total) {
     if (n >= MIN_FILES_FOR_SHARE_RULE && (source.get(dir) ?? 0) / n < MAX_NON_SOURCE_SHARE) sparse.add(dir);
   }
   if (sparse.size === 0) return candidates;
   return candidates.filter((c) => {
-    if (ancestors(c.entry.path).some((a) => sparse.has(a))) {
-      bump(summary.files, "non_engineering_folder");
-      return false;
-    }
-    return true;
+    const dropped = ancestors(c.entry.path).some((a) => sparse.has(a));
+    if (dropped) bump(summary.files, "non_engineering_folder");
+    return !dropped;
   });
 }
 
