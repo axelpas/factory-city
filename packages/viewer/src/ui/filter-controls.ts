@@ -1,8 +1,9 @@
 import { el } from "../lib/dom";
 import type { Mapping } from "../presets/index";
+import type { TestsMode } from "../view/frame-state";
 import { SCALE_KINDS, type ScaleKind } from "../view/scales";
 
-export type TestsMode = "show" | "dim" | "hide";
+export type { TestsMode } from "../view/frame-state";
 
 /** The filter of the panel: a search by path or glob, and what to do with the test files. */
 export interface FilterState {

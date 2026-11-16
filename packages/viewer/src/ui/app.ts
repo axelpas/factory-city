@@ -21,7 +21,6 @@ import { buildTimelineData, layoutWeights, type TimelineData } from "../data/tim
 import type { EncodedVideo, VideoOptions } from "../export/video";
 import { clear, el } from "../lib/dom";
 import { format } from "../lib/format";
-import { makePathFilter } from "../lib/glob";
 import { defaultMapping, type Mapping, type Preset, presetStatuses } from "../presets/index";
 import { CityScene, type Pick } from "../scene/CityScene";
 import { applyTheme, DEFAULT_THEME, THEMES, type Theme, themeById } from "../themes/index";
@@ -29,13 +28,13 @@ import { biggestChanges, CHANGE, changePlacements } from "../view/change";
 import { parseHex } from "../view/color";
 import { projectContext } from "../view/context";
 import { factoryView } from "../view/factory";
+import { frameState } from "../view/frame-state";
 import { type Insets, NO_INSETS } from "../view/framing";
 import { healthView, scoreAt } from "../view/health";
 import { hiddenLensesLine } from "../view/lenses";
 import { type ColorLegend, computePlacements, computeTints } from "../view/placements";
 import type { ScaleKind } from "../view/scales";
-import { buildDelays, buildState } from "../view/state";
-import { blockSize, voxelize } from "../view/voxel";
+import { buildDelays } from "../view/state";
 import { AppearanceMenu, type MotionSetting } from "./appearance-menu";
 import { DistrictLabelLayer } from "./district-labels";
 import { ExportMenu } from "./export-menu";
@@ -628,44 +627,8 @@ export class App {
     const cached = this.stateCache.get(frameIndex);
     if (cached) return cached;
     const s = this.state;
-    const frame = s?.data.frames[frameIndex];
-    if (!s || !frame) return new Float32Array(0);
-    const byChange = s.mapping.color === CHANGE;
-    // the Change preset also draws the files the frame removed, so its placements cover the whole timeline
-    const union = byChange
-      ? changePlacements(s.data, frameIndex, s.layout, s.mapping, this.theme).placements
-      : undefined;
-    const own = union ? [] : computePlacements(frame.model, s.layout, s.mapping, this.theme).placements;
-    const previous = frameIndex > 0 ? s.data.frames[frameIndex - 1] : undefined;
-    const match = makePathFilter(s.search);
-    const block = blockSize(this.theme, s.layout.width);
-    const dimmed = new Set<number>();
-    const hidden = new Set<number>();
-    const aligned = s.data.paths.map((path, u) => {
-      const m = frame.modelIndex[u] as number;
-      const placement = union ? union[u] : m < 0 ? undefined : own[m];
-      if (!placement) return undefined;
-      const file = m >= 0 ? frame.model.files[m] : previous?.model.files[previous.modelIndex[u] as number];
-      if (match && !match(path)) dimmed.add(u);
-      if (file?.isTest && s.tests === "dim") dimmed.add(u);
-      if (file?.isTest && s.tests === "hide") hidden.add(u);
-      // a theme made of blocks draws whole cubes: heights and footprints snap, exact values stay in the card
-      const rect = block === undefined ? undefined : s.layout.files.get(path);
-      return rect && block !== undefined ? voxelize(placement, rect, block, this.theme) : placement;
-    });
-    const touched = new Set<number>();
-    if (frame.info && frameIndex > 0) {
-      for (const path of [...frame.info.added, ...frame.info.modified]) {
-        const u = s.data.pathIndex.get(path);
-        if (u !== undefined) touched.add(u);
-      }
-    }
-    const state = buildState(s.data.paths, s.layout, aligned, {
-      dimmed,
-      hidden,
-      touched,
-      dimColor: parseHex(this.theme.colors.dim ?? ""),
-    });
+    if (!s) return new Float32Array(0);
+    const state = frameState(s, this.theme, frameIndex);
     this.stateCache.set(frameIndex, state);
     return state;
   }
