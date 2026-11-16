@@ -1,4 +1,4 @@
-import type { Layout, Rect } from "@factory-city/layout";
+import type { Layout } from "@factory-city/layout";
 import { computeLayout } from "@factory-city/layout";
 import type { Factory, Report } from "@factory-city/schema";
 import { Animator } from "../anim/animator";
@@ -25,15 +25,14 @@ import { makePathFilter } from "../lib/glob";
 import { defaultMapping, type Mapping, type Preset, presetStatuses } from "../presets/index";
 import { CityScene, type Pick } from "../scene/CityScene";
 import { applyTheme, DEFAULT_THEME, THEMES, type Theme, themeById } from "../themes/index";
-import { fileCard, folderCard, frameChangeRows, lastChangeRow, lotCard } from "../view/card";
-import { placeCard } from "../view/card-place";
+import { frameChangeRows } from "../view/card";
 import { biggestChanges, CHANGE, changePlacements, type FileChange } from "../view/change";
 import { parseHex } from "../view/color";
 import { projectContext } from "../view/context";
 import { describeCity } from "../view/describe";
 import { fileDetails } from "../view/details";
 import { factoryView } from "../view/factory";
-import { freeRect, type Insets, NO_INSETS } from "../view/framing";
+import { type Insets, NO_INSETS } from "../view/framing";
 import { healthView, scoreAt } from "../view/health";
 import { type LegendModel, legendModel } from "../view/legend";
 import { hiddenLensesLine } from "../view/lenses";
@@ -43,27 +42,24 @@ import { buildDelays, buildState } from "../view/state";
 import { statusChip, statusDetails } from "../view/status";
 import { blockLegend, blockSize, voxelize } from "../view/voxel";
 import { AppearanceMenu, type MotionSetting } from "./appearance-menu";
-import { fileCardView, folderCardView } from "./card-view";
 import { renderFileDetails } from "./details-view";
 import { DistrictLabelLayer } from "./district-labels";
 import { ExportMenu } from "./export-menu";
 import { Exporter } from "./exporter";
 import { FileFinder } from "./file-finder";
 import { fillHelp } from "./help";
+import { HoverCard } from "./hover-card";
 import { type IconName, icon } from "./icons";
 import { Inspector, type InspectorTab } from "./inspector";
 import { renderLegendBox } from "./legend-box";
 import { lensGroups, renderLensButton, renderLensList } from "./lens";
 import { renderFactoryPanel, renderHealthPanel } from "./panels";
+import { PointerController } from "./pointer";
 import { closePopovers, watchPopovers } from "./popovers";
 import { ScoreBox } from "./score-box";
 import { renderStatusChip } from "./status-chip";
 import { TimelineBar } from "./timeline-bar";
 import { type TestsMode, ViewPanel } from "./view-panel";
-
-function dirOf(path: string): string {
-  return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
-}
 
 interface State {
   data: TimelineData;
@@ -112,7 +108,9 @@ export class App {
   private readonly header: HTMLElement;
   /** The camera view of a running export sequence (a video): pictures use it as it is. */
   private readonly scene: CityScene;
-  private readonly card = el("div", { class: "card", attrs: { role: "tooltip" } });
+  /** The card that follows the pointer, and what the pointer does on the city. */
+  private card!: HoverCard;
+  private pointerController!: PointerController;
   private readonly details = el("section", { attrs: { "aria-label": "File details", hidden: "" } });
   private readonly helpDialog = el("div", {
     class: "help",
@@ -244,19 +242,25 @@ export class App {
   private exporter!: Exporter;
   /** The building the details show, outlined in the city until another one is selected. */
   private selectedUnion: number | null = null;
-  private rafPending = false;
-  private pointer = { x: 0, y: 0, down: false, moved: false, startX: 0, startY: 0 };
 
   constructor(root: HTMLElement) {
     applyTheme(this.theme, document.documentElement);
     this.stage = el("div", { class: "stage" });
+    this.card = new HoverCard({
+      state: () => this.state,
+      frame: () => this.animator?.frame ?? 0,
+      report: () => this.report,
+      modelIndex: (union) => this.modelIndex(union),
+      stage: this.stage,
+      insets: () => this.insets,
+    });
     this.bar = new TimelineBar({
       onPlayPause: () => this.togglePlay(),
       onStep: (delta) => this.step(delta),
       onSeek: (position) => {
         this.animator?.pause();
         this.animator?.setPosition(position);
-        this.hideCard();
+        this.card.hide();
       },
       onJump: (frame) => this.animator?.goTo(frame),
       onSpeed: (speed) => {
@@ -278,7 +282,7 @@ export class App {
       this.bar.element,
       this.legendBox,
       this.status,
-      this.card,
+      this.card.element,
       this.inspector.element,
       this.helpDialog,
       this.dropZone,
@@ -304,6 +308,15 @@ export class App {
     this.districtLabels = new DistrictLabelLayer(this.scene, () => this.coveredBoxes());
     this.districtLabels.setEnabled(this.appearance.districtNames);
     this.stage.append(this.districtLabels.element);
+    this.pointerController = new PointerController({
+      scene: this.scene,
+      card: this.card,
+      state: () => this.state,
+      animator: () => this.animator,
+      openDetails: (union) => this.openDetails(union),
+      closeDetails: () => this.closeDetails(),
+      frameDistrict: (path) => this.frameDistrict(path),
+    });
     this.exporter = new Exporter({
       state: () => this.state,
       animator: () => this.animator,
@@ -722,7 +735,7 @@ export class App {
     if (!a) return;
     if (a.playing) a.pause();
     else {
-      this.hideCard();
+      this.card.hide();
       this.scene.setHover(null);
       a.play();
     }
@@ -881,43 +894,7 @@ export class App {
   // ------------------------------------------------------------ hover card
 
   private wireEvents(): void {
-    const canvas = this.scene.canvas;
-    canvas.addEventListener("pointermove", (e) => {
-      this.pointer.x = e.clientX;
-      this.pointer.y = e.clientY;
-      if (e.buttons !== 0) {
-        this.pointer.moved ||=
-          Math.hypot(e.clientX - this.pointer.startX, e.clientY - this.pointer.startY) > 5;
-        this.hideCard();
-        return;
-      }
-      if (e.pointerType === "touch") return;
-      this.scheduleHover();
-    });
-    canvas.addEventListener("pointerleave", () => this.hideCard());
-    canvas.addEventListener("pointerdown", (e) => {
-      this.pointer = {
-        x: e.clientX,
-        y: e.clientY,
-        down: true,
-        moved: false,
-        startX: e.clientX,
-        startY: e.clientY,
-      };
-    });
-    canvas.addEventListener("pointerup", (e) => {
-      const wasClick = this.pointer.down && !this.pointer.moved;
-      this.pointer.down = false;
-      if (!wasClick) return;
-      this.onClick(e);
-    });
-    // a double click on a district (or on a building: its district) frames it; Reset comes back
-    canvas.addEventListener("dblclick", (e) => {
-      const s = this.state;
-      const pick = this.scene.pick(e.clientX, e.clientY);
-      if (!s || !pick) return;
-      this.frameDistrict(pick.kind === "folder" ? pick.path : dirOf(s.data.paths[pick.index] ?? ""));
-    });
+    this.pointerController.attach();
     window.addEventListener("keydown", (e) => this.onKey(e));
     watchPopovers(document);
     window.addEventListener("dragover", (e) => {
@@ -941,116 +918,11 @@ export class App {
     });
   }
 
-  private scheduleHover(): void {
-    if (this.rafPending) return;
-    this.rafPending = true;
-    requestAnimationFrame(() => {
-      this.rafPending = false;
-      this.updateHover(this.pointer.x, this.pointer.y);
-    });
-  }
-
-  private folderOf(pick: NonNullable<Pick>): { path: string; rect: Rect } | undefined {
-    const s = this.state;
-    if (!s) return undefined;
-    const path = pick.kind === "folder" ? pick.path : dirOf(s.data.paths[pick.index] ?? "");
-    const rect = s.layout.folders.get(path);
-    return rect ? { path, rect } : undefined;
-  }
-
-  /** The card is shown in map mode and whenever the timelapse is paused; during playback it is off. */
-  private updateHover(x: number, y: number): void {
-    const s = this.state;
-    if (!s || this.animator?.playing) return;
-    const pick = this.scene.pick(x, y);
-    s.hover = pick;
-    // a building can be clicked: the cursor says so
-    this.scene.canvas.style.cursor = pick?.kind === "file" ? "pointer" : "";
-    if (!pick) {
-      this.scene.setHover(null);
-      this.hideCard();
-      return;
-    }
-    this.scene.setHover(pick, this.folderOf(pick));
-    this.showCard(pick, x, y);
-  }
-
-  private onClick(e: PointerEvent): void {
-    const s = this.state;
-    if (!s) return;
-    if (this.animator?.playing) {
-      // during playback a click pauses and shows the card of what is under the pointer
-      this.animator.pause();
-      this.updateHover(e.clientX, e.clientY);
-      return;
-    }
-    const pick = this.scene.pick(e.clientX, e.clientY);
-    if (e.pointerType === "touch") {
-      // first tap shows the card, a second tap on the same building opens the details
-      const same = pick?.kind === "file" && s.pinned?.kind === "file" && pick.index === s.pinned.index;
-      s.pinned = pick;
-      if (same && pick?.kind === "file") {
-        this.openDetails(pick.index);
-        return;
-      }
-      s.hover = pick;
-      this.scene.setHover(pick, pick ? this.folderOf(pick) : undefined);
-      if (pick) this.showCard(pick, e.clientX, e.clientY);
-      else this.hideCard();
-      return;
-    }
-    if (pick?.kind === "file") this.openDetails(pick.index);
-    else this.closeDetails();
-  }
-
   /** Index of a union file in the model of the current frame, or -1. */
   private modelIndex(union: number): number {
     const s = this.state;
     const frame = s?.data.frames[this.animator?.frame ?? 0];
     return frame ? (frame.modelIndex[union] as number) : -1;
-  }
-
-  private showCard(pick: NonNullable<Pick>, x: number, y: number): void {
-    const s = this.state;
-    const frame = this.animator?.frame ?? 0;
-    if (!s) return;
-    clear(this.card);
-    if (pick.kind === "folder") {
-      this.card.append(folderCardView(folderCard(s.model, pick.path, format)));
-    } else {
-      const m = this.modelIndex(pick.index);
-      if (pick.kind === "lot" || m < 0) {
-        const lot = lotCard(s.data, frame, pick.index);
-        this.card.append(
-          el(
-            "div",
-            {},
-            el("div", { class: "card-title", text: `Empty lot: ${lot.title}` }),
-            el("div", { class: "muted", text: lot.folder }),
-            el("p", { class: "lot-text", text: lot.text }),
-          ),
-        );
-      } else {
-        const data = fileCard(s.model, m, s.mapping, format, this.report?.dimensions);
-        const last = lastChangeRow(s.data, frame, pick.index, format);
-        this.card.append(fileCardView(data, last ? [last] : []));
-      }
-    }
-    this.card.classList.add("on");
-    // beside the pointer, inside what the bar, the panels and the timeline leave free
-    const stage = this.stage.getBoundingClientRect();
-    const free = freeRect({ w: stage.width, h: stage.height }, this.insets);
-    const place = placeCard(
-      { x: x - stage.left, y: y - stage.top },
-      { w: this.card.offsetWidth, h: this.card.offsetHeight },
-      free,
-    );
-    this.card.style.left = `${stage.left + place.left}px`;
-    this.card.style.top = `${stage.top + place.top}px`;
-  }
-
-  private hideCard(): void {
-    this.card.classList.remove("on");
   }
 
   // --------------------------------------------------------------- details
@@ -1330,7 +1202,10 @@ export class App {
     const rect = s?.layout.files.get(path);
     if (!s || union === undefined || !rect) return;
     this.scene.focus(rect.x + rect.w / 2, rect.y + rect.h / 2);
-    this.scene.setHover({ kind: "file", index: union }, this.folderOf({ kind: "file", index: union }));
+    this.scene.setHover(
+      { kind: "file", index: union },
+      this.pointerController.folderOf({ kind: "file", index: union }),
+    );
   }
 
   private renderHealth(): void {
