@@ -38,11 +38,16 @@ it("computeLayout > places every file and every folder", () => {
   expect([...layout.folders.keys()].sort()).toEqual(["", "src", "src/deep", "test"]);
 });
 
+/** The files after `path` in order whose parcel overlaps the given one. */
+function overlappingPaths(path: string, rect: Rect, rects: Array<[string, Rect]>): string[] {
+  return rects.filter(([other, r]) => path < other && overlaps(rect, r)).map(([other]) => other);
+}
+
 it("computeLayout > keeps parcels disjoint and inside their folder", () => {
   const layout = computeLayout(FILES);
   const rects = [...layout.files.entries()];
   for (const [pa, a] of rects) {
-    for (const [pb, b] of rects) if (pa < pb) expect(overlaps(a, b), `${pa} / ${pb}`).toBe(false);
+    expect(overlappingPaths(pa, a, rects), pa).toEqual([]);
     const folder = pa.includes("/") ? pa.slice(0, pa.lastIndexOf("/")) : "";
     expect(inside(a, layout.folders.get(folder) as Rect), pa).toBe(true);
   }

@@ -94,8 +94,8 @@ it("code-first defaults > keeps engineering code only and says what was left out
   expect(ignored.warnings).toMatchObject({ binary: 1, non_utf8: 1, lfs_pointer: 1 });
 });
 
-it("code-first defaults > flags tests instead of dropping them", async () => {
-  const result = await analyze({ folder: makeTree(files) });
+/** The metrics of each file of an analysis, by file name. */
+function metricsByName(result: Awaited<ReturnType<typeof analyze>>): Map<string, Record<string, number>> {
   const byName = new Map<string, Record<string, number>>();
   const walk = (nodes: typeof result.snapshot.files) => {
     for (const n of nodes) {
@@ -104,6 +104,12 @@ it("code-first defaults > flags tests instead of dropping them", async () => {
     }
   };
   walk(result.snapshot.files);
+  return byName;
+}
+
+it("code-first defaults > flags tests instead of dropping them", async () => {
+  const result = await analyze({ folder: makeTree(files) });
+  const byName = metricsByName(result);
   expect(byName.get("app.test.ts")?.is_test).toBe(1);
   expect(byName.get("app.ts")?.is_test).toBe(0);
 });

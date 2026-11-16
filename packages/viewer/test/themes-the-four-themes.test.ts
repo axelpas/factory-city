@@ -123,10 +123,10 @@ for (const theme of THEMES) {
 
   it(`${theme.label}: the sequential ramp gets steadily ${theme.mode === "dark" ? "lighter" : "darker"}, so it reads without hue`, () => {
     const l = theme.ramps.sequential.map((c) => luminance(parseHex(c)));
-    for (let i = 1; i < l.length; i++) {
-      if (theme.mode === "dark") expect(l[i] as number, `stop ${i}`).toBeGreaterThan(l[i - 1] as number);
-      else expect(l[i] as number, `stop ${i}`).toBeLessThan(l[i - 1] as number);
-    }
+    const steady = l.every(
+      (v, i) => i === 0 || (theme.mode === "dark" ? v > (l[i - 1] as number) : v < (l[i - 1] as number)),
+    );
+    expect(steady, `luminance of the stops: ${l.join(", ")}`).toBe(true);
     // and its strong end stands out from the ground it is drawn on
     const strong = parseHex(theme.ramps.sequential.at(-1) as string);
     expect(contrastRatio(strong, hex(theme, "ground"))).toBeGreaterThanOrEqual(3);

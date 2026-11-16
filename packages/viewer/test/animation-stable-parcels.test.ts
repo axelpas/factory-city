@@ -1,3 +1,4 @@
+import type { Rect } from "@factory-city/layout";
 import { expect, it } from "vitest";
 import { D, H, PRESENCE, STRIDE, W, X, Y, Z } from "../src/anim/transition";
 import { FRAMES, setup } from "./timeline-helpers";
@@ -5,15 +6,13 @@ import { FRAMES, setup } from "./timeline-helpers";
 it("stable parcels > never moves a parcel between any two frames", () => {
   const { data, stateOf } = setup();
   const states = FRAMES.map((_, f) => stateOf(f));
-  for (let f = 1; f < states.length; f++) {
-    for (let i = 0; i < data.paths.length; i++) {
-      for (const c of [X, Y, Z] as const) {
-        expect((states[f] as Float32Array)[i * STRIDE + c], `${data.paths[i]} frame ${f}`).toBe(
-          (states[0] as Float32Array)[i * STRIDE + c],
-        );
-      }
-    }
-  }
+  const cells = states
+    .slice(1)
+    .flatMap((state, k) =>
+      data.paths.flatMap((path, i) => ([X, Y, Z] as const).map((c) => ({ state, path, i, c, f: k + 1 }))),
+    );
+  for (const { state, path, i, c, f } of cells)
+    expect(state[i * STRIDE + c], `${path} frame ${f}`).toBe((states[0] as Float32Array)[i * STRIDE + c]);
 });
 
 it("stable parcels > gives a parcel to every file of any frame, and keeps buildings inside it", () => {
@@ -22,9 +21,8 @@ it("stable parcels > gives a parcel to every file of any frame, and keeps buildi
   for (let f = 0; f < FRAMES.length; f++) {
     const state = stateOf(f);
     data.paths.forEach((path, i) => {
-      const rect = layout.files.get(path);
+      const rect = layout.files.get(path) as Rect;
       expect(rect, path).toBeDefined();
-      if (!rect) return;
       const o = i * STRIDE;
       expect((state[o + X] as number) - (state[o + W] as number) / 2).toBeGreaterThanOrEqual(rect.x - 1e-4);
       expect((state[o + X] as number) + (state[o + W] as number) / 2).toBeLessThanOrEqual(

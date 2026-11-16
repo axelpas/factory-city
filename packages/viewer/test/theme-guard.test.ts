@@ -68,12 +68,11 @@ it("design tokens > gives selects, inputs and buttons one height, and icon butto
 });
 
 it("browser build > imports only types from the schema package root, which holds Node-only code", () => {
-  const offenders: string[] = [];
   const root = new RegExp(`from "@factory-city/${"schema"}";`);
-  for (const file of walk(SRC).filter((f) => f.endsWith(".ts"))) {
-    for (const statement of readFileSync(file, "utf8").split(";\n")) {
-      if (root.test(`${statement};`) && !/import type /.test(statement)) offenders.push(relative(SRC, file));
-    }
-  }
+  const importsValue = (statement: string) => root.test(`${statement};`) && !/import type /.test(statement);
+  const offenders = walk(SRC)
+    .filter((f) => f.endsWith(".ts"))
+    .filter((file) => readFileSync(file, "utf8").split(";\n").some(importsValue))
+    .map((file) => relative(SRC, file));
   expect(offenders).toEqual([]);
 });
