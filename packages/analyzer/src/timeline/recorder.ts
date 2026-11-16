@@ -4,9 +4,10 @@ import type { AnalysisResult } from "../analysis/types.js";
 import { addCostShares } from "../collectors/enrich.js";
 import type { RawCommit } from "../collectors/history.js";
 import { frameHealth } from "../health/health.js";
-import { diffBlobs, factOf, lineChanges, qualityChange, snapshotTotals, writeCostShares } from "./frame.js";
+import { diffBlobs, lineChanges, qualityChange, snapshotTotals } from "./frame.js";
 import { writeAtomic } from "./io.js";
 import { kindOfSubject } from "./plan.js";
+import { factOf, writeCostShares } from "./retro.js";
 import type { Rev } from "./types.js";
 
 export interface RecorderInput {

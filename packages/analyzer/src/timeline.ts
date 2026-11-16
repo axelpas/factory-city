@@ -8,12 +8,12 @@ import { computeHistory, loadHistoryLog, reachableCommits } from "./collectors/h
 import { loadConfig } from "./config.js";
 import { resolveDimensions } from "./health/dimensions.js";
 import { findRepo, scopeOf } from "./source/git.js";
-import { addRetrospective } from "./timeline/frame.js";
 import { loadFacts, loadFileCache, writeAtomic } from "./timeline/io.js";
 import { loadLineage } from "./timeline/lineage-setup.js";
 import { buildManifest, writeOutputs } from "./timeline/manifest.js";
 import { branchLabel, planFrames } from "./timeline/plan.js";
 import { FrameRecorder } from "./timeline/recorder.js";
+import { addRetrospective } from "./timeline/retro.js";
 import type { Rev, TimelineOptions, TimelineResult } from "./timeline/types.js";
 
 export { branchLabel, kindOfSubject, lastOfEachDay, sample } from "./timeline/plan.js";

@@ -1,50 +1,5 @@
-import type { CoverageReport, FrameIssue, FrameKind, LinkStrategy } from "@factory-city/schema";
-import type { CiRun } from "./delivery.js";
-
-/** A commit as the resolver sees it. */
-export interface CommitMessage {
-  hash: string;
-  subject: string;
-  body: string;
-}
-
-export interface ForgeIssue {
-  number: number;
-  title: string;
-  state: string;
-  labels: string[];
-  url: string;
-  createdAt?: string;
-  closedAt?: string;
-}
-
-export interface ForgePull {
-  number: number;
-  title: string;
-  body: string;
-  branch: string;
-  url: string;
-  /** Issues the pull request closes, as the forge reports them. */
-  closes: number[];
-  createdAt?: string;
-  mergedAt?: string;
-}
-
-/** What the forge knows, when `gh` is available: issues and pull requests by number. */
-export interface ForgeData {
-  issues: Map<number, ForgeIssue>;
-  pulls: Map<number, ForgePull>;
-  /** CI runs; absent when the repository has none. */
-  runs?: CiRun[];
-}
-
-export interface Link {
-  issue?: number;
-  pullRequest?: number;
-  strategy: LinkStrategy;
-  /** Branch the work came from, when a merge commit names it. */
-  branch?: string;
-}
+import type { CoverageReport, FrameIssue, FrameKind } from "@factory-city/schema";
+import type { ForgeData } from "./issue-types.js";
 
 const KIND_WORDS: Record<string, FrameKind> = {
   feat: "feature",
@@ -120,4 +75,5 @@ export function coverageLine(c: CoverageReport): string {
 }
 
 export { branchIssue, closingIssues, parseMerge, references } from "./issue-text.js";
+export type { CommitMessage, ForgeData, ForgeIssue, ForgePull, Link } from "./issue-types.js";
 export { linkStep } from "./link-step.js";

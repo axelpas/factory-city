@@ -2,63 +2,14 @@ import type { IgnoreSummary } from "@factory-city/schema";
 import { globToRegExp, matchesAny } from "./glob.js";
 import type { LanguageConfig } from "./languages/index.js";
 import { languageForPath } from "./languages/index.js";
+import {
+  DEPENDENCY_FOLDERS,
+  LOCKFILES,
+  MAX_NON_SOURCE_SHARE,
+  MIN_FILES_FOR_SHARE_RULE,
+  NON_ENGINEERING_FOLDERS,
+} from "./select-tables.js";
 import type { SourceEntry } from "./source/types.js";
-
-export const DEPENDENCY_FOLDERS = new Set([
-  "node_modules",
-  "vendor",
-  "dist",
-  "build",
-  "out",
-  ".next",
-  ".nuxt",
-  ".svelte-kit",
-  ".turbo",
-  ".cache",
-  "coverage",
-  "bower_components",
-  "venv",
-  ".venv",
-  "env",
-  "__pycache__",
-  ".tox",
-  "target",
-  ".gradle",
-  ".idea",
-  ".vscode",
-  ".git",
-  "pods",
-]);
-
-export const NON_ENGINEERING_FOLDERS = new Set([
-  "public",
-  "static",
-  "assets",
-  "media",
-  "images",
-  "img",
-  "fonts",
-  "uploads",
-  "docs",
-]);
-
-const LOCKFILES = new Set([
-  "package-lock.json",
-  "yarn.lock",
-  "pnpm-lock.yaml",
-  "bun.lockb",
-  "bun.lock",
-  "composer.lock",
-  "gemfile.lock",
-  "poetry.lock",
-  "cargo.lock",
-  "go.sum",
-  "pipfile.lock",
-]);
-
-/** Files this small share of source files in a folder (with at least this many files) make it non-engineering. */
-const MIN_FILES_FOR_SHARE_RULE = 20;
-const MAX_NON_SOURCE_SHARE = 0.05;
 
 export interface SelectOptions {
   all: boolean;
@@ -200,3 +151,5 @@ function dropMostlyNonSourceFolders(
     return true;
   });
 }
+
+export { DEPENDENCY_FOLDERS, NON_ENGINEERING_FOLDERS } from "./select-tables.js";
