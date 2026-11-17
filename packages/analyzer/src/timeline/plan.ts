@@ -9,7 +9,7 @@ import type { Rev, TimelineOptions } from "./types.js";
 
 export { planIssueFrames } from "./issue-plan.js";
 export { kindOfSubject } from "./kinds.js";
-export { branchLabel, git, lastOfEachDay, listRevs, sample } from "./revs.js";
+export { branchLabel, lastOfEachDay, listRevs, sample } from "./revs.js";
 
 /** The frames of a timeline, picked and sampled, and what is known about how they were found. */
 export interface FramePlan {

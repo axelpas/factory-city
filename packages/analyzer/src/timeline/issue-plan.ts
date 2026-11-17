@@ -7,7 +7,7 @@ import {
   kindOf,
 } from "../collectors/issues.js";
 import { linkStep } from "../collectors/link-step.js";
-import { git } from "./revs.js";
+import { git } from "../git.js";
 import type { Rev, TimelineOptions } from "./types.js";
 
 type Message = CommitMessage & { parents: string[]; time: number };

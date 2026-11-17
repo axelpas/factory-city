@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { git } from "../git.js";
 import type { ForgeData, Link } from "./issues.js";
 import { type CommitMessage, kindOf } from "./issues.js";
 import { linkStep } from "./link-step.js";
@@ -15,15 +15,6 @@ export interface Step {
   merged: Array<CommitMessage & { authorName: string; authorEmail: string }>;
   link: Link;
   isFix: boolean;
-}
-
-function git(cwd: string, args: string[]): Promise<string> {
-  return new Promise((ok, fail) => {
-    execFile("git", args, { cwd, maxBuffer: 512 * 1024 * 1024, encoding: "utf8" }, (err, stdout, stderr) => {
-      if (err) fail(new Error(`git ${args.join(" ")} failed: ${(stderr || err.message).trim()}`));
-      else ok(stdout);
-    });
-  });
 }
 
 const FORMAT = "--format=%x01%H%x02%P%x02%ct%x02%an%x02%ae%x02%s%x02%b";

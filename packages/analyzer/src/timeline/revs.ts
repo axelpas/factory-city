@@ -1,14 +1,5 @@
-import { execFile } from "node:child_process";
+import { git } from "../git.js";
 import type { Rev, TimelineOptions } from "./types.js";
-
-export function git(cwd: string, args: string[]): Promise<string> {
-  return new Promise((ok, fail) => {
-    execFile("git", args, { cwd, maxBuffer: 512 * 1024 * 1024, encoding: "utf8" }, (err, stdout, stderr) => {
-      if (err) fail(new Error(`git ${args.join(" ")} failed: ${(stderr || err.message).trim()}`));
-      else ok(stdout);
-    });
-  });
-}
 
 /** Even sampling that always keeps the first and the last item. */
 export function sample<T>(items: T[], max: number | undefined): T[] {

@@ -1,19 +1,10 @@
-import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { CcJson, DiffSummary, TimelineManifest } from "@factory-city/schema";
 import { summarize } from "./diff-summary.js";
+import { git } from "./git.js";
 import { findRepo } from "./source/git.js";
 import { buildTimeline } from "./timeline.js";
-
-function git(cwd: string, args: string[]): Promise<string> {
-  return new Promise((ok, fail) => {
-    execFile("git", args, { cwd, encoding: "utf8" }, (err, stdout, stderr) => {
-      if (err) fail(new Error((stderr || err.message).trim()));
-      else ok(stdout.trim());
-    });
-  });
-}
 
 async function tryGit(cwd: string, args: string[]): Promise<string | undefined> {
   try {

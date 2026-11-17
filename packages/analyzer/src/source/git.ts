@@ -1,17 +1,8 @@
-import { execFile } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
+import { git } from "../git.js";
 import { BlobReader } from "./blob-reader.js";
 import type { ListOptions, Source, SourceEntry } from "./types.js";
-
-function git(cwd: string, args: string[]): Promise<string> {
-  return new Promise((ok, fail) => {
-    execFile("git", args, { cwd, maxBuffer: 256 * 1024 * 1024, encoding: "utf8" }, (err, stdout, stderr) => {
-      if (err) fail(new Error(`git ${args.join(" ")} failed: ${(stderr || err.message).trim()}`));
-      else ok(stdout);
-    });
-  });
-}
 
 /** Full hash of a revision. */
 export async function revParse(topLevel: string, rev: string): Promise<string> {
