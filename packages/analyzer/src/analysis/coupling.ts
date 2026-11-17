@@ -1,3 +1,5 @@
+import { languageForPath } from "../languages/index.js";
+import { dirOf } from "../resolve/paths.js";
 import { buildImportGraph, folderCohesion, loadResolveContext } from "../resolve.js";
 import { folderReason } from "../select.js";
 import type { Source } from "../source/types.js";
@@ -42,7 +44,11 @@ function addImportCounts(graph: Graph, attributesByPath: FileValues): void {
   for (const [file, targets] of graph) {
     const values = attributesByPath.get(file);
     if (!values) continue;
-    values.imports_out = targets.size;
+    // a Go import is a package, which is a folder: it counts once, however many files it has
+    values.imports_out =
+      languageForPath(file)?.modules?.resolver === "go"
+        ? new Set([...targets].map(dirOf)).size
+        : targets.size;
     values.imports_in = incoming.get(file) ?? 0;
   }
 }

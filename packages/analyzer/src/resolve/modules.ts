@@ -1,5 +1,6 @@
 import { posix } from "node:path";
 import { dirOf } from "./paths.js";
+import type { ResolveContext } from "./types.js";
 
 /** Index of the Python files of a project by every module name they could answer to, built once per file set. */
 const indexes = new WeakMap<ReadonlySet<string>, Map<string, string[]>>();
@@ -67,4 +68,48 @@ export function resolvePython(spec: string, from: string, files: ReadonlySet<str
   }
   const hits = indexOf(files).get(rest);
   return hits ? nearest(hits, from) : undefined;
+}
+
+/** The non-test Go files of each folder, built once per file set. */
+const goFolders = new WeakMap<ReadonlySet<string>, Map<string, string[]>>();
+
+function goFoldersOf(files: ReadonlySet<string>): Map<string, string[]> {
+  const known = goFolders.get(files);
+  if (known) return known;
+  const folders = new Map<string, string[]>();
+  for (const file of files) {
+    if (!file.endsWith(".go") || file.endsWith("_test.go")) continue;
+    const dir = dirOf(file);
+    const list = folders.get(dir);
+    if (list) list.push(file);
+    else folders.set(dir, [file]);
+  }
+  goFolders.set(files, folders);
+  return folders;
+}
+
+/**
+ * The files of the package a Go import path names. A package is a folder: the import links to the files of that
+ * folder. The folder comes from the module path of the nearest `go.mod` that is a prefix of the import path; with
+ * no `go.mod` in the analyzed folder, from the folder whose path ends like the import path (two segments at least).
+ * A path of no module of the project (the standard library, dependencies) has no file.
+ */
+export function resolveGo(spec: string, ctx: ResolveContext): string[] {
+  const folders = goFoldersOf(ctx.files);
+  if (ctx.goModules.size > 0) {
+    let best: { dir: string; path: string } | undefined;
+    for (const [dir, path] of ctx.goModules)
+      if ((spec === path || spec.startsWith(`${path}/`)) && (!best || path.length > best.path.length))
+        best = { dir, path };
+    if (!best) return [];
+    const rest = spec.slice(best.path.length + 1);
+    return folders.get(rest ? posix.join(best.dir, rest) : best.dir) ?? [];
+  }
+  const segments = spec.split("/");
+  // the longest tail of the import path that is also the end of a folder of the project
+  for (let keep = segments.length; keep >= 2; keep--) {
+    const tail = segments.slice(-keep).join("/");
+    for (const [dir, list] of folders) if (dir === tail || dir.endsWith(`/${tail}`)) return list;
+  }
+  return [];
 }

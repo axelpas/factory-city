@@ -79,6 +79,16 @@ async function loadPackages(paths: readonly string[], load: Loader): Promise<Map
   return packages;
 }
 
+/** The module path each `go.mod` declares, by the folder of the file. */
+async function loadGoModules(paths: readonly string[], read: Reader): Promise<Map<string, string>> {
+  const modules = new Map<string, string>();
+  for (const path of paths.filter((p) => posix.basename(p) === "go.mod")) {
+    const module = /^\s*module\s+(\S+)/m.exec((await read(path)) ?? "")?.[1];
+    if (module) modules.set(dirOf(path), module.replace(/^"|"$/g, ""));
+  }
+  return modules;
+}
+
 export async function loadResolveContext(
   entryPaths: readonly string[],
   files: ReadonlySet<string>,
@@ -100,5 +110,10 @@ export async function loadResolveContext(
     const cfg = await effective(path);
     if (cfg) configs.set(dirOf(path), cfg);
   }
-  return { files, configs, packages: await loadPackages(usable, load) };
+  return {
+    files,
+    configs,
+    packages: await loadPackages(usable, load),
+    goModules: await loadGoModules(usable, read),
+  };
 }

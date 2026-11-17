@@ -15,7 +15,10 @@ function stringValue(node: Node): string {
 function matchesCall(rule: ShortcutRule, re: RegExp | undefined, node: Node): boolean {
   if (node.type !== (rule.nodeType ?? "call_expression")) return false;
   const callee = node.childForFieldName("function")?.text;
-  return callee !== undefined && re?.test(callee) === true;
+  if (callee === undefined || re?.test(callee) !== true) return false;
+  if (!rule.argsPattern) return true;
+  const args = node.childForFieldName("arguments")?.text;
+  return args !== undefined && new RegExp(rule.argsPattern).test(args);
 }
 
 export class Walker {
@@ -69,7 +72,8 @@ export class Walker {
   private matches(rule: ShortcutRule, re: RegExp | undefined, node: Node): boolean {
     if (rule.type === "node") return rule.nodeType === node.type && (!re || re.test(node.text));
     if (rule.type === "call") return matchesCall(rule, re, node);
-    if (rule.type === "emptyBlock") return rule.nodeType === node.type && this.isEmptyBlock(rule, node);
+    if (rule.type === "emptyBlock")
+      return rule.nodeType === node.type && (!re || re.test(node.text)) && this.isEmptyBlock(rule, node);
     return false;
   }
 
@@ -119,7 +123,9 @@ export class Walker {
       : [];
     for (const module of modules) {
       // `import a.b as c` names the module in its `name` field
-      const base = (module.childForFieldName("name") ?? module).text.replace(/\s+/g, "");
+      const base = (module.childForFieldName("name") ?? module).text
+        .replace(/\s+/g, "")
+        .replace(/^["'`]|["'`]$/g, "");
       this.imports.push(base);
       for (const name of names) {
         const bare = (name.childForFieldName("name") ?? name).text;

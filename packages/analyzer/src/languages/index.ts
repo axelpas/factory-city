@@ -64,7 +64,7 @@ export interface ModulesConfig {
     namesField?: string;
   }>;
   /** How the names are turned into files of the project (see `resolve/modules.ts`). */
-  resolver: "python";
+  resolver: "python" | "go";
 }
 
 export interface CohesionConfig {
@@ -89,6 +89,20 @@ export interface CohesionConfig {
   assignments?: { statement: string; node: string; nameField: string };
   /** True when the fields of a class are the members its constructor sets through the self object (Python). */
   fieldsFromConstructor?: boolean;
+  /**
+   * Languages whose methods are declared outside their type (Go): the method node, the field holding its receiver,
+   * and the nodes that declare a type with its fields. The name the receiver gives itself is the self object.
+   */
+  receivers?: {
+    methodNode: string;
+    receiverField: string;
+    typeDeclaration: string;
+    typeSpec: string;
+    structNode: string;
+    fieldNode: string;
+  };
+  /** Declarations holding specs that each declare names (Go: `const_declaration` holds `const_spec`s). */
+  specDeclarations?: Record<string, string>;
   barrelStatements: string[];
   /** Two functions whose names start with the same word of at least this length are linked. */
   minStemLength: number;
@@ -106,6 +120,8 @@ export interface ShortcutRule {
   bodyField?: string;
   /** For `emptyBlock`: when the body has no field, the type of the child that is the body (Python: `block`). */
   bodyType?: string;
+  /** For `call`: a pattern the text of the arguments must match too (`exec.Command` with a shell as first argument). */
+  argsPattern?: string;
   /** For `emptyBlock`: statement types that do nothing, beside comments (Python: `pass_statement`). */
   emptyTypes?: string[];
 }

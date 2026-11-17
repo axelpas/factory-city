@@ -1,7 +1,7 @@
 {
   "id": "go",
   "label": "Go",
-  "tier": 2,
+  "tier": 1,
   "grammar": "go",
   "extensions": [".go"],
   "comment": ["comment"],
@@ -26,13 +26,140 @@
     {
       "kind": "lint_disable",
       "type": "comment",
-      "pattern": "//\\s*nolint|#nosec"
+      "pattern": "//\\s*(nolint|lint:ignore|lint:file-ignore)|#nosec"
     },
     {
       "kind": "skipped_test",
       "type": "call",
       "nodeType": "call_expression",
       "pattern": "^\\w+\\.Skip(f|Now)?$"
+    },
+    {
+      "kind": "empty_catch",
+      "type": "emptyBlock",
+      "nodeType": "if_statement",
+      "bodyField": "consequence",
+      "pattern": "^if\\b[^{]*\\berr\\s*!=\\s*nil\\b"
+    }
+  ],
+  "modules": {
+    "statements": [
+      {
+        "nodeType": "import_spec",
+        "moduleField": "path"
+      }
+    ],
+    "resolver": "go"
+  },
+  "cohesion": {
+    "wrappers": [],
+    "functionDeclarations": ["function_declaration"],
+    "variableDeclarations": [],
+    "functionValues": [],
+    "classDeclarations": [],
+    "methods": [],
+    "constructorName": "",
+    "fields": [],
+    "otherDeclarations": [],
+    "identifiers": ["identifier", "type_identifier"],
+    "memberExpression": "selector_expression",
+    "memberObjectField": "operand",
+    "memberPropertyField": "field",
+    "selfObject": "",
+    "receivers": {
+      "methodNode": "method_declaration",
+      "receiverField": "receiver",
+      "typeDeclaration": "type_declaration",
+      "typeSpec": "type_spec",
+      "structNode": "struct_type",
+      "fieldNode": "field_declaration"
+    },
+    "specDeclarations": {
+      "const_declaration": "const_spec",
+      "var_declaration": "var_spec"
+    },
+    "barrelStatements": ["import_declaration"],
+    "minStemLength": 4
+  },
+  "security": [
+    {
+      "kind": "command_exec",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^exec\\.Command(Context)?$",
+      "argsPattern": "^\\(\\s*(\\w+,\\s*)?[\"`](sh|bash|zsh|dash|cmd|powershell|pwsh)[\"`]"
+    },
+    {
+      "kind": "unsafe_html",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^template\\.(HTML|JS|JSStr|CSS|HTMLAttr|URL|Srcset)$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "var_spec",
+      "pattern": "^\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*(\\w+\\s*)?=\\s*[`\"][^`\"\\s${}]{8,}[`\"]$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "const_spec",
+      "pattern": "^\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*(\\w+\\s*)?=\\s*[`\"][^`\"\\s${}]{8,}[`\"]$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "short_var_declaration",
+      "pattern": "^\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*:=\\s*[`\"][^`\"\\s${}]{8,}[`\"]$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "assignment_statement",
+      "pattern": "^[\\w.]*\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*=\\s*[`\"][^`\"\\s${}]{8,}[`\"]$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "keyed_element",
+      "pattern": "^\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*:\\s*[`\"][^`\"\\s${}]{8,}[`\"]$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "interpreted_string_literal",
+      "pattern": "^\"(ghp_[A-Za-z0-9]{30,}|github_pat_\\w{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[\\w-]{10,})"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "raw_string_literal",
+      "pattern": "BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "interpreted_string_literal",
+      "pattern": "BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "node",
+      "nodeType": "keyed_element",
+      "pattern": "^InsecureSkipVerify\\s*:\\s*true$"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "node",
+      "nodeType": "assignment_statement",
+      "pattern": "InsecureSkipVerify\\s*=\\s*true$"
+    },
+    {
+      "kind": "sql_concat",
+      "type": "node",
+      "nodeType": "call_expression",
+      "pattern": "(^|\\.)(Query|QueryRow|Exec|QueryContext|ExecContext|QueryRowContext|Raw|Prepare|PrepareContext)\\(\\s*(\\w+,\\s*)?(fmt\\.Sprintf\\(|[\"`][^\"`]*[\"`]\\s*\\+)"
     }
   ]
 }

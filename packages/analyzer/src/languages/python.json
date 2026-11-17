@@ -148,7 +148,7 @@
       "kind": "hardcoded_secret",
       "type": "node",
       "nodeType": "assignment",
-      "pattern": "^([A-Za-z_]*)([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA]pi[_-]?[kK]ey|API_?KEY)\\w*\\s*(:\\s*[\\w\\[\\], .]+\\s*)?=\\s*[\"'][^\"'\\s${}]{8,}[\"']$"
+      "pattern": "^([A-Za-z_]*)([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*(:\\s*[\\w\\[\\], .]+\\s*)?=\\s*[\"'][^\"'\\s${}]{8,}[\"']$"
     },
     {
       "kind": "hardcoded_secret",

@@ -1,4 +1,4 @@
-import { resolveImport } from "./import.js";
+import { resolveImportAll } from "./import.js";
 import type { ResolveContext } from "./types.js";
 
 /** Links between files of the project: file to the set of files it imports. */
@@ -10,8 +10,7 @@ export function buildImportGraph(
   for (const [file, specs] of imports) {
     const targets = new Set<string>();
     for (const spec of specs) {
-      const target = resolveImport(spec, file, ctx);
-      if (target && target !== file) targets.add(target);
+      for (const target of resolveImportAll(spec, file, ctx)) if (target !== file) targets.add(target);
     }
     graph.set(file, targets);
   }

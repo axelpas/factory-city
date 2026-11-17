@@ -1,6 +1,6 @@
 import { posix } from "node:path";
 import { languageForPath } from "../languages/index.js";
-import { resolvePython } from "./modules.js";
+import { resolveGo, resolvePython } from "./modules.js";
 import { dirOf } from "./paths.js";
 import type { Pkg, ResolveContext, TsConfig } from "./types.js";
 
@@ -47,6 +47,13 @@ function matchPattern(pattern: string, spec: string): string | undefined {
     return spec.slice(head.length, spec.length - tail.length);
   }
   return undefined;
+}
+
+/** Every file a module specifier stands for: one for most languages, the files of a package for Go. */
+export function resolveImportAll(spec: string, from: string, ctx: ResolveContext): string[] {
+  if (languageForPath(from)?.modules?.resolver === "go") return resolveGo(spec, ctx);
+  const one = resolveImport(spec, from, ctx);
+  return one ? [one] : [];
 }
 
 /** Resolves a module specifier to a file of the project, or undefined for external packages. */
