@@ -1,7 +1,7 @@
 {
   "id": "java",
   "label": "Java",
-  "tier": 2,
+  "tier": 1,
   "grammar": "java",
   "extensions": [".java"],
   "comment": ["line_comment", "block_comment"],
@@ -44,13 +44,19 @@
     {
       "kind": "lint_disable",
       "type": "comment",
-      "pattern": "NOSONAR|CHECKSTYLE:OFF|@formatter:off"
+      "pattern": "NOSONAR|CHECKSTYLE:OFF|@formatter:off|NOPMD|//\\s*noinspection"
     },
     {
       "kind": "lint_disable",
       "type": "node",
       "nodeType": "annotation",
-      "pattern": "^@SuppressWarnings\\b"
+      "pattern": "^@(SuppressWarnings|SuppressFBWarnings|SuppressLint)\\b"
+    },
+    {
+      "kind": "lint_disable",
+      "type": "node",
+      "nodeType": "marker_annotation",
+      "pattern": "^@(SuppressWarnings|SuppressFBWarnings|SuppressLint)$"
     },
     {
       "kind": "skipped_test",
@@ -65,10 +71,129 @@
       "pattern": "^@(Disabled|Ignore)\\b"
     },
     {
+      "kind": "skipped_test",
+      "type": "node",
+      "nodeType": "annotation",
+      "pattern": "^@Test\\(.*enabled\\s*=\\s*false"
+    },
+    {
       "kind": "empty_catch",
       "type": "emptyBlock",
       "nodeType": "catch_clause",
       "bodyField": "body"
+    }
+  ],
+  "modules": {
+    "statements": [
+      {
+        "nodeType": "import_declaration",
+        "moduleField": "",
+        "moduleType": "scoped_identifier",
+        "wildcardType": "asterisk"
+      }
+    ],
+    "resolver": "java"
+  },
+  "cohesion": {
+    "wrappers": [],
+    "functionDeclarations": [],
+    "variableDeclarations": [],
+    "functionValues": [],
+    "classDeclarations": [
+      "class_declaration",
+      "interface_declaration",
+      "enum_declaration",
+      "record_declaration"
+    ],
+    "methods": ["method_declaration"],
+    "constructorName": "",
+    "fields": ["field_declaration"],
+    "fieldDeclarators": {
+      "field": "declarator",
+      "nameField": "name"
+    },
+    "otherDeclarations": [],
+    "identifiers": ["identifier", "type_identifier"],
+    "memberExpression": "field_access",
+    "memberObjectField": "object",
+    "memberPropertyField": "field",
+    "selfObject": "this",
+    "bareMembers": true,
+    "barrelStatements": ["import_declaration", "package_declaration"],
+    "minStemLength": 4
+  },
+  "security": [
+    {
+      "kind": "dynamic_code",
+      "type": "call",
+      "nodeType": "method_invocation",
+      "pattern": "[Ee]ngine\\.eval$"
+    },
+    {
+      "kind": "command_exec",
+      "type": "call",
+      "nodeType": "method_invocation",
+      "pattern": "^Runtime\\.getRuntime\\(\\)\\.exec$"
+    },
+    {
+      "kind": "command_exec",
+      "type": "node",
+      "nodeType": "object_creation_expression",
+      "pattern": "^new\\s+ProcessBuilder\\(\\s*\"(sh|bash|zsh|dash|cmd(\\.exe)?|powershell|pwsh)\""
+    },
+    {
+      "kind": "unsafe_deserialization",
+      "type": "node",
+      "nodeType": "object_creation_expression",
+      "pattern": "^new\\s+(ObjectInputStream|XMLDecoder)\\("
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "variable_declarator",
+      "pattern": "^\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*=\\s*\"[^\"\\s${}]{8,}\"$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "assignment_expression",
+      "pattern": "^[\\w.]*\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*=\\s*\"[^\"\\s${}]{8,}\"$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string_literal",
+      "pattern": "^\"(ghp_[A-Za-z0-9]{30,}|github_pat_\\w{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[\\w-]{10,})"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string_literal",
+      "pattern": "BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "node",
+      "nodeType": "identifier",
+      "pattern": "^ALLOW_ALL_HOSTNAME_VERIFIER$"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "node",
+      "nodeType": "object_creation_expression",
+      "pattern": "^new\\s+NoopHostnameVerifier\\("
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "node",
+      "nodeType": "method_invocation",
+      "pattern": "^[\\w.()]*setHostnameVerifier\\(\\s*\\([^)]*\\)\\s*->\\s*true\\s*\\)"
+    },
+    {
+      "kind": "sql_concat",
+      "type": "node",
+      "nodeType": "method_invocation",
+      "pattern": "\\.(executeQuery|executeUpdate|execute|createQuery|createNativeQuery|prepareStatement|queryForList|queryForObject|query|update)\\(\\s*(\"[^\"]*\"\\s*\\+|String\\.format\\(|\"[^\"]*\"\\.formatted\\()"
     }
   ]
 }

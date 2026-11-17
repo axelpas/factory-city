@@ -11,10 +11,19 @@ function stringValue(node: Node): string {
   return fragment ? fragment.text : node.text.slice(1, -1);
 }
 
+/** The name a call goes through: the function, or for a Java method invocation the object and the method. */
+function calleeOf(node: Node): string | undefined {
+  const fn = node.childForFieldName("function");
+  if (fn) return fn.text;
+  const name = node.childForFieldName("name");
+  const object = node.childForFieldName("object");
+  return name ? (object ? `${object.text}.${name.text}` : name.text) : undefined;
+}
+
 /** A call whose callee matches the rule, such as `eval(...)` or `test.skip(...)`. */
 function matchesCall(rule: ShortcutRule, re: RegExp | undefined, node: Node): boolean {
   if (node.type !== (rule.nodeType ?? "call_expression")) return false;
-  const callee = node.childForFieldName("function")?.text;
+  const callee = calleeOf(node);
   if (callee === undefined || re?.test(callee) !== true) return false;
   if (!rule.argsPattern) return true;
   const args = node.childForFieldName("arguments")?.text;
@@ -117,16 +126,25 @@ export class Walker {
   private collectModules(node: Node): void {
     const statement = this.lang.modules?.statements.find((s) => s.nodeType === node.type);
     if (!statement) return;
-    const modules = node.childrenForFieldName(statement.moduleField).filter((n): n is Node => n !== null);
+    const modules = (
+      statement.moduleType
+        ? node.namedChildren.filter((c) => c?.type === statement.moduleType)
+        : node.childrenForFieldName(statement.moduleField)
+    ).filter((n): n is Node => n !== null && n !== undefined);
+    const wildcard =
+      statement.wildcardType !== undefined &&
+      node.namedChildren.some((c) => c?.type === statement.wildcardType);
     const names = statement.namesField
       ? node.childrenForFieldName(statement.namesField).filter((n): n is Node => n !== null)
       : [];
     for (const module of modules) {
       // `import a.b as c` names the module in its `name` field
-      const base = (module.childForFieldName("name") ?? module).text
+      const base = (
+        module.type === "aliased_import" ? (module.childForFieldName("name") ?? module) : module
+      ).text
         .replace(/\s+/g, "")
         .replace(/^["'`]|["'`]$/g, "");
-      this.imports.push(base);
+      this.imports.push(wildcard ? `${base}.*` : base);
       for (const name of names) {
         const bare = (name.childForFieldName("name") ?? name).text;
         this.imports.push(base.endsWith(".") ? `${base}${bare}` : `${base}.${bare}`);

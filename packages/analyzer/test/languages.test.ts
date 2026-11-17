@@ -40,7 +40,7 @@ const TIER2: Array<[id: string, file: string, rloc: number]> = [
 ];
 
 /** The languages that are measured on every indicator, hence Tier 1; the others are still Tier 2. */
-const FULL = ["python", "go"];
+const FULL = ["python", "go", "java"];
 
 it("tiers > a language is Tier 1 exactly when every indicator is covered", () => {
   for (const l of LANGUAGES) expect(isFullyCovered(l) ? 1 : 2, l.id).toBe(l.tier);

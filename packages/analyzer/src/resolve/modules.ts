@@ -113,3 +113,57 @@ export function resolveGo(spec: string, ctx: ResolveContext): string[] {
   }
   return [];
 }
+
+interface JavaIndex {
+  /** Classes by every dotted tail of their path: `com/a/B.java` answers to `B`, `a.B` and `com.a.B`. */
+  classes: Map<string, string[]>;
+  /** Files of each folder by every dotted tail of its path, for `import a.b.*`. */
+  packages: Map<string, string[]>;
+}
+
+const javaIndexes = new WeakMap<ReadonlySet<string>, JavaIndex>();
+
+function javaIndexOf(files: ReadonlySet<string>): JavaIndex {
+  const known = javaIndexes.get(files);
+  if (known) return known;
+  const classes = new Map<string, string[]>();
+  const packages = new Map<string, string[]>();
+  const add = (map: Map<string, string[]>, path: string, file: string) => {
+    const parts = path.split("/");
+    for (let from = 0; from < parts.length; from++) {
+      const key = parts.slice(from).join(".");
+      const list = map.get(key);
+      if (list) list.push(file);
+      else map.set(key, [file]);
+    }
+  };
+  for (const file of files) {
+    if (!file.endsWith(".java")) continue;
+    add(classes, file.slice(0, -".java".length), file);
+    const dir = dirOf(file);
+    if (dir) add(packages, dir, file);
+  }
+  javaIndexes.set(files, { classes, packages });
+  return { classes, packages };
+}
+
+/**
+ * The files a Java import stands for. A class is a file named after it, in the folders of its package: `a.b.C`
+ * answers to the file whose path ends with `a/b/C.java`, the closest to the importer first. A static import
+ * (`a.b.C.member`) is read as the class it names, so the trailing names are dropped until a file answers. `a.b.*`
+ * is every file of the package folder. A name that no file answers to (the JDK, libraries) has no file. Classes
+ * of the same package need no import: they are not seen.
+ */
+export function resolveJava(spec: string, from: string, files: ReadonlySet<string>): string[] {
+  const index = javaIndexOf(files);
+  const wildcard = spec.endsWith(".*");
+  const name = wildcard ? spec.slice(0, -2) : spec;
+  const segments = name.split(".");
+  // a class first, then the classes a static member import reaches through
+  for (let keep = segments.length; keep >= 2; keep--) {
+    const hits = index.classes.get(segments.slice(0, keep).join("."));
+    const file = hits ? nearest(hits, from) : undefined;
+    if (file) return [file];
+  }
+  return wildcard ? (index.packages.get(name) ?? []) : [];
+}

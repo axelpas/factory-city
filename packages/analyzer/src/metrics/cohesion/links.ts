@@ -32,12 +32,16 @@ function bySharedDeclaration({ units, declared }: Declarations, uf: UnionFind): 
 }
 
 /** 3. Methods of one class: calls between methods and shared fields, through `this.`. */
-function byClass({ units, classMembers }: Declarations, uf: UnionFind): void {
+function byClass({ units, classMembers }: Declarations, uf: UnionFind, cfg: CohesionConfig): void {
   const fieldUsers = new Map<string, number>();
   units.forEach((u, i) => {
     const cls = u.owner ? classMembers.get(u.owner) : undefined;
     if (!u.owner || !cls) return;
-    for (const member of u.selfTokens) {
+    // some languages use a member by its bare name; its own name does not count as a use of itself
+    const bare = cfg.bareMembers
+      ? [...u.tokens].filter((t) => cls.fields.has(t) || (cls.methods.has(t) && cls.methods.get(t) !== i))
+      : [];
+    for (const member of [...u.selfTokens, ...bare]) {
       const method = cls.methods.get(member);
       if (method !== undefined && method !== i) uf.union(i, method);
       if (cls.fields.has(member)) joinByKey(uf, fieldUsers, `${u.owner}.${member}`, i);
@@ -64,6 +68,6 @@ function byLeadingWord({ units }: Declarations, uf: UnionFind, cfg: CohesionConf
 export function linkUnits(d: Declarations, uf: UnionFind, cfg: CohesionConfig): void {
   byReference(d, uf);
   bySharedDeclaration(d, uf);
-  byClass(d, uf);
+  byClass(d, uf, cfg);
   byLeadingWord(d, uf, cfg);
 }

@@ -59,12 +59,16 @@ export interface ImportsConfig {
 export interface ModulesConfig {
   statements: Array<{
     nodeType: string;
+    /** The field holding the module; empty when the module is a child of the type `moduleType` (Java). */
     moduleField: string;
+    moduleType?: string;
+    /** A child of this type means every module of the package is imported (Java `.*`): `.*` is added to the name. */
+    wildcardType?: string;
     /** Field with the names imported from the module: each may be a module of its own (`from a import b`). */
     namesField?: string;
   }>;
   /** How the names are turned into files of the project (see `resolve/modules.ts`). */
-  resolver: "python" | "go";
+  resolver: "python" | "go" | "java";
 }
 
 export interface CohesionConfig {
@@ -101,6 +105,13 @@ export interface CohesionConfig {
     structNode: string;
     fieldNode: string;
   };
+  /**
+   * True when a method may use the fields and the methods of its class by their bare name, without the self object
+   * (Java, Kotlin): a name the method uses that is a member of its class counts as a use.
+   */
+  bareMembers?: boolean;
+  /** Fields whose names sit in declarators (Java `int a, b;`): the field holding them, then the field holding the name. */
+  fieldDeclarators?: { field: string; nameField: string };
   /** Declarations holding specs that each declare names (Go: `const_declaration` holds `const_spec`s). */
   specDeclarations?: Record<string, string>;
   barrelStatements: string[];

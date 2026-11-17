@@ -111,6 +111,13 @@ function addClass(node: Node, name: string, d: Declarations, cfg: CohesionConfig
       continue;
     }
     const member = raw ? unwrap(raw, cfg) : undefined;
+    if (member && cfg.fieldDeclarators && cfg.fields.includes(member.type)) {
+      for (const declarator of member.childrenForFieldName(cfg.fieldDeclarators.field)) {
+        const field = declarator?.childForFieldName(cfg.fieldDeclarators.nameField)?.text;
+        if (field) members.fields.add(field);
+      }
+      continue;
+    }
     const memberName = member?.childForFieldName("name")?.text;
     if (!member || !memberName) continue;
     if (cfg.methods.includes(member.type) && memberName !== cfg.constructorName) {
