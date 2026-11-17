@@ -1,6 +1,6 @@
 import { posix } from "node:path";
 import { languageForPath } from "../languages/index.js";
-import { resolveGo, resolveJava, resolvePython } from "./modules.js";
+import { resolveCsharp, resolveGo, resolveJava, resolvePython } from "./modules.js";
 import { dirOf } from "./paths.js";
 import type { Pkg, ResolveContext, TsConfig } from "./types.js";
 
@@ -54,6 +54,7 @@ export function resolveImportAll(spec: string, from: string, ctx: ResolveContext
   const resolver = languageForPath(from)?.modules?.resolver;
   if (resolver === "go") return resolveGo(spec, ctx);
   if (resolver === "java") return resolveJava(spec, from, ctx.files);
+  if (resolver === "csharp") return resolveCsharp(spec, ctx);
   const one = resolveImport(spec, from, ctx);
   return one ? [one] : [];
 }

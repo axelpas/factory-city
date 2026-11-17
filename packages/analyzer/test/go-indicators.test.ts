@@ -42,6 +42,7 @@ const ctx = (goModules: Array<[string, string]>): ResolveContext => ({
   configs: new Map(),
   packages: new Map(),
   goModules: new Map(goModules),
+  namespaces: new Map(),
 });
 
 it("go coupling > resolves an import path to the files of the package folder, tests left out", () => {

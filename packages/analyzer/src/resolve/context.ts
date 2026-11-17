@@ -89,10 +89,19 @@ async function loadGoModules(paths: readonly string[], read: Reader): Promise<Ma
   return modules;
 }
 
+/** The files that declare each name, from what each file declares. */
+function namespacesOf(declares: ReadonlyMap<string, string[]>): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const [file, names] of declares)
+    for (const name of new Set(names)) out.set(name, [...(out.get(name) ?? []), file].sort());
+  return out;
+}
+
 export async function loadResolveContext(
   entryPaths: readonly string[],
   files: ReadonlySet<string>,
   read: Reader,
+  declares: ReadonlyMap<string, string[]> = new Map(),
 ): Promise<ResolveContext> {
   const usable = entryPaths.filter(
     (p) =>
@@ -115,5 +124,6 @@ export async function loadResolveContext(
     configs,
     packages: await loadPackages(usable, load),
     goModules: await loadGoModules(usable, read),
+    namespaces: namespacesOf(declares),
   };
 }

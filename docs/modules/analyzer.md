@@ -29,8 +29,8 @@ Decisions: `decisions/2026-11-14-parsing-web-tree-sitter.md`, `decisions/2026-11
 
 | Tier | Languages | What is measured |
 |---|---|---|
-| 1 | TypeScript, TSX, JavaScript, Python, Go, Java | Size, complexity, nesting, coupling, cohesion, shortcuts and security signals: every indicator |
-| 2 | C#, C, C++ (and `.h` headers, read with the C++ grammar), Rust, PHP, Ruby, Kotlin, Swift | Size, complexity, nesting, and the shortcuts the configuration lists. The other indicators are covered one language at a time (#60). |
+| 1 | TypeScript, TSX, JavaScript, Python, Go, Java, C# | Size, complexity, nesting, coupling, cohesion, shortcuts and security signals: every indicator |
+| 2 | C, C++ (and `.h` headers, read with the C++ grammar), Rust, PHP, Ruby, Kotlin, Swift | Size, complexity, nesting, and the shortcuts the configuration lists. The other indicators are covered one language at a time (#60). |
 | 3 | Any other text file, with `--all` | Lines (`loc`) and the git metrics only |
 
 A language is Tier 1 exactly when it has every indicator (a test checks it). Coverage by indicator, as `factory-city languages` prints it:
@@ -40,12 +40,13 @@ A language is Tier 1 exactly when it has every indicator (a test checks it). Cov
 | TypeScript, TSX, JavaScript | yes | yes | full set | yes |
 | Python | yes | yes | lint, type-checker, skipped tests, empty except | yes |
 | Java | yes (explicit imports only) | yes (bare names count) | lint, disabled tests, empty catch | yes |
+| C# | yes (by namespace, from the files that declare it) | yes (bare names count) | lint, nullable opt-out, ignored tests, empty catch | yes |
 | Go | yes (a package is a folder) | yes (methods by receiver) | lint, skipped tests, empty error check | yes |
-| C#, C, C++, Rust, PHP, Ruby, Kotlin, Swift | unavailable | unavailable | lint-disable markers, some skipped tests and empty catches | unavailable |
+| C, C++, Rust, PHP, Ruby, Kotlin, Swift | unavailable | unavailable | lint-disable markers, some skipped tests and empty catches | unavailable |
 
 `factory-city languages` prints the list. A metric a tier does not have is absent from the snapshot: unavailable, never zero. A file with syntax errors is still measured, and the manifest counts such files in a warning.
 
-Known limits of Tier 2: a Python docstring is a string, so it counts as code; Python module names are matched against the project's files by name (the closest file wins, a project module named like a standard-library one is linked), and a Python class's fields are the members its `__init__` sets; a Go import links to the files of the package's folder (through `go.mod`, else by the end of the path) and counts once in `imports_out`, a Go method belongs to the type of its receiver, and a Go `if err != nil {}` stands for the empty catch; a Java class of the same package needs no import, so it is not linked, and a wildcard import links the files of the package folder; a `default` clause counts as a branch in the languages whose grammar gives it the same node as a `case`; Ruby blocks add nesting but are not counted as functions; test files are recognized by name only (`*_test.go`, `test_*.py`, `*Test.java`, `*Tests.cs`, `*_spec.rb`, `*Spec.kt` and the `test` folders).
+Known limits of Tier 2: a Python docstring is a string, so it counts as code; Python module names are matched against the project's files by name (the closest file wins, a project module named like a standard-library one is linked), and a Python class's fields are the members its `__init__` sets; a Go import links to the files of the package's folder (through `go.mod`, else by the end of the path) and counts once in `imports_out`, a Go method belongs to the type of its receiver, and a Go `if err != nil {}` stands for the empty catch; a Java class of the same package needs no import, so it is not linked, and a wildcard import links the files of the package folder; a C# `using` links to every file that declares the namespace and counts once in `imports_out`, and a namespace the analyzed folder does not declare (the framework, packages) has no file; a `default` clause counts as a branch in the languages whose grammar gives it the same node as a `case`; Ruby blocks add nesting but are not counted as functions; test files are recognized by name only (`*_test.go`, `test_*.py`, `*Test.java`, `*Tests.cs`, `*_spec.rb`, `*Spec.kt` and the `test` folders).
 
 ## How to add a language
 

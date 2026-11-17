@@ -109,7 +109,7 @@
     "constructorName": "",
     "fields": ["field_declaration"],
     "fieldDeclarators": {
-      "field": "declarator",
+      "declaratorType": "variable_declarator",
       "nameField": "name"
     },
     "otherDeclarations": [],

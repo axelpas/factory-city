@@ -167,3 +167,17 @@ export function resolveJava(spec: string, from: string, files: ReadonlySet<strin
   }
   return wildcard ? (index.packages.get(name) ?? []) : [];
 }
+
+/**
+ * The files a C# `using` stands for: the files that declare the namespace it names. `using static A.B.C` names a
+ * class, so the last names are dropped until a namespace answers. A namespace no file declares (the framework,
+ * packages) has no file.
+ */
+export function resolveCsharp(spec: string, ctx: ResolveContext): string[] {
+  const segments = spec.split(".");
+  for (let keep = segments.length; keep >= 1; keep--) {
+    const files = ctx.namespaces.get(segments.slice(0, keep).join("."));
+    if (files) return files;
+  }
+  return [];
+}

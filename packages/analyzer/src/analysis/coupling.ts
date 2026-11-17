@@ -1,6 +1,11 @@
 import { languageForPath } from "../languages/index.js";
-import { dirOf } from "../resolve/paths.js";
-import { buildImportGraph, folderCohesion, loadResolveContext } from "../resolve.js";
+import {
+  buildImportGraph,
+  folderCohesion,
+  loadResolveContext,
+  type ResolveContext,
+  resolveImportAll,
+} from "../resolve.js";
 import { folderReason } from "../select.js";
 import type { Source } from "../source/types.js";
 import type { FileValues } from "./types.js";
@@ -12,6 +17,7 @@ export async function addCoupling(
   attributesByPath: FileValues,
   importsByFile: Map<string, string[]>,
   folderAttributes: FileValues,
+  declaresByFile: Map<string, string[]> = new Map(),
 ): Promise<Array<[string, string]>> {
   if (importsByFile.size === 0) return [];
   const entries = new Map(
@@ -27,13 +33,30 @@ export async function addCoupling(
     }
   };
   const files = new Set(attributesByPath.keys());
-  const ctx = await loadResolveContext(entryPaths, files, reader);
+  const ctx = await loadResolveContext(entryPaths, files, reader, declaresByFile);
   const graph = buildImportGraph(importsByFile, ctx);
   addImportCounts(graph, attributesByPath);
+  countPackages(importsByFile, ctx, attributesByPath);
   addFolderCohesion(graph, folderAttributes);
   const links: Array<[string, string]> = [];
   for (const [file, targets] of graph) for (const target of targets) links.push([file, target]);
   return links;
+}
+
+/**
+ * An import that names a group of files (a Go package, a C# namespace) counts once in `imports_out`, however many
+ * files the group has: the languages that say so with `granularity: "package"`.
+ */
+function countPackages(
+  importsByFile: ReadonlyMap<string, string[]>,
+  ctx: ResolveContext,
+  attributesByPath: FileValues,
+): void {
+  for (const [file, specs] of importsByFile) {
+    const values = attributesByPath.get(file);
+    if (!values || languageForPath(file)?.modules?.granularity !== "package") continue;
+    values.imports_out = new Set(specs.filter((s) => resolveImportAll(s, file, ctx).length > 0)).size;
+  }
 }
 
 type Graph = ReturnType<typeof buildImportGraph>;
@@ -44,11 +67,7 @@ function addImportCounts(graph: Graph, attributesByPath: FileValues): void {
   for (const [file, targets] of graph) {
     const values = attributesByPath.get(file);
     if (!values) continue;
-    // a Go import is a package, which is a folder: it counts once, however many files it has
-    values.imports_out =
-      languageForPath(file)?.modules?.resolver === "go"
-        ? new Set([...targets].map(dirOf)).size
-        : targets.size;
+    values.imports_out = targets.size;
     values.imports_in = incoming.get(file) ?? 0;
   }
 }

@@ -99,6 +99,17 @@ function assignedName(statement: Node, cfg: CohesionConfig): string | undefined 
   return name?.type === "identifier" ? name.text : undefined;
 }
 
+/** The field names a member declares through declarators (`int a, b;`), when the language writes them so. */
+function declaredFields(member: Node, cfg: CohesionConfig): string[] {
+  const d = cfg.fieldDeclarators;
+  if (!d) return [];
+  const holder = d.through ? member.namedChildren.find((c) => c?.type === d.through) : member;
+  return (holder?.namedChildren ?? [])
+    .filter((c) => c?.type === d.declaratorType)
+    .map((c) => c?.childForFieldName(d.nameField)?.text)
+    .filter((n): n is string => n !== undefined);
+}
+
 /** A class: its methods become units, its fields are kept to link the methods that share them. */
 function addClass(node: Node, name: string, d: Declarations, cfg: CohesionConfig): void {
   d.declared.add(name);
@@ -111,11 +122,9 @@ function addClass(node: Node, name: string, d: Declarations, cfg: CohesionConfig
       continue;
     }
     const member = raw ? unwrap(raw, cfg) : undefined;
-    if (member && cfg.fieldDeclarators && cfg.fields.includes(member.type)) {
-      for (const declarator of member.childrenForFieldName(cfg.fieldDeclarators.field)) {
-        const field = declarator?.childForFieldName(cfg.fieldDeclarators.nameField)?.text;
-        if (field) members.fields.add(field);
-      }
+    const declared = member && cfg.fields.includes(member.type) ? declaredFields(member, cfg) : [];
+    if (declared.length > 0) {
+      for (const field of declared) members.fields.add(field);
       continue;
     }
     const memberName = member?.childForFieldName("name")?.text;
@@ -206,6 +215,26 @@ function addDeclaration(top: Node, d: Declarations, cfg: CohesionConfig): void {
   else if (cfg.otherDeclarations.includes(node.type) && name) d.declared.add(name);
 }
 
+/** Reads a list of top-level nodes; the members of a container (a namespace) are read as top level too. */
+function readTop(nodes: ReadonlyArray<Node | null>, d: Declarations, cfg: CohesionConfig): void {
+  for (const top of nodes) {
+    if (!top || top.type === "comment") continue;
+    if (cfg.containers?.includes(top.type)) {
+      readTop(
+        (top.childForFieldName("body") ?? top).namedChildren.filter(
+          (c) => c?.id !== top.childForFieldName("name")?.id,
+        ),
+        d,
+        cfg,
+      );
+      continue;
+    }
+    d.statements++;
+    if (!isBarrelStatement(top, cfg)) d.nonBarrel++;
+    addDeclaration(top, d, cfg);
+  }
+}
+
 /** Reads the top level of a file: its functions and methods, and the names it declares. */
 export function readDeclarations(root: Node, cfg: CohesionConfig): Declarations {
   const d: Declarations = {
@@ -215,11 +244,6 @@ export function readDeclarations(root: Node, cfg: CohesionConfig): Declarations 
     statements: 0,
     nonBarrel: 0,
   };
-  for (const top of root.namedChildren) {
-    if (!top || top.type === "comment") continue;
-    d.statements++;
-    if (!isBarrelStatement(top, cfg)) d.nonBarrel++;
-    addDeclaration(top, d, cfg);
-  }
+  readTop(root.namedChildren, d, cfg);
   return d;
 }

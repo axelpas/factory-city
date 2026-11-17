@@ -84,6 +84,7 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
       measured.attributesByPath,
       measured.importsByFile,
       folderAttributes,
+      measured.declaresByFile,
     );
     const history = await addHistory(opts, repo, measured.attributesByPath, warnings);
 

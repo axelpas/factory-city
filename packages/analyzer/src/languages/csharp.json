@@ -1,7 +1,7 @@
 {
   "id": "csharp",
   "label": "C#",
-  "tier": 2,
+  "tier": 1,
   "grammar": "c-sharp",
   "extensions": [".cs"],
   "comment": ["comment"],
@@ -49,7 +49,7 @@
     {
       "kind": "lint_disable",
       "type": "comment",
-      "pattern": "ReSharper\\s+disable|NOSONAR"
+      "pattern": "ReSharper\\s+disable|NOSONAR|//\\s*noinspection"
     },
     {
       "kind": "lint_disable",
@@ -58,10 +58,183 @@
       "pattern": "warning\\s+disable"
     },
     {
+      "kind": "lint_disable",
+      "type": "node",
+      "nodeType": "attribute",
+      "pattern": "^(System\\.Diagnostics\\.CodeAnalysis\\.)?SuppressMessage\\b"
+    },
+    {
+      "kind": "type_ignore",
+      "type": "node",
+      "nodeType": "preproc_nullable",
+      "pattern": "disable"
+    },
+    {
+      "kind": "skipped_test",
+      "type": "node",
+      "nodeType": "attribute",
+      "pattern": "^(Ignore|Skip)(Attribute)?\\b"
+    },
+    {
+      "kind": "skipped_test",
+      "type": "node",
+      "nodeType": "attribute",
+      "pattern": "^(Fact|Theory|Test|TestCase)\\(.*\\bSkip\\s*=\\s*"
+    },
+    {
       "kind": "empty_catch",
       "type": "emptyBlock",
       "nodeType": "catch_clause",
       "bodyField": "body"
+    }
+  ],
+  "modules": {
+    "statements": [
+      {
+        "nodeType": "using_directive",
+        "moduleField": "",
+        "moduleType": "qualified_name"
+      },
+      {
+        "nodeType": "using_directive",
+        "moduleField": "",
+        "moduleType": "identifier"
+      }
+    ],
+    "resolver": "csharp",
+    "granularity": "package",
+    "declarations": [
+      {
+        "nodeType": "namespace_declaration",
+        "nameField": "name"
+      },
+      {
+        "nodeType": "file_scoped_namespace_declaration",
+        "nameField": "name"
+      }
+    ]
+  },
+  "cohesion": {
+    "wrappers": [],
+    "containers": ["namespace_declaration", "file_scoped_namespace_declaration"],
+    "functionDeclarations": [],
+    "variableDeclarations": [],
+    "functionValues": [],
+    "classDeclarations": [
+      "class_declaration",
+      "interface_declaration",
+      "struct_declaration",
+      "record_declaration"
+    ],
+    "methods": ["method_declaration"],
+    "constructorName": "",
+    "fields": ["field_declaration", "property_declaration"],
+    "fieldDeclarators": {
+      "through": "variable_declaration",
+      "declaratorType": "variable_declarator",
+      "nameField": "name"
+    },
+    "otherDeclarations": [],
+    "identifiers": ["identifier"],
+    "memberExpression": "member_access_expression",
+    "memberObjectField": "expression",
+    "memberPropertyField": "name",
+    "selfObject": "this",
+    "bareMembers": true,
+    "barrelStatements": ["using_directive", "namespace_declaration", "file_scoped_namespace_declaration"],
+    "minStemLength": 4
+  },
+  "security": [
+    {
+      "kind": "dynamic_code",
+      "type": "call",
+      "nodeType": "invocation_expression",
+      "pattern": "^(Microsoft\\.CodeAnalysis\\.CSharp\\.Scripting\\.)?CSharpScript\\.(EvaluateAsync|RunAsync)"
+    },
+    {
+      "kind": "command_exec",
+      "type": "call",
+      "nodeType": "invocation_expression",
+      "pattern": "^(System\\.Diagnostics\\.)?Process\\.Start$",
+      "argsPattern": "^\\(\\s*\"(cmd(\\.exe)?|sh|bash|zsh|powershell|pwsh)\""
+    },
+    {
+      "kind": "command_exec",
+      "type": "node",
+      "nodeType": "assignment_expression",
+      "pattern": "\\bUseShellExecute\\s*=\\s*true$"
+    },
+    {
+      "kind": "unsafe_deserialization",
+      "type": "node",
+      "nodeType": "object_creation_expression",
+      "pattern": "^new\\s+(BinaryFormatter|NetDataContractSerializer|SoapFormatter|LosFormatter|ObjectStateFormatter)\\("
+    },
+    {
+      "kind": "unsafe_deserialization",
+      "type": "node",
+      "nodeType": "member_access_expression",
+      "pattern": "^TypeNameHandling\\.(All|Auto|Objects|Arrays)$"
+    },
+    {
+      "kind": "unsafe_html",
+      "type": "call",
+      "nodeType": "invocation_expression",
+      "pattern": "^(Html|HtmlHelper)\\.Raw$"
+    },
+    {
+      "kind": "unsafe_html",
+      "type": "node",
+      "nodeType": "object_creation_expression",
+      "pattern": "^new\\s+HtmlString\\("
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "variable_declarator",
+      "pattern": "^\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*=\\s*@?\"[^\"\\s${}]{8,}\"$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "assignment_expression",
+      "pattern": "^[\\w.]*\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*=\\s*@?\"[^\"\\s${}]{8,}\"$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string_literal",
+      "pattern": "^\"(ghp_[A-Za-z0-9]{30,}|github_pat_\\w{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[\\w-]{10,})"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string_literal",
+      "pattern": "BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "node",
+      "nodeType": "assignment_expression",
+      "pattern": "(ServerCertificateValidationCallback|ServerCertificateCustomValidationCallback)\\s*\\+?=.*=>\\s*true$"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "node",
+      "nodeType": "member_access_expression",
+      "pattern": "DangerousAcceptAnyServerCertificateValidator$"
+    },
+    {
+      "kind": "sql_concat",
+      "type": "node",
+      "nodeType": "object_creation_expression",
+      "pattern": "^new\\s+\\w*(Sql|Odbc|OleDb|Npgsql|MySql|Oracle|Sqlite)Command\\(\\s*(\\$@?\"|@?\"[^\"]*\"\\s*\\+|string\\.Format\\()"
+    },
+    {
+      "kind": "sql_concat",
+      "type": "node",
+      "nodeType": "invocation_expression",
+      "pattern": "\\.(ExecuteSqlRaw|ExecuteSqlCommand|FromSqlRaw|SqlQuery|Query|Execute|ExecuteScalar|QueryAsync|ExecuteAsync)\\(\\s*(\\$@?\"|@?\"[^\"]*\"\\s*\\+|string\\.Format\\()"
     }
   ]
 }

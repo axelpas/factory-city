@@ -9,6 +9,8 @@ export interface FileMetrics {
   syntaxErrors: boolean;
   /** Module specifiers imported by the file, as written (`./a`, `@scope/pkg`). Empty for languages without coupling support. */
   imports: string[];
+  /** Names the file declares that others import, in the languages where that is not the file's path (C# namespaces). */
+  declares?: string[];
   /** Declaration names of each cohesion group, when the file has several: the report names groups by them. */
   groups?: string[][];
 }
@@ -126,6 +128,7 @@ export function computeMetrics(
       metrics,
       syntaxErrors: tree.rootNode.hasError,
       imports: walker.imports,
+      ...(walker.declares.length > 0 ? { declares: walker.declares } : {}),
       ...(cohesion.groups ? { groups: cohesion.groups } : {}),
     };
   } finally {

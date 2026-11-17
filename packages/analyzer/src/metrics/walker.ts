@@ -37,6 +37,7 @@ export class Walker {
   maxNesting = 0;
   readonly commentRanges = new Map<number, Array<[number, number]>>();
   readonly imports: string[] = [];
+  readonly declares: string[] = [];
   readonly shortcuts = new Map<string, number>();
   /** Security signals by kind: how many places, never what they say. */
   readonly security = new Map<string, number>();
@@ -124,11 +125,24 @@ export class Walker {
    * Each name taken from a module is added as a module of its own (`c.d`): the resolver keeps the ones that exist.
    */
   private collectModules(node: Node): void {
-    const statement = this.lang.modules?.statements.find((s) => s.nodeType === node.type);
-    if (!statement) return;
+    const declaration = this.lang.modules?.declarations?.find((d) => d.nodeType === node.type);
+    const declared = declaration && node.childForFieldName(declaration.nameField)?.text;
+    if (declared) this.declares.push(declared.replace(/\s+/g, ""));
+    // several rules may read one statement: each reads the kind of module it names
+    for (const statement of this.lang.modules?.statements.filter((s) => s.nodeType === node.type) ?? [])
+      this.collectStatement(node, statement);
+  }
+
+  private collectStatement(
+    node: Node,
+    statement: NonNullable<LanguageConfig["modules"]>["statements"][number],
+  ) {
     const modules = (
       statement.moduleType
-        ? node.namedChildren.filter((c) => c?.type === statement.moduleType)
+        ? node.namedChildren.filter(
+            // the alias of `using A = B.C;` is the field `name`, not a module
+            (c) => c?.type === statement.moduleType && c.id !== node.childForFieldName("name")?.id,
+          )
         : node.childrenForFieldName(statement.moduleField)
     ).filter((n): n is Node => n !== null && n !== undefined);
     const wildcard =

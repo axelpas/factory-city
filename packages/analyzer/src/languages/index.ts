@@ -68,7 +68,11 @@ export interface ModulesConfig {
     namesField?: string;
   }>;
   /** How the names are turned into files of the project (see `resolve/modules.ts`). */
-  resolver: "python" | "go" | "java";
+  resolver: "python" | "go" | "java" | "csharp";
+  /** `package` when an import names a group of files (a Go package, a C# namespace): it counts once in `imports_out`. */
+  granularity?: "package";
+  /** Nodes that declare a name other files can import (a C# namespace): the node type and the field with the name. */
+  declarations?: Array<{ nodeType: string; nameField: string }>;
 }
 
 export interface CohesionConfig {
@@ -110,8 +114,13 @@ export interface CohesionConfig {
    * (Java, Kotlin): a name the method uses that is a member of its class counts as a use.
    */
   bareMembers?: boolean;
-  /** Fields whose names sit in declarators (Java `int a, b;`): the field holding them, then the field holding the name. */
-  fieldDeclarators?: { field: string; nameField: string };
+  /**
+   * Fields whose names sit in declarators (Java `int a, b;`): the type of the declarator, the field holding the
+   * name, and the child that holds the declarators when they are not direct children of the member (C#).
+   */
+  fieldDeclarators?: { declaratorType: string; nameField: string; through?: string };
+  /** Nodes that hold declarations of the top level without being one (a C# namespace): their members are read as top level. */
+  containers?: string[];
   /** Declarations holding specs that each declare names (Go: `const_declaration` holds `const_spec`s). */
   specDeclarations?: Record<string, string>;
   barrelStatements: string[];

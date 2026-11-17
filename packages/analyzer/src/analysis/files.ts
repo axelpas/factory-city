@@ -14,6 +14,8 @@ type Candidate = ReturnType<typeof selectEntries>[number];
 export interface MeasuredFiles {
   attributesByPath: FileValues;
   importsByFile: Map<string, string[]>;
+  /** Names each file declares that others import (C# namespaces), for the files that declare any. */
+  declaresByFile: Map<string, string[]>;
   groupNames: Map<string, string[][]>;
   /** The metric ids that at least one file has. */
   present: Set<string>;
@@ -60,6 +62,7 @@ function record(
   out.analyzedEntries.push(entry);
   if (entry.blobId) out.blobs.set(entry.path, entry.blobId);
   if (language?.imports || language?.modules) out.importsByFile.set(entry.path, result.imports);
+  if (result.declares) out.declaresByFile.set(entry.path, result.declares);
   if (result.syntaxErrors) out.syntaxErrorFiles++;
   if (result.groups) out.groupNames.set(entry.path, result.groups);
   const values: Record<string, number> = { ...result.metrics, is_test: isTest ? 1 : 0 };
@@ -79,6 +82,7 @@ export async function measureFiles(
   const out: MeasuredFiles = {
     attributesByPath: new Map(),
     importsByFile: new Map(),
+    declaresByFile: new Map(),
     groupNames: new Map(),
     present: new Set(),
     blobs: new Map(),
