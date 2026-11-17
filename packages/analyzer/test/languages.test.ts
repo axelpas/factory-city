@@ -39,17 +39,14 @@ const TIER2: Array<[id: string, file: string, rloc: number]> = [
   ["swift", "Sample.swift", 21],
 ];
 
-/** The languages that are measured on every indicator, hence Tier 1; the others are still Tier 2. */
-const FULL = ["python", "go", "java", "csharp", "kotlin", "rust", "php", "ruby", "c", "cpp", "swift"];
-
 it("tiers > a language is Tier 1 exactly when every indicator is covered", () => {
   for (const l of LANGUAGES) expect(isFullyCovered(l) ? 1 : 2, l.id).toBe(l.tier);
 });
 
 it.each(TIER2)("%s: measures the sample program", async (id, file, rloc) => {
-  const { language, metrics, syntaxErrors, imports } = await measureFile(file);
+  const { language, metrics, syntaxErrors } = await measureFile(file);
   expect(language.id).toBe(id);
-  expect(language.tier).toBe(FULL.includes(id) ? 1 : 2);
+  expect(language.tier).toBe(1);
   expect(syntaxErrors).toBe(false);
   expect(metrics.comment_lines).toBe(1);
   expect(metrics.rloc).toBe(rloc);
@@ -62,12 +59,8 @@ it.each(TIER2)("%s: measures the sample program", async (id, file, rloc) => {
   expect(metrics.max_nesting_level).toBe(2);
   expect(metrics.escape_lint_disable).toBe(1);
   expect(metrics.escape_hatches).toBe(1);
-  // a language without coupling or cohesion configured: unavailable, not zero
-  if (!FULL.includes(id)) {
-    expect(imports).toEqual([]);
-    expect(metrics.cohesion_groups).toBeUndefined();
-    expect(metrics.lack_of_cohesion).toBeUndefined();
-  }
+  // every language has coupling and cohesion configured
+  expect(metrics.cohesion_groups).toBeDefined();
 });
 
 it("Tier 2 languages > covers the eleven languages of the specification", () => {
@@ -110,8 +103,12 @@ it("language configurations > give each extension to one language only", () => {
 const own = LANGUAGES.filter((l) => !l.extends).map((l) => [l.id, l] as const);
 it.each(own)("%s: names only node types its grammar has", async (_id, l) => {
   const grammar = await loadGrammar(l.grammar);
+  // the TypeScript configuration carries rules for the languages that inherit it (JSX, JavaScript class fields)
+  const heirs = l.id === "typescript" ? await Promise.all(["tsx", "javascript"].map(loadGrammar)) : [];
   const known = (type: string) =>
-    grammar.idForNodeType(type, true) !== null || grammar.idForNodeType(type, false) !== null;
+    [grammar, ...heirs].some(
+      (g) => g.idForNodeType(type, true) !== null || g.idForNodeType(type, false) !== null,
+    );
   const named = [
     ...l.comment,
     ...l.functions,
@@ -120,8 +117,50 @@ it.each(own)("%s: names only node types its grammar has", async (_id, l) => {
     ...l.logical.nodeTypes,
     ...Object.keys(l.nestingExceptParent),
     ...Object.values(l.nestingExceptParent).flat(),
-    ...l.shortcuts.flatMap((rule) => (rule.nodeType ? [rule.nodeType] : [])),
-  ];
+    ...[...l.shortcuts, ...l.security].flatMap((rule) =>
+      [rule.nodeType, rule.bodyType, ...(rule.emptyTypes ?? [])].filter((t): t is string => t !== undefined),
+    ),
+    // the rest of a language's configuration names node types too: a misspelled one counts nothing, silently
+    ...(l.modules?.statements.flatMap((s) => [s.nodeType, s.moduleType, s.wildcardType]) ?? []),
+    ...(l.modules?.declarations?.map((d) => d.nodeType) ?? []),
+    ...(l.modules?.calls ? [l.modules.calls.nodeType] : []),
+    ...(l.cohesion
+      ? [
+          ...l.cohesion.wrappers,
+          ...(l.cohesion.containers ?? []),
+          ...l.cohesion.functionDeclarations,
+          ...l.cohesion.classDeclarations,
+          ...l.cohesion.methods,
+          ...l.cohesion.fields,
+          ...l.cohesion.otherDeclarations,
+          ...l.cohesion.identifiers,
+          ...l.cohesion.barrelStatements,
+          ...l.cohesion.memberExpression.split("|"),
+          ...(l.cohesion.selfTokenTypes ?? []),
+          ...(l.cohesion.structNodes ?? []),
+          ...(l.cohesion.declaratorDeclarations ?? []),
+          ...Object.keys(l.cohesion.specDeclarations ?? {}),
+          ...Object.values(l.cohesion.specDeclarations ?? {}),
+          ...(l.cohesion.classBodyType ? [l.cohesion.classBodyType] : []),
+          ...(l.cohesion.fieldDeclarators
+            ? [l.cohesion.fieldDeclarators.declaratorType, l.cohesion.fieldDeclarators.through ?? ""]
+            : []),
+          ...(l.cohesion.constructorParams
+            ? [l.cohesion.constructorParams.constructor, l.cohesion.constructorParams.parameter]
+            : []),
+          ...(l.cohesion.assignments ? [l.cohesion.assignments.statement, l.cohesion.assignments.node] : []),
+          ...(l.cohesion.receivers
+            ? [
+                l.cohesion.receivers.methodNode,
+                l.cohesion.receivers.typeDeclaration,
+                l.cohesion.receivers.typeSpec,
+                l.cohesion.receivers.structNode,
+                l.cohesion.receivers.fieldNode,
+              ]
+            : []),
+        ]
+      : []),
+  ].filter((type): type is string => type !== undefined && type !== "");
   const unknown = [...new Set(named)].filter((type) => !known(type));
   expect(unknown).toEqual([]);
 });

@@ -186,3 +186,22 @@ it("swift security > never keeps what a secret says, and does not rate test file
     [],
   );
 });
+
+it("swift coupling > a system framework is not a folder of the project that has the same name", () => {
+  const c = ctx(["Sources/App/Network/Client.swift", "Sources/App/main.swift"]);
+  expect(resolveSwift("Network", c)).toEqual([]);
+  expect(resolveSwift("Security", ctx(["Security/Keys.swift"]))).toEqual([]);
+  expect(resolveSwift("Billing", ctx(["Billing/Invoice.swift"]))).toEqual(["Billing/Invoice.swift"]);
+});
+
+it("swift cohesion > the methods of an extension of a type declared elsewhere are not rated", async () => {
+  const { metrics } = await measure(
+    "extension Box {\n    func a() -> Int { return 1 }\n    func b() -> Int { return 2 }\n}\n",
+  );
+  expect(metrics.cohesion_groups).toBeUndefined();
+});
+
+it("swift security > a private key block is found in a multi-line string", async () => {
+  const code = 'let k = """\n-----BEGIN RSA PRIVATE KEY-----\nabc\n"""\n';
+  expect((await decl(code)).security_hardcoded_secret).toBe(1);
+});

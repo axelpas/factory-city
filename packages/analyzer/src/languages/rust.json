@@ -175,6 +175,12 @@
       "nodeType": "call_expression",
       "pattern": "(^|::|\\.)(query|query_as|query_scalar|execute|prepare|raw_sql|batch_execute|simple_query)$",
       "argsPattern": "^\\(\\s*(&\\s*)?(format!\\s*\\(|\"[^\"]*\"\\s*\\.to_(string|owned)\\(\\)\\s*\\+|String::from\\(\"[^\"]*\"\\)\\s*\\+)"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "assignment_expression",
+      "pattern": "^[\\w.]*\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*=\\s*\"(?![a-z_]+\")(?![A-Z_]+\")(?!\\S*/)[^\"\\s${}]{8,}\";?$"
     }
   ]
 }

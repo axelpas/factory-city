@@ -198,7 +198,7 @@ The contracts are described in [`docs/data-model.md`](docs/data-model.md) and va
 
 ## Extending it
 
-- **A language:** one grammar, one JSON file (`packages/analyzer/src/languages/<id>.json`: which syntax nodes count as functions, branches, comments, shortcuts), one fixture. No language-specific code. Steps in [`docs/modules/analyzer.md`](docs/modules/analyzer.md#how-to-add-a-language).
+- **A language:** one grammar, one JSON file (`packages/analyzer/src/languages/<id>.json`: which syntax nodes count as functions, branches, comments, shortcuts), one fixture. A language whose imports or methods need more than node types gets a small resolver, not a fork of the engine. Steps in [`docs/modules/analyzer.md`](docs/modules/analyzer.md#how-to-add-a-language).
 - **A metric:** declare it in the registry (`packages/schema/src/registry.ts`: definition, computation, why it matters, unit, direction, data level, limits). The viewer builds its pickers and its help from the registry.
 - **A preset:** a JSON file in `packages/viewer/src/presets/` naming the area, height, color and optional marker, and the question it answers.
 - **A theme:** a token file in `packages/viewer/src/themes/` (palette, ramps, light, camera, renderer `solid`, `voxel` or `wireframe`). No literal color or font anywhere else.

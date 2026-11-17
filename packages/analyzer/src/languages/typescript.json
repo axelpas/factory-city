@@ -144,7 +144,7 @@
       "kind": "unsafe_html",
       "type": "node",
       "nodeType": "assignment_expression",
-      "pattern": "\\.(innerHTML|outerHTML)\\s*\\+?=(?!\\s*(\"[^\"]*\"|'[^']*'|`[^`$]*`)\\s*;?$)"
+      "pattern": "\\.(innerHTML|outerHTML)\\s*=(?!\\s*(\"[^\"]*\"|'[^']*'|`[^`$]*`)\\s*;?$)"
     },
     {
       "kind": "unsafe_html",
@@ -209,7 +209,7 @@
       "kind": "unsafe_html",
       "type": "node",
       "nodeType": "augmented_assignment_expression",
-      "pattern": "\\.(innerHTML|outerHTML)\\s*\\+="
+      "pattern": "\\.(innerHTML|outerHTML)\\s*\\+=(?!\\s*(\"[^\"]*\"|'[^']*'|`[^`$]*`)\\s*;?$)"
     }
   ]
 }

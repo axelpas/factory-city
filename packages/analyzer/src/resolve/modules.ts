@@ -255,15 +255,17 @@ export function resolveRust(spec: string, from: string, ctx: ResolveContext): st
     const [head, ...rest] = path.split("::");
     let found: string | undefined;
     if (head === "crate" || head === "self" || head === "super") {
-      const src = head === "crate" ? srcOf(dir) : head === "self" ? here : dir;
+      // `super` is the parent module: the folder of foo.rs, the folder above for mod.rs, none at the root of a crate
+      const parent = stem === "mod" ? dirOf(dir) : ["lib", "main"].includes(stem) ? undefined : dir;
+      const src = head === "crate" ? srcOf(dir) : head === "self" ? here : parent;
       if (src === undefined) continue;
-      const segments = head === "super" ? rest : rest;
+      const segments = rest;
       found =
         rustModuleFile(src, segments, ctx.files) ??
         (head === "crate" && segments.length > 0
           ? ["lib.rs", "main.rs"].map((r) => posix.join(src, r)).find((f) => ctx.files.has(f))
           : undefined) ??
-        (head === "super" ? parentModuleFile(dir, ctx.files) : undefined);
+        (head === "super" ? parentModuleFile(src, ctx.files) : undefined);
     } else if (head && ctx.rustCrates.has(head)) {
       const src = posix.join(ctx.rustCrates.get(head) as string, "src");
       found = rest.length > 0 ? rustModuleFile(src, rest, ctx.files) : undefined;
@@ -287,6 +289,26 @@ function srcOf(dir: string): string | undefined {
 /** The file of the module that holds the folder: `mod.rs`, `<folder>.rs`, or the crate root. */
 function parentModuleFile(dir: string, files: ReadonlySet<string>): string | undefined {
   return [`${dir}/mod.rs`, `${dir}.rs`, `${dir}/lib.rs`, `${dir}/main.rs`].find((f) => files.has(f));
+}
+
+const byBasename = new WeakMap<ReadonlySet<string>, Map<string, string[]>>();
+
+/** The files whose path is `path` or ends with `/path` (not the importer), through an index by file name built once. */
+function endingWith(files: ReadonlySet<string>, path: string, from: string): string[] {
+  let index = byBasename.get(files);
+  if (!index) {
+    index = new Map();
+    for (const f of files) {
+      const name = posix.basename(f);
+      const list = index.get(name);
+      if (list) list.push(f);
+      else index.set(name, [f]);
+    }
+    byBasename.set(files, index);
+  }
+  return (index.get(posix.basename(path)) ?? []).filter(
+    (f) => f !== from && (f === path || f.endsWith(`/${path}`)),
+  );
 }
 
 /** The top-level parts of a comma-separated list, braces kept whole. */
@@ -330,9 +352,10 @@ function phpUses(clause: string): string[] {
  */
 export function resolvePhp(spec: string, from: string, ctx: ResolveContext): string[] {
   if (spec.startsWith("req:")) {
-    const path = /['"]([^'"]+)['"]/.exec(spec)?.[1];
+    // only the path was kept (`__DIR__ . '/x.php'` gives `/x.php`)
+    const path = spec.slice(4);
     if (!path) return [];
-    const relative = posix.normalize(posix.join(dirOf(from), path.replace(/^\.\//, "")));
+    const relative = posix.normalize(posix.join(dirOf(from), path.replace(/^\.?\//, "")));
     const fromRoot = posix.normalize(path.replace(/^\.?\//, ""));
     return [relative, fromRoot].filter((f) => f !== from && ctx.files.has(f)).slice(0, 1);
   }
@@ -360,11 +383,19 @@ export function resolveRuby(spec: string, from: string, ctx: ResolveContext): st
     const file = posix.normalize(posix.join(dirOf(from), withExt(spec.slice(4))));
     return file !== from && ctx.files.has(file) ? [file] : [];
   }
-  const path = withExt(spec.slice(4).replace(/^\.?\//, ""));
-  const hits = [...ctx.files].filter((f) => f !== from && (f === path || f.endsWith(`/${path}`)));
-  const file = nearest(hits, from);
+  const name = spec.slice(4).replace(/^\.?\//, "");
+  // the standard library is not the project's, whatever a file of the project is called
+  if (!name.includes("/") && RUBY_STDLIB.has(name)) return [];
+  const path = withExt(name);
+  const file = nearest(endingWith(ctx.files, path, from), from);
   return file ? [file] : [];
 }
+
+const RUBY_STDLIB = new Set(
+  "set json yaml date time logger fileutils pathname securerandom digest open3 optparse erb csv uri forwardable singleton ostruct stringio tempfile timeout benchmark bigdecimal socket openssl zlib base64 English monitor observer pp prettyprint rational readline ripper strscan tmpdir weakref".split(
+    " ",
+  ),
+);
 
 /**
  * The file a C or C++ `#include` stands for. A quoted include is read from the folder of the file, then by the end of
@@ -379,8 +410,7 @@ export function resolveC(spec: string, from: string, ctx: ResolveContext): strin
     const near = posix.join(dirOf(from), path);
     if (near !== from && ctx.files.has(near)) return [near];
   } else if (!path.includes("/")) return [];
-  const hits = [...ctx.files].filter((f) => f !== from && (f === path || f.endsWith(`/${path}`)));
-  const file = nearest(hits, from);
+  const file = nearest(endingWith(ctx.files, path, from), from);
   return file ? [file] : [];
 }
 
@@ -391,12 +421,44 @@ export function resolveC(spec: string, from: string, ctx: ResolveContext): strin
  */
 export function resolveSwift(spec: string, ctx: ResolveContext): string[] {
   const module = spec.split(".")[0] ?? "";
-  if (!module) return [];
-  const inFolder = (f: string, folder: string) => f.startsWith(`${folder}/`) || f.includes(`/${folder}/`);
-  const swift = [...ctx.files].filter(
-    (f) => f.endsWith(".swift") && !/(^|\/)(Tests?|[A-Za-z]*Tests)\//.test(f),
-  );
-  const inSources = swift.filter((f) => inFolder(f, `Sources/${module}`));
-  if (inSources.length > 0) return inSources;
-  return swift.filter((f) => inFolder(f, module));
+  // a framework of the system is not a folder of the project, whatever the folder is called
+  if (!module || APPLE_MODULES.has(module)) return [];
+  const index = swiftIndexOf(ctx.files);
+  return index.sources.get(module) ?? index.folders.get(module) ?? [];
+}
+
+const APPLE_MODULES = new Set(
+  "Foundation UIKit AppKit SwiftUI Combine CoreData CoreGraphics CoreLocation CoreImage CoreText CoreML Network Security Photos PhotosUI MapKit AVFoundation AVKit WebKit StoreKit Metal MetalKit SceneKit SpriteKit GameKit CloudKit HealthKit Speech Vision os Darwin Glibc Dispatch XCTest Testing Observation SwiftData".split(
+    " ",
+  ),
+);
+
+interface SwiftIndex {
+  sources: Map<string, string[]>;
+  folders: Map<string, string[]>;
+}
+const swiftIndexes = new WeakMap<ReadonlySet<string>, SwiftIndex>();
+
+/** The Swift files of each module (`Sources/<Module>/`) and of each folder, tests left out, built once per file set. */
+function swiftIndexOf(files: ReadonlySet<string>): SwiftIndex {
+  const known = swiftIndexes.get(files);
+  if (known) return known;
+  const sources = new Map<string, string[]>();
+  const folders = new Map<string, string[]>();
+  const push = (map: Map<string, string[]>, key: string, file: string) => {
+    const list = map.get(key);
+    if (list) list.push(file);
+    else map.set(key, [file]);
+  };
+  for (const file of files) {
+    if (!file.endsWith(".swift") || /(^|\/)(Tests?|[A-Za-z]*Tests)\//.test(file)) continue;
+    const parts = file.split("/");
+    parts.slice(0, -1).forEach((part, i) => {
+      push(folders, part, file);
+      if (part === "Sources" && i + 1 < parts.length - 1) push(sources, parts[i + 1] as string, file);
+    });
+  }
+  const index = { sources, folders };
+  swiftIndexes.set(files, index);
+  return index;
 }

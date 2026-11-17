@@ -212,3 +212,10 @@ it("go security > counts a chained call once", async () => {
       .security_signals,
   ).toBe(2);
 });
+
+it("go cohesion > the methods of a type declared in another file are not rated", async () => {
+  const { metrics } = await measure(
+    "package x\n\nfunc (b *Box) A() int { return b.n }\nfunc (b *Box) B() int { return 2 }\n",
+  );
+  expect(metrics.cohesion_groups).toBeUndefined();
+});

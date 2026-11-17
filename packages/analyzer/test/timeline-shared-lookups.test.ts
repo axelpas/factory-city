@@ -57,7 +57,7 @@ it("timeline lookups > short hashes from one call are the ones rev-parse --short
 });
 
 it("timeline lookups > reachable commits of a shallow clone match one rev-list per revision", async () => {
-  const { dir, root, side, main, after } = await repoWithMerge();
+  const { dir, after } = await repoWithMerge();
   const clone = makeTree({});
   execFileSync("git", ["clone", "-q", "--depth", "2", `file://${dir}`, join(clone, "c")]);
   const there = join(clone, "c");
@@ -66,7 +66,6 @@ it("timeline lookups > reachable commits of a shallow clone match one rev-list p
   for (const rev of heads)
     expect([...reach(rev)].sort(), rev).toEqual([...(await reachableCommits(there, rev))].sort());
   expect(heads).toContain(after);
-  expect([root, side, main].length).toBe(3);
 });
 
 it("timeline lookups > reachable commits of revisions on two branches, in no order, match one rev-list each", async () => {
@@ -102,7 +101,18 @@ it("timeline lookups > a frame of a timeline has the metrics an analysis of its 
 });
 
 it("timeline lookups > the process that reads blobs is closed when a frame fails", async () => {
-  if (process.platform === "win32") return;
+  const children = () => {
+    try {
+      return execFileSync("pgrep", ["-P", String(process.pid), "-f", "cat-file"], {
+        encoding: "utf8",
+      }).trim();
+    } catch (err) {
+      // pgrep exits with 1 when nothing matches; any other failure means it cannot be used here
+      if ((err as { status?: number }).status === 1) return "";
+      return undefined;
+    }
+  };
+  if (process.platform === "win32" || children() === undefined) return;
   const out = makeTree({});
   await expect(
     buildTimeline(
@@ -116,16 +126,11 @@ it("timeline lookups > the process that reads blobs is closed when a frame fails
       out,
     ),
   ).rejects.toThrow("stop here");
-  // no `git cat-file --batch` of ours is left running
-  await new Promise((done) => setTimeout(done, 200));
-  const left = (() => {
-    try {
-      return execFileSync("pgrep", ["-P", String(process.pid), "-f", "cat-file"], {
-        encoding: "utf8",
-      }).trim();
-    } catch {
-      return "";
-    }
-  })();
+  // the process goes away shortly after: poll instead of waiting a fixed time
+  let left = children();
+  for (let i = 0; i < 40 && left !== ""; i++) {
+    await new Promise((done) => setTimeout(done, 50));
+    left = children();
+  }
   expect(left).toBe("");
 });

@@ -27,12 +27,17 @@ export function computeCohesion(root: Node, cfg: CohesionConfig): Cohesion | und
   const uf = new UnionFind(units.length);
   linkUnits(declarations, uf, cfg);
   const byRoot = new Map<number, string[]>();
+  let nodes = 0;
   units.forEach((u, i) => {
+    // a method of a type declared in another file cannot be rated here: its fields are elsewhere
+    if (u.owner && !declarations.owned.has(u.owner)) return;
+    nodes++;
     const root = uf.find(i);
     byRoot.set(root, [...(byRoot.get(root) ?? []), u.name]);
   });
   const names = [...byRoot.values()].sort(
     (a, b) => b.length - a.length || ((a[0] as string) < (b[0] as string) ? -1 : 1),
   );
-  return { groups: uf.count(), nodes: units.length, barrel: statements > 0 && nonBarrel === 0, names };
+  if (nodes === 0) return undefined;
+  return { groups: byRoot.size, nodes, barrel: statements > 0 && nonBarrel === 0, names };
 }

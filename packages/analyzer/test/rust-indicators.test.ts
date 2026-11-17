@@ -65,7 +65,12 @@ it("rust coupling > resolves mod x; next to the file, as x.rs or x/mod.rs", () =
 it("rust coupling > resolves crate::, self:: and super:: paths, dropping the names of types and functions", () => {
   expect(resolveRust("crate::util::helper", "src/models/user.rs", ctx())).toEqual(["src/util.rs"]);
   expect(resolveRust("crate::models::user::User", "src/lib.rs", ctx())).toEqual(["src/models/user.rs"]);
-  expect(resolveRust("super::user::User", "src/models/mod.rs", ctx())).toEqual(["src/models/user.rs"]);
+  // from src/models/mod.rs, `super` is the root of the crate, not `models`
+  expect(resolveRust("super::util::helper", "src/models/mod.rs", ctx())).toEqual(["src/util.rs"]);
+  // `user` is not a module of the root: what is left is the names the root file holds
+  expect(resolveRust("super::user::User", "src/models/mod.rs", ctx())).toEqual(["src/lib.rs"]);
+  // the root of a crate has no parent
+  expect(resolveRust("super::util", "src/lib.rs", ctx())).toEqual([]);
   // `super::util` is not a module of `models`: the names a parent module holds are in its own file
   expect(resolveRust("super::util", "src/models/user.rs", ctx())).toEqual(["src/models/mod.rs"]);
 });
@@ -97,7 +102,7 @@ it("rust coupling > links the files of a project", async () => {
 
 // ------------------------------------------------------------------------------------------ cohesion
 
-it("rust cohesion > methods that use the same field of their struct are one group, impl blocks merged", async () => {
+it("rust cohesion > methods that share a field of their struct form a group, impl blocks merged", async () => {
   const { metrics } = await measure(`pub struct Boxy { items: Vec<i32>, label: String }
 
 impl Boxy {
@@ -215,4 +220,31 @@ it("rust security > counts a chained call once, never keeps what a secret says, 
   expect(Object.keys((await measure(code, true)).metrics).filter((k) => k.startsWith("security_"))).toEqual(
     [],
   );
+});
+
+it("rust cohesion > a generic or qualified impl is the type it implements, not `Boxy<T>`", async () => {
+  const { metrics } = await measure(`pub struct Boxy<T> { items: Vec<T> }
+impl<T> Boxy<T> {
+    pub fn count(&self) -> usize { self.items.len() }
+    pub fn add(&mut self, x: T) { self.items.push(x); }
+}
+impl<T> Default for Boxy<T> {
+    fn default() -> Self { Boxy { items: Vec::new() } }
+}`);
+  // count and add share items; default does not use self
+  expect(metrics.cohesion_groups).toBe(2);
+});
+
+it("rust cohesion > the methods of a type declared in another file are not rated", async () => {
+  const { metrics } = await measure(
+    "impl Boxy {\n    fn a(&self) -> u32 { 1 }\n    fn b(&self) -> u32 { 2 }\n}\n",
+  );
+  expect(metrics.cohesion_groups).toBeUndefined();
+  // an enum declared here is a type of this file
+  const withEnum = await measure("enum Kind { A, B }\nimpl Kind {\n    fn a(&self) -> u32 { 1 }\n}\n");
+  expect(withEnum.metrics.cohesion_groups).toBe(1);
+});
+
+it("rust security > a field assigned a secret is one", async () => {
+  expect((await item('fn f() { self.token = "abcdefgh12345678"; }')).security_hardcoded_secret).toBe(1);
 });

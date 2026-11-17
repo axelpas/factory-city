@@ -78,26 +78,26 @@
       {
         "nodeType": "require_expression",
         "moduleField": "",
-        "wholeText": true,
-        "specPrefix": "req:"
+        "specPrefix": "req:",
+        "firstString": true
       },
       {
         "nodeType": "require_once_expression",
         "moduleField": "",
-        "wholeText": true,
-        "specPrefix": "req:"
+        "specPrefix": "req:",
+        "firstString": true
       },
       {
         "nodeType": "include_expression",
         "moduleField": "",
-        "wholeText": true,
-        "specPrefix": "req:"
+        "specPrefix": "req:",
+        "firstString": true
       },
       {
         "nodeType": "include_once_expression",
         "moduleField": "",
-        "wholeText": true,
-        "specPrefix": "req:"
+        "specPrefix": "req:",
+        "firstString": true
       }
     ],
     "resolver": "php",
@@ -166,7 +166,7 @@
       "kind": "hardcoded_secret",
       "type": "node",
       "nodeType": "assignment_expression",
-      "pattern": "^\\$\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*=\\s*[\"'](?![a-z_]+[\"'])(?![A-Z_]+[\"'])(?!\\S*/)[^\"'\\s${}]{8,}[\"']$"
+      "pattern": "^\\$(this->)?\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*=\\s*[\"'](?![a-z_]+[\"'])(?![A-Z_]+[\"'])(?!\\S*/)[^\"'\\s${}]{8,}[\"']$"
     },
     {
       "kind": "hardcoded_secret",

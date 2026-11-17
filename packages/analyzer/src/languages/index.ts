@@ -14,7 +14,7 @@ import swift from "./swift.json" with { type: "json" };
 import tsx from "./tsx.json" with { type: "json" };
 import typescript from "./typescript.json" with { type: "json" };
 
-/** Declarative language configuration: which syntax nodes count as what. No language-specific engine code. */
+/** Declarative language configuration: which syntax nodes count as what. The engine reads these options; a language that needs more has a resolver in resolve/modules.ts. */
 export interface LanguageConfig {
   id: string;
   label: string;
@@ -68,6 +68,8 @@ export interface ModulesConfig {
     wildcardSuffix?: string;
     /** The module is the whole statement as written, whitespace folded (PHP `use A\\B;`, `require 'x.php';`). */
     wholeText?: boolean;
+    /** Only the first string literal of the statement is kept (PHP `require 'x.php'`): never the code around it. */
+    firstString?: boolean;
     /** Added in front of the module name, to tell this kind of statement from the others (Rust `mod:` for `mod x;`). */
     specPrefix?: string;
     /** The statement says nothing about another file when it has this field (Rust `mod x { ... }` has a body). */

@@ -209,3 +209,38 @@ it("cpp security > finds std::system and unqualified calls once, and never keeps
   expect(JSON.stringify(await cpp(code))).not.toContain("correct-horse");
   expect(Object.keys((await cpp(code, true)).metrics).filter((k) => k.startsWith("security_"))).toEqual([]);
 });
+
+it("cpp cohesion > methods defined in a file whose class is declared in a header are not rated", async () => {
+  const lone = await cpp(
+    "int Box::count() { return items.size(); }\nvoid Box::add(int x) { items.push_back(x); }\n",
+  );
+  expect(lone.metrics.cohesion_groups).toBeUndefined();
+  // a free function of the same file is still rated
+  const mixed = await cpp("int Box::count() { return 1; }\nint helper(int a) { return a; }\n");
+  expect(mixed.metrics.cohesion_groups).toBe(1);
+  expect(mixed.metrics.lack_of_cohesion).toBe(0);
+});
+
+it("cpp cohesion > a method that returns a reference is a method, and `int a, b;` declares two fields", async () => {
+  const { metrics } = await cpp(`class Box {
+public:
+    const std::string& name() const { return label; }
+    int size() { return label.size(); }
+    int sum() { return a + b; }
+private:
+    std::string label;
+    int a, b;
+};`);
+  // name and size share label; sum uses a and b
+  expect(metrics.cohesion_groups).toBe(2);
+  expect(metrics.lack_of_cohesion).toBe(0.5);
+});
+
+it("c family security > a private key block is found in a string", async () => {
+  const key = "-----BEGIN RSA PRIVATE KEY-----\\nabc\\n-----END RSA PRIVATE KEY-----";
+  expect(only((await c(`const char *k = "${key}";`)).metrics, "security_").security_hardcoded_secret).toBe(1);
+  expect(
+    only((await cpp('const char *k = R"(-----BEGIN RSA PRIVATE KEY-----\nabc\n)";')).metrics, "security_")
+      .security_hardcoded_secret,
+  ).toBe(1);
+});

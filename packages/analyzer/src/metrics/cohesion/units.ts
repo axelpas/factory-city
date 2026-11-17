@@ -20,6 +20,8 @@ export interface ClassMembers {
 export interface Declarations {
   units: Unit[];
   declared: Set<string>;
+  /** The types whose declaration is in this file: the methods of any other owner are not rated (their fields are elsewhere). */
+  owned: Set<string>;
   classMembers: Map<string, ClassMembers>;
   statements: number;
   nonBarrel: number;
@@ -29,6 +31,18 @@ export interface Declarations {
 export function leadingWord(name: string): string {
   const m = /^[a-z0-9]+|^[A-Z][a-z0-9]*|^[A-Z]+(?![a-z])/.exec(name);
   return m ? m[0] : name;
+}
+
+const MEMBER_TYPES = new WeakMap<CohesionConfig, Set<string>>();
+
+/** The node types of a member access, computed once per configuration. */
+function memberTypes(cfg: CohesionConfig): Set<string> {
+  let set = MEMBER_TYPES.get(cfg);
+  if (!set) {
+    set = new Set(cfg.memberExpression.split("|"));
+    MEMBER_TYPES.set(cfg, set);
+  }
+  return set;
 }
 
 function collect(
@@ -42,7 +56,7 @@ function collect(
   if (skip && node.id === skip.id) return;
   if (cfg.identifiers.includes(node.type)) tokens.add(node.text);
   if (cfg.selfTokenTypes?.includes(node.type)) selfTokens.add(node.text.replace(/^@+/, ""));
-  if (cfg.memberExpression.split("|").includes(node.type)) {
+  if (memberTypes(cfg).has(node.type)) {
     // without field names (Kotlin) the object is the first child and the property the last
     const positional = cfg.memberObjectField === "";
     const object = positional
@@ -94,7 +108,10 @@ function nameThrough(start: Node | null | undefined, allowFunction: boolean): st
   while (cur) {
     if (DECLARED_NAMES.includes(cur.type)) return cur.text;
     if (cur.type === "function_declarator" && !allowFunction) return undefined;
-    cur = cur.childForFieldName("declarator");
+    // a reference declarator (`int& f()`) keeps its declarator as a plain child
+    cur =
+      cur.childForFieldName("declarator") ??
+      (cur.type === "reference_declarator" ? cur.namedChildren.at(-1) : null);
   }
   return undefined;
 }
@@ -183,8 +200,9 @@ function attributeFields(member: Node | null, cfg: CohesionConfig): string[] {
 }
 
 /** A class: its methods become units, its fields are kept to link the methods that share them. */
-function addClass(node: Node, name: string, d: Declarations, cfg: CohesionConfig): void {
+function addClass(node: Node, name: string, d: Declarations, cfg: CohesionConfig, owns = true): void {
   d.declared.add(name);
+  if (owns) d.owned.add(name);
   const members = membersOf(d, name);
   for (const field of constructorFields(node, cfg)) members.fields.add(field);
   const body =
@@ -207,8 +225,10 @@ function addClass(node: Node, name: string, d: Declarations, cfg: CohesionConfig
     // a constructor or a destructor is not a method of the class (C++)
     if (cfg.nameFromDeclarator && (memberName === name || memberName.startsWith("~"))) continue;
     if (cfg.fields.includes(member.type) && cfg.nameFromDeclarator) {
-      const field = nameThrough(member.childForFieldName("declarator"), false);
-      if (field) members.fields.add(field);
+      for (const declarator of member.childrenForFieldName("declarator")) {
+        const field = nameThrough(declarator, false);
+        if (field) members.fields.add(field);
+      }
       continue;
     }
     if (cfg.methods.includes(member.type) && memberName !== cfg.constructorName) {
@@ -225,7 +245,15 @@ function addClass(node: Node, name: string, d: Declarations, cfg: CohesionConfig
 
 /** The type a receiver is declared on: `*Box` and `Box[T]` both give `Box`. */
 function receiverType(type: Node | null | undefined): string | undefined {
-  return type?.text.replace(/^\*+/, "").replace(/\[.*$/, "").trim() || undefined;
+  // `*Box`, `&mut Box<T>`, `Box[T]` and `a::Box` all name the type `Box`
+  return (
+    type?.text
+      .replace(/^[&*]+(mut\s+)?/, "")
+      .replace(/[<[].*$/, "")
+      .split("::")
+      .pop()
+      ?.trim() || undefined
+  );
 }
 
 function membersOf(d: Declarations, owner: string): ClassMembers {
@@ -250,17 +278,13 @@ function addReceiverMethod(node: Node, d: Declarations, cfg: CohesionConfig, fie
 }
 
 /** The types of a declaration: each is a declared name, a struct also gives the fields of its type. */
-function addTypes(
-  node: Node,
-  d: Declarations,
-  cfg: CohesionConfig,
-  r: NonNullable<CohesionConfig["receivers"]>,
-) {
+function addTypes(node: Node, d: Declarations, r: NonNullable<CohesionConfig["receivers"]>) {
   for (const spec of node.namedChildren) {
     if (spec?.type !== r.typeSpec) continue;
     const name = spec.childForFieldName("name")?.text;
     if (!name) continue;
     d.declared.add(name);
+    d.owned.add(name);
     const type = spec.childForFieldName("type");
     if (type?.type !== r.structNode) continue;
     const members = membersOf(d, name);
@@ -290,6 +314,7 @@ function addStruct(node: Node, d: Declarations): void {
   const name = node.childForFieldName("name")?.text;
   if (!name) return;
   d.declared.add(name);
+  d.owned.add(name);
   const members = membersOf(d, name);
   for (const field of node.childForFieldName("body")?.namedChildren ?? []) {
     const id = field?.childForFieldName("name")?.text;
@@ -306,7 +331,7 @@ function addDeclaration(top: Node, d: Declarations, cfg: CohesionConfig): void {
   const node = unwrap(top, cfg);
   const r = cfg.receivers;
   if (r && node.type === r.methodNode) return addReceiverMethod(node, d, cfg, r.receiverField);
-  if (r && node.type === r.typeDeclaration) return addTypes(node, d, cfg, r);
+  if (r && node.type === r.typeDeclaration) return addTypes(node, d, r);
   const specKind = cfg.specDeclarations?.[node.type];
   if (specKind) return addSpecs(node, d, specKind);
   if (cfg.structNodes?.includes(node.type)) return addStruct(node, d);
@@ -326,8 +351,17 @@ function addDeclaration(top: Node, d: Declarations, cfg: CohesionConfig): void {
   const className = cfg.classNameField ? receiverType(node.childForFieldName(cfg.classNameField)) : name;
   if (cfg.functionDeclarations.includes(node.type) && name) d.units.push(unitOf(node, name, undefined, cfg));
   else if (cfg.variableDeclarations.includes(node.type)) addVariables(node, d, cfg);
-  else if (cfg.classDeclarations.includes(node.type) && className) addClass(node, className, d, cfg);
-  else if (cfg.otherDeclarations.includes(node.type) && name) d.declared.add(name);
+  else if (cfg.classDeclarations.includes(node.type) && className) {
+    // an impl block (Rust) or an extension (Swift) adds methods to a type that is declared somewhere else
+    const nameNode = cfg.classNameField
+      ? node.childForFieldName(cfg.classNameField)
+      : node.childForFieldName("name");
+    addClass(node, className, d, cfg, !cfg.classNameField && nameNode?.type !== "user_type");
+  } else if (cfg.otherDeclarations.includes(node.type) && name) {
+    d.declared.add(name);
+    // an enum, a trait or an alias is a type too: its impl blocks are rated here
+    d.owned.add(name);
+  }
 }
 
 /** Reads a list of top-level nodes; the members of a container (a namespace) are read as top level too. */
@@ -355,6 +389,7 @@ export function readDeclarations(root: Node, cfg: CohesionConfig): Declarations 
   const d: Declarations = {
     units: [],
     declared: new Set(),
+    owned: new Set(),
     classMembers: new Map(),
     statements: 0,
     nonBarrel: 0,

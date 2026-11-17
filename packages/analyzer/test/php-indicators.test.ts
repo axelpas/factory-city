@@ -29,8 +29,8 @@ it("php coupling > reads use clauses, groups, function imports and require, and 
     "use:use App\\Models\\User;",
     "use:use App\\Util\\{Helper, Str};",
     "use:use function App\\Util\\slug;",
-    "req:require_once 'lib/util.php'",
-    "req:require __DIR__ . '/boot.php'",
+    "req:lib/util.php",
+    "req:/boot.php",
   ]);
   expect(declares).toEqual(["App\\Services"]);
 });
@@ -92,9 +92,17 @@ it("php coupling > leaves the framework and vendor classes without a file, and d
 
 it("php coupling > resolves a require from the folder of the file, __DIR__ included, then from the root", () => {
   const c = ctx(FILES, NAMESPACES);
-  expect(resolvePhp("req:require __DIR__ . '/boot.php';", "src/index.php", c)).toEqual(["src/boot.php"]);
-  expect(resolvePhp("req:require_once 'lib/util.php';", "src/index.php", c)).toEqual(["lib/util.php"]);
-  expect(resolvePhp("req:include 'nope.php';", "src/index.php", c)).toEqual([]);
+  expect(resolvePhp("req:/boot.php", "src/index.php", c)).toEqual(["src/boot.php"]);
+  expect(resolvePhp("req:lib/util.php", "src/index.php", c)).toEqual(["lib/util.php"]);
+  expect(resolvePhp("req:nope.php", "src/index.php", c)).toEqual([]);
+});
+
+it("php coupling > keeps the path of a require, never the code around it", async () => {
+  const { imports } = await measure(
+    "require_once ABSPATH . 'wp-load.php';\ninclude $_SERVER['DOCUMENT_ROOT'] . $page;\nrequire \"$dir/x.php\";\n",
+  );
+  // the literal of the first, nothing for an expression or an interpolation
+  expect(imports).toEqual(["req:wp-load.php"]);
 });
 
 it("php coupling > links the files of a project", async () => {
@@ -217,4 +225,10 @@ it("php security > never keeps what a secret says, and does not rate test files"
   expect(Object.keys((await measure(code, true)).metrics).filter((k) => k.startsWith("security_"))).toEqual(
     [],
   );
+});
+
+it("php security > a private key block is found in single and double quoted strings; a property assigned through $this is a secret", async () => {
+  expect((await sec("$k = 'BEGIN RSA PRIVATE KEY';")).security_hardcoded_secret).toBe(1);
+  expect((await sec('$k = "BEGIN RSA PRIVATE KEY";')).security_hardcoded_secret).toBe(1);
+  expect((await sec('$this->apiKey = "abcdefgh12345678";')).security_hardcoded_secret).toBe(1);
 });

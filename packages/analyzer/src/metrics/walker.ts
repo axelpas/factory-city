@@ -172,7 +172,9 @@ export class Walker {
     const callee = node.childForFieldName(calls.functionField)?.text;
     const prefix = callee === undefined ? undefined : calls.callees[callee];
     const first = node.childForFieldName(calls.argumentsField)?.namedChildren[0];
-    if (prefix !== undefined && first?.type === "string") this.imports.push(`${prefix}${stringValue(first)}`);
+    // a path built with an interpolation is not a path: only the string is kept, never an expression
+    if (prefix !== undefined && first?.type === "string" && !first.text.includes("#{"))
+      this.imports.push(`${prefix}${stringValue(first)}`);
   }
 
   private collectStatement(
@@ -180,6 +182,13 @@ export class Walker {
     statement: NonNullable<LanguageConfig["modules"]>["statements"][number],
   ) {
     if (statement.skipWhenField && node.childForFieldName(statement.skipWhenField)) return;
+    if (statement.firstString) {
+      // a `require` keeps its path only, never the code around it (`ABSPATH . 'x.php'`)
+      // a literal inside an index (`$_SERVER['DOCUMENT_ROOT']`) is not a path
+      const literal = /['"]([^'"$]+)['"]/.exec(node.text.replace(/\[[^\]]*\]/g, "[]"))?.[1];
+      if (literal) this.imports.push(`${statement.specPrefix ?? ""}${literal}`);
+      return;
+    }
     if (statement.wholeText) {
       const text = node.text
         .replace(/\s+as\s+\w+/g, "")

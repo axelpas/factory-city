@@ -66,6 +66,16 @@ it("ruby coupling > resolves require along the load path: the file whose path en
   expect(resolveRuby("req:util", "lib/app.rb", c)).toEqual(["lib/util.rb"]);
 });
 
+it("ruby coupling > keeps no path that is built with an interpolation, and links no standard library name", async () => {
+  const { imports } = await measure('require "plugins/#{name}"\nrequire_relative "x"\n');
+  expect(imports).toEqual(["rel:x"]);
+  // a project file named logger.rb does not stand for the standard library `require "logger"`
+  expect(resolveRuby("req:logger", "lib/app.rb", ctx(["lib/app.rb", "lib/models/logger.rb"]))).toEqual([]);
+  expect(resolveRuby("req:models/logger", "lib/app.rb", ctx(["lib/app.rb", "lib/models/logger.rb"]))).toEqual(
+    ["lib/models/logger.rb"],
+  );
+});
+
 it("ruby coupling > leaves gems and the standard library without a file", () => {
   const c = ctx(FILES);
   for (const spec of ["req:json", "req:active_support/core_ext", "req:set"])
@@ -208,4 +218,9 @@ it("ruby security > never keeps what a secret says, and does not rate test files
   expect(Object.keys((await measure(code, true)).metrics).filter((k) => k.startsWith("security_"))).toEqual(
     [],
   );
+});
+
+it("ruby security > a private key block is found in a string", async () => {
+  const key = "-----BEGIN RSA PRIVATE KEY-----\\nabc";
+  expect((await sec(`k = "${key}"`)).security_hardcoded_secret).toBe(1);
 });
