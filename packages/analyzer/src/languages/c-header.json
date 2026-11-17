@@ -1,7 +1,7 @@
 {
   "id": "c-header",
   "label": "C/C++ header",
-  "tier": 2,
+  "tier": 1,
   "extends": "cpp",
   "grammar": "cpp",
   "extensions": [".h"]

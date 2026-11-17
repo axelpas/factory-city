@@ -365,3 +365,21 @@ export function resolveRuby(spec: string, from: string, ctx: ResolveContext): st
   const file = nearest(hits, from);
   return file ? [file] : [];
 }
+
+/**
+ * The file a C or C++ `#include` stands for. A quoted include is read from the folder of the file, then by the end of
+ * the path anywhere in the project (include folders are the project's own), the closest first. An angle include
+ * (`<a/b.h>`) is matched by the end of the path only when it names a folder, so that `<stdio.h>` stays the system's.
+ * System and library headers have no file.
+ */
+export function resolveC(spec: string, from: string, ctx: ResolveContext): string[] {
+  const quoted = spec.startsWith("q:");
+  const path = posix.normalize(spec.slice(2));
+  if (quoted) {
+    const near = posix.join(dirOf(from), path);
+    if (near !== from && ctx.files.has(near)) return [near];
+  } else if (!path.includes("/")) return [];
+  const hits = [...ctx.files].filter((f) => f !== from && (f === path || f.endsWith(`/${path}`)));
+  const file = nearest(hits, from);
+  return file ? [file] : [];
+}

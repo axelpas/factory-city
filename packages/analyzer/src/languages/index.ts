@@ -76,7 +76,7 @@ export interface ModulesConfig {
     namesField?: string;
   }>;
   /** How the names are turned into files of the project (see `resolve/modules.ts`). */
-  resolver: "python" | "go" | "java" | "csharp" | "kotlin" | "rust" | "php" | "ruby";
+  resolver: "python" | "go" | "java" | "csharp" | "kotlin" | "rust" | "php" | "ruby" | "c";
   /** Imports written as calls with a string argument (Ruby `require "x"`): the callee, and what is put in front of the path. */
   calls?: {
     nodeType: string;
@@ -149,6 +149,10 @@ export interface CohesionConfig {
   selfTokenTypes?: string[];
   /** Calls in a class body that declare fields through symbol arguments (Ruby `attr_reader :a`). */
   attributeCalls?: string[];
+  /** The name of a function or a method is in its declarator, not in a `name` field (C, C++). */
+  nameFromDeclarator?: boolean;
+  /** Declarations that declare variables, types or typedefs through declarators; their names are declared names (C, C++). */
+  declaratorDeclarations?: string[];
   /** Declarations holding specs that each declare names (Go: `const_declaration` holds `const_spec`s). */
   specDeclarations?: Record<string, string>;
   barrelStatements: string[];

@@ -52,6 +52,17 @@ export const METRICS_5: readonly MetricDefinition[] = [
     limits: "Only for languages whose configuration has rules for it; test files are not rated.",
   }),
   metric({
+    id: "security_unsafe_function",
+    label: "Unsafe library functions",
+    definition: "A call to a function that cannot be used safely: gets, strcpy, strcat, sprintf, tmpnam.",
+    computation: "Counted by the language's declarative rule set.",
+    why: "They write without knowing the size of the destination, so a long input overruns it.",
+    unit: "places",
+    direction: "higher-is-worse",
+    level: 0,
+    limits: "Only for languages whose configuration has rules for it (C, C++); test files are not rated.",
+  }),
+  metric({
     id: "security_command_exec",
     label: "Command execution",
     definition: "A shell command run from the code: exec, execSync, or spawn with a shell.",

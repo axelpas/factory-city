@@ -206,7 +206,7 @@ export class Walker {
       ).text
         .replace(/\s+as\s+\w+/g, "")
         .replace(/\s+/g, "")
-        .replace(/^["'`]|["'`]$/g, "");
+        .replace(/^["'`<]|["'`>]$/g, "");
       this.imports.push(`${statement.specPrefix ?? ""}${wildcard ? `${base}.*` : base}`);
       for (const name of names) {
         const bare = (name.childForFieldName("name") ?? name).text;

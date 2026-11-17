@@ -1,7 +1,7 @@
 {
   "id": "c",
   "label": "C",
-  "tier": 2,
+  "tier": 1,
   "grammar": "c",
   "extensions": [".c"],
   "comment": ["comment"],
@@ -26,13 +26,134 @@
     {
       "kind": "lint_disable",
       "type": "comment",
-      "pattern": "NOLINT|cppcheck-suppress"
+      "pattern": "NOLINT|cppcheck-suppress|NOSONAR|coverity\\[|flawfinder"
     },
     {
       "kind": "lint_disable",
       "type": "node",
       "nodeType": "preproc_call",
       "pattern": "^#\\s*pragma\\s+((GCC|clang)\\s+diagnostic\\s+ignored|warning\\s*\\(\\s*disable)"
+    },
+    {
+      "kind": "skipped_test",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^(TEST|TEST_F|TEST_P|TYPED_TEST)$",
+      "argsPattern": "DISABLED_"
+    },
+    {
+      "kind": "skipped_test",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^(GTEST_SKIP|SKIP|GTEST_SKIP_)$"
+    }
+  ],
+  "modules": {
+    "statements": [
+      {
+        "nodeType": "preproc_include",
+        "moduleField": "",
+        "moduleType": "string_literal",
+        "specPrefix": "q:"
+      },
+      {
+        "nodeType": "preproc_include",
+        "moduleField": "",
+        "moduleType": "system_lib_string",
+        "specPrefix": "s:"
+      }
+    ],
+    "resolver": "c"
+  },
+  "cohesion": {
+    "wrappers": [],
+    "functionDeclarations": ["function_definition"],
+    "variableDeclarations": [],
+    "functionValues": [],
+    "classDeclarations": [],
+    "methods": [],
+    "constructorName": "",
+    "fields": [],
+    "nameFromDeclarator": true,
+    "declaratorDeclarations": ["declaration", "type_definition"],
+    "otherDeclarations": ["struct_specifier", "enum_specifier", "union_specifier"],
+    "identifiers": ["identifier", "type_identifier"],
+    "memberExpression": "field_expression",
+    "memberObjectField": "argument",
+    "memberPropertyField": "field",
+    "selfObject": "this",
+    "barrelStatements": ["preproc_include", "preproc_def", "preproc_ifdef", "preproc_if"],
+    "minStemLength": 4
+  },
+  "security": [
+    {
+      "kind": "dynamic_code",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^(dlopen|LoadLibrary[AW]?)$"
+    },
+    {
+      "kind": "command_exec",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^(system|popen|_popen|execl|execlp|execle|execv|execvp|execve|WinExec|ShellExecute[AW]?)$"
+    },
+    {
+      "kind": "unsafe_function",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "(^|::)(gets|strcpy|strcat|sprintf|vsprintf|stpcpy|wcscpy|wcscat|tmpnam|tempnam|mktemp)$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "init_declarator",
+      "pattern": "^\\**\\s*\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*(\\[\\])?\\s*=\\s*\"(?![a-z_]+\")(?![A-Z_]+\")(?!\\S*/)[^\"\\s${}%]{8,}\"$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "assignment_expression",
+      "pattern": "^[\\w.>-]*\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*=\\s*\"(?![a-z_]+\")(?![A-Z_]+\")(?!\\S*/)[^\"\\s${}%]{8,}\"$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "preproc_def",
+      "pattern": "^#\\s*define\\s+\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s+\"(?![a-z_]+\")(?![A-Z_]+\")(?!\\S*/)[^\"\\s${}%]{8,}\"\\s*$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string_literal",
+      "pattern": "^\"(ghp_[A-Za-z0-9]{30,}|github_pat_\\w{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[\\w-]{10,})"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string_literal",
+      "pattern": "BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^SSL_(CTX_)?set_verify$",
+      "argsPattern": "SSL_VERIFY_NONE"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^curl_easy_setopt$",
+      "argsPattern": "CURLOPT_SSL_VERIFY(PEER|HOST)\\s*,\\s*0"
+    },
+    {
+      "kind": "sql_concat",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^(sprintf|snprintf)$",
+      "argsPattern": "\"\\s*([Ss][Ee][Ll][Ee][Cc][Tt]|[Ii][Nn][Ss][Ee][Rr][Tt]|[Uu][Pp][Dd][Aa][Tt][Ee]|[Dd][Ee][Ll][Ee][Tt][Ee])\\b[^\"]*%"
     }
   ]
 }

@@ -55,6 +55,7 @@ const SECURITY_KINDS: Record<string, string> = {
   dynamic_code: "dynamic code",
   command_exec: "command execution",
   unsafe_deserialization: "unsafe deserialization",
+  unsafe_function: "unsafe library functions",
   unsafe_html: "unsafe HTML",
   hardcoded_secret: "hard-coded secrets",
   tls_disabled: "disabled TLS checks",

@@ -73,7 +73,46 @@ function unitOf(
 
 function unwrap(node: Node, cfg: CohesionConfig): Node {
   if (!cfg.wrappers.includes(node.type)) return node;
+  // an empty field name means the wrapped node is the child that is not a template's parameters (C++)
+  if (cfg.wrapperField === "")
+    return node.namedChildren.find((c) => c && c.type !== "template_parameter_list") ?? node;
   return node.childForFieldName(cfg.wrapperField ?? "declaration") ?? node;
+}
+
+const DECLARED_NAMES = [
+  "identifier",
+  "field_identifier",
+  "type_identifier",
+  "qualified_identifier",
+  "destructor_name",
+  "operator_name",
+];
+
+/** The name inside a chain of declarators (`*b`, `f(int)`, `Box::add(int)`); a function declarator gives none when `allowFunction` is false. */
+function nameThrough(start: Node | null | undefined, allowFunction: boolean): string | undefined {
+  let cur = start;
+  while (cur) {
+    if (DECLARED_NAMES.includes(cur.type)) return cur.text;
+    if (cur.type === "function_declarator" && !allowFunction) return undefined;
+    cur = cur.childForFieldName("declarator");
+  }
+  return undefined;
+}
+
+/** The name of a function or a method: its `name` field, or for C and C++ its declarator. */
+function nameOf(node: Node, cfg: CohesionConfig): string | undefined {
+  return (
+    node.childForFieldName("name")?.text ??
+    (cfg.nameFromDeclarator ? nameThrough(node.childForFieldName("declarator"), true) : undefined)
+  );
+}
+
+/** The variables and types a declaration declares: declared names; a function prototype declares none. */
+function addDeclaratorNames(node: Node, d: Declarations): void {
+  for (const declarator of node.childrenForFieldName("declarator")) {
+    const name = nameThrough(declarator, false);
+    if (name) d.declared.add(name);
+  }
 }
 
 /** A statement that only re-exports: no declaration and no value of its own. */
@@ -163,8 +202,15 @@ function addClass(node: Node, name: string, d: Declarations, cfg: CohesionConfig
       for (const field of declared) members.fields.add(field);
       continue;
     }
-    const memberName = member?.childForFieldName("name")?.text;
+    const memberName = member ? nameOf(member, cfg) : undefined;
     if (!member || !memberName) continue;
+    // a constructor or a destructor is not a method of the class (C++)
+    if (cfg.nameFromDeclarator && (memberName === name || memberName.startsWith("~"))) continue;
+    if (cfg.fields.includes(member.type) && cfg.nameFromDeclarator) {
+      const field = nameThrough(member.childForFieldName("declarator"), false);
+      if (field) members.fields.add(field);
+      continue;
+    }
     if (cfg.methods.includes(member.type) && memberName !== cfg.constructorName) {
       members.methods.set(memberName, d.units.length);
       d.units.push(unitOf(member, `${name}.${memberName}`, name, cfg));
@@ -264,7 +310,19 @@ function addDeclaration(top: Node, d: Declarations, cfg: CohesionConfig): void {
   const specKind = cfg.specDeclarations?.[node.type];
   if (specKind) return addSpecs(node, d, specKind);
   if (cfg.structNodes?.includes(node.type)) return addStruct(node, d);
-  const name = node.childForFieldName("name")?.text;
+  if (cfg.declaratorDeclarations?.includes(node.type)) return addDeclaratorNames(node, d);
+  const name = nameOf(node, cfg);
+  // a C++ method defined outside its class: `void Box::add()` belongs to Box
+  if (cfg.nameFromDeclarator && name?.includes("::") && cfg.functionDeclarations.includes(node.type)) {
+    const cut = name.lastIndexOf("::");
+    const owner = name.slice(0, cut).replace(/<.*$/, "").split("::").pop() ?? "";
+    const method = name.slice(cut + 2);
+    if (owner && !method.startsWith("~") && method !== owner) {
+      membersOf(d, owner).methods.set(method, d.units.length);
+      d.units.push(unitOf(node, `${owner}.${method}`, owner, cfg));
+    }
+    return;
+  }
   const className = cfg.classNameField ? receiverType(node.childForFieldName(cfg.classNameField)) : name;
   if (cfg.functionDeclarations.includes(node.type) && name) d.units.push(unitOf(node, name, undefined, cfg));
   else if (cfg.variableDeclarations.includes(node.type)) addVariables(node, d, cfg);

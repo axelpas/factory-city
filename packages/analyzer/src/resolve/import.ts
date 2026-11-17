@@ -1,6 +1,7 @@
 import { posix } from "node:path";
 import { languageForPath } from "../languages/index.js";
 import {
+  resolveC,
   resolveCsharp,
   resolveGo,
   resolveJava,
@@ -68,6 +69,7 @@ export function resolveImportAll(spec: string, from: string, ctx: ResolveContext
   if (resolver === "rust") return resolveRust(spec, from, ctx);
   if (resolver === "php") return resolvePhp(spec, from, ctx);
   if (resolver === "ruby") return resolveRuby(spec, from, ctx);
+  if (resolver === "c") return resolveC(spec, from, ctx);
   const one = resolveImport(spec, from, ctx);
   return one ? [one] : [];
 }
