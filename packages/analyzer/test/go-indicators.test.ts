@@ -205,3 +205,10 @@ it("go security > never keeps what a secret says, and does not rate test files",
     [],
   );
 });
+
+it("go security > counts a chained call once", async () => {
+  expect(
+    (await sec('func f(a string) { exec.Command("sh", "-c", a).Run(); db.Query("select " + a).Scan(nil) }\n'))
+      .security_signals,
+  ).toBe(2);
+});

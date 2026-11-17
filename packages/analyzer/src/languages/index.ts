@@ -64,15 +64,17 @@ export interface ModulesConfig {
     moduleType?: string;
     /** A child of this type means every module of the package is imported (Java `.*`): `.*` is added to the name. */
     wildcardType?: string;
+    /** The statement ends with this text when it imports a whole package (Kotlin `.*`, an anonymous token). */
+    wildcardSuffix?: string;
     /** Field with the names imported from the module: each may be a module of its own (`from a import b`). */
     namesField?: string;
   }>;
   /** How the names are turned into files of the project (see `resolve/modules.ts`). */
-  resolver: "python" | "go" | "java" | "csharp";
+  resolver: "python" | "go" | "java" | "csharp" | "kotlin";
   /** `package` when an import names a group of files (a Go package, a C# namespace): it counts once in `imports_out`. */
   granularity?: "package";
   /** Nodes that declare a name other files can import (a C# namespace): the node type and the field with the name. */
-  declarations?: Array<{ nodeType: string; nameField: string }>;
+  declarations?: Array<{ nodeType: string; nameField: string; nameType?: string }>;
 }
 
 export interface CohesionConfig {
@@ -119,6 +121,10 @@ export interface CohesionConfig {
    * name, and the child that holds the declarators when they are not direct children of the member (C#).
    */
   fieldDeclarators?: { declaratorType: string; nameField: string; through?: string };
+  /** The node that holds the body of a class when it is not in the field `body` (Kotlin `class_body`). */
+  classBodyType?: string;
+  /** The parameters of a primary constructor are fields of the class (Kotlin): the constructor node, and the parameter node. */
+  constructorParams?: { constructor: string; parameter: string };
   /** Nodes that hold declarations of the top level without being one (a C# namespace): their members are read as top level. */
   containers?: string[];
   /** Declarations holding specs that each declare names (Go: `const_declaration` holds `const_spec`s). */

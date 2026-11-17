@@ -232,9 +232,10 @@
     },
     {
       "kind": "sql_concat",
-      "type": "node",
+      "type": "call",
       "nodeType": "invocation_expression",
-      "pattern": "\\.(ExecuteSqlRaw|ExecuteSqlCommand|FromSqlRaw|SqlQuery|Query|Execute|ExecuteScalar|QueryAsync|ExecuteAsync)\\(\\s*(\\$@?\"|@?\"[^\"]*\"\\s*\\+|string\\.Format\\()"
+      "pattern": "(^|\\.)(ExecuteSqlRaw|ExecuteSqlCommand|FromSqlRaw|SqlQuery|Query|Execute|ExecuteScalar|QueryAsync|ExecuteAsync)$",
+      "argsPattern": "^\\(\\s*(\\$@?\"|@?\"[^\"]*\"\\s*\\+|string\\.Format\\()"
     }
   ]
 }

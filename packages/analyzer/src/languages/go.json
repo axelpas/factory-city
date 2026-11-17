@@ -158,9 +158,10 @@
     },
     {
       "kind": "sql_concat",
-      "type": "node",
+      "type": "call",
       "nodeType": "call_expression",
-      "pattern": "(^|\\.)(Query|QueryRow|Exec|QueryContext|ExecContext|QueryRowContext|Raw|Prepare|PrepareContext)\\(\\s*(\\w+,\\s*)?(fmt\\.Sprintf\\(|[\"`][^\"`]*[\"`]\\s*\\+)"
+      "pattern": "(^|\\.)(Query|QueryRow|Exec|QueryContext|ExecContext|QueryRowContext|Raw|Prepare|PrepareContext)$",
+      "argsPattern": "^\\(\\s*(\\w+,\\s*)?(fmt\\.Sprintf\\(|[\"`][^\"`]*[\"`]\\s*\\+)"
     }
   ]
 }

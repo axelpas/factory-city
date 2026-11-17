@@ -201,9 +201,9 @@
     },
     {
       "kind": "sql_concat",
-      "type": "node",
-      "nodeType": "call_expression",
-      "pattern": "(^|\\.)(query|execute|raw|queryRawUnsafe|executeRawUnsafe)\\(\\s*(`[^`]*\\$\\{|\"[^\"]*\"\\s*\\+|'[^']*'\\s*\\+)"
+      "type": "call",
+      "pattern": "(^|\\.)(query|execute|raw|queryRawUnsafe|executeRawUnsafe)$",
+      "argsPattern": "^\\(\\s*(`[^`]*\\$\\{|\"[^\"]*\"\\s*\\+|'[^']*'\\s*\\+)"
     }
   ]
 }

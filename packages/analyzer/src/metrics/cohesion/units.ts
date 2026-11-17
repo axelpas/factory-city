@@ -42,8 +42,14 @@ function collect(
   if (skip && node.id === skip.id) return;
   if (cfg.identifiers.includes(node.type)) tokens.add(node.text);
   if (node.type === cfg.memberExpression) {
-    const object = node.childForFieldName(cfg.memberObjectField ?? "object");
-    const property = node.childForFieldName(cfg.memberPropertyField ?? "property");
+    // without field names (Kotlin) the object is the first child and the property the last
+    const positional = cfg.memberObjectField === "";
+    const object = positional
+      ? node.namedChildren[0]
+      : node.childForFieldName(cfg.memberObjectField ?? "object");
+    const property = positional
+      ? node.namedChildren[node.namedChildren.length - 1]
+      : node.childForFieldName(cfg.memberPropertyField ?? "property");
     if (object?.text === self && property) selfTokens.add(property.text);
   }
   for (const child of node.namedChildren) if (child) collect(child, cfg, tokens, selfTokens, self, skip);
@@ -106,8 +112,24 @@ function declaredFields(member: Node, cfg: CohesionConfig): string[] {
   const holder = d.through ? member.namedChildren.find((c) => c?.type === d.through) : member;
   return (holder?.namedChildren ?? [])
     .filter((c) => c?.type === d.declaratorType)
-    .map((c) => c?.childForFieldName(d.nameField)?.text)
+    .map((c) => (d.nameField === "" ? c?.text : c?.childForFieldName(d.nameField)?.text))
     .filter((n): n is string => n !== undefined);
+}
+
+/** The fields a primary constructor declares through its parameters (Kotlin `class A(val x: Int)`). */
+function constructorFields(cls: Node, cfg: CohesionConfig): string[] {
+  const c = cfg.constructorParams;
+  if (!c) return [];
+  const ctor = cls.namedChildren.find((n) => n?.type === c.constructor);
+  const out: string[] = [];
+  const walk = (n: Node) => {
+    if (n.type === c.parameter) {
+      const id = n.namedChildren.find((x) => x?.type === "identifier")?.text;
+      if (id) out.push(id);
+    } else for (const child of n.namedChildren) if (child) walk(child);
+  };
+  if (ctor) walk(ctor);
+  return out;
 }
 
 /** A class: its methods become units, its fields are kept to link the methods that share them. */
@@ -115,7 +137,10 @@ function addClass(node: Node, name: string, d: Declarations, cfg: CohesionConfig
   d.declared.add(name);
   const members: ClassMembers = { methods: new Map(), fields: new Set() };
   d.classMembers.set(name, members);
-  for (const raw of node.childForFieldName("body")?.namedChildren ?? []) {
+  for (const field of constructorFields(node, cfg)) members.fields.add(field);
+  const body =
+    node.childForFieldName("body") ?? node.namedChildren.find((c) => c?.type === cfg.classBodyType);
+  for (const raw of body?.namedChildren ?? []) {
     const assigned = raw ? assignedName(raw, cfg) : undefined;
     if (assigned) {
       members.fields.add(assigned);
@@ -192,8 +217,15 @@ function addTypes(
 /** The names declared by the specs of a `const` or `var` declaration. */
 function addSpecs(node: Node, d: Declarations, spec: string): void {
   const specs = node.type === spec ? [node] : node.namedChildren.filter((c) => c?.type === spec);
-  for (const s of specs)
-    for (const id of s?.childrenForFieldName("name") ?? []) if (id) d.declared.add(id.text);
+  for (const s of specs) {
+    // the name is in the field `name`; a Kotlin property keeps it in its variable declaration
+    const named = s?.childrenForFieldName("name") ?? [];
+    const names =
+      named.length > 0
+        ? named
+        : [s?.namedChildren.find((c) => c?.type === "variable_declaration")?.namedChildren[0]];
+    for (const id of names) if (id) d.declared.add(id.text);
+  }
 }
 
 function addDeclaration(top: Node, d: Declarations, cfg: CohesionConfig): void {

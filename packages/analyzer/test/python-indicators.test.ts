@@ -255,3 +255,8 @@ it("python security > never keeps what a secret says, and does not rate test fil
     [],
   );
 });
+
+it("python security > counts a chained or nested call once", async () => {
+  expect((await sec('rows = cursor.execute(f"select {a}").fetchall()\n')).security_sql_concat).toBe(1);
+  expect((await sec("data = yaml.load(stream).get('k')\n")).security_unsafe_deserialization).toBe(1);
+});

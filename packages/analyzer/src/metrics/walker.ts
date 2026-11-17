@@ -15,6 +15,8 @@ function stringValue(node: Node): string {
 function calleeOf(node: Node): string | undefined {
   const fn = node.childForFieldName("function");
   if (fn) return fn.text;
+  // Kotlin: a call has no field, its callee is the first child
+  if (node.type === "call_expression") return node.namedChildren[0]?.text;
   const name = node.childForFieldName("name");
   const object = node.childForFieldName("object");
   return name ? (object ? `${object.text}.${name.text}` : name.text) : undefined;
@@ -26,7 +28,9 @@ function matchesCall(rule: ShortcutRule, re: RegExp | undefined, node: Node): bo
   const callee = calleeOf(node);
   if (callee === undefined || re?.test(callee) !== true) return false;
   if (!rule.argsPattern) return true;
-  const args = node.childForFieldName("arguments")?.text;
+  const args = (
+    node.childForFieldName("arguments") ?? node.namedChildren.find((c) => c?.type === "value_arguments")
+  )?.text;
   return args !== undefined && new RegExp(rule.argsPattern).test(args);
 }
 
@@ -126,7 +130,12 @@ export class Walker {
    */
   private collectModules(node: Node): void {
     const declaration = this.lang.modules?.declarations?.find((d) => d.nodeType === node.type);
-    const declared = declaration && node.childForFieldName(declaration.nameField)?.text;
+    const nameNode = declaration
+      ? declaration.nameType
+        ? node.namedChildren.find((c) => c?.type === declaration.nameType)
+        : node.childForFieldName(declaration.nameField)
+      : undefined;
+    const declared = nameNode?.text;
     if (declared) this.declares.push(declared.replace(/\s+/g, ""));
     // several rules may read one statement: each reads the kind of module it names
     for (const statement of this.lang.modules?.statements.filter((s) => s.nodeType === node.type) ?? [])
@@ -146,8 +155,10 @@ export class Walker {
         : node.childrenForFieldName(statement.moduleField)
     ).filter((n): n is Node => n !== null && n !== undefined);
     const wildcard =
-      statement.wildcardType !== undefined &&
-      node.namedChildren.some((c) => c?.type === statement.wildcardType);
+      (statement.wildcardType !== undefined &&
+        node.namedChildren.some((c) => c?.type === statement.wildcardType)) ||
+      (statement.wildcardSuffix !== undefined &&
+        node.text.replace(/\s+/g, "").endsWith(statement.wildcardSuffix));
     const names = statement.namesField
       ? node.childrenForFieldName(statement.namesField).filter((n): n is Node => n !== null)
       : [];

@@ -1,7 +1,7 @@
 {
   "id": "kotlin",
   "label": "Kotlin",
-  "tier": 2,
+  "tier": 1,
   "grammar": "kotlin",
   "extensions": [".kt", ".kts"],
   "comment": ["line_comment", "block_comment"],
@@ -35,13 +35,158 @@
     {
       "kind": "lint_disable",
       "type": "comment",
-      "pattern": "ktlint-disable|detekt:disable|noinspection"
+      "pattern": "ktlint-disable|detekt:disable|noinspection|NOSONAR"
     },
     {
       "kind": "lint_disable",
       "type": "node",
       "nodeType": "annotation",
-      "pattern": "^@Suppress\\b"
+      "pattern": "^@(Suppress|SuppressWarnings|SuppressLint)\\b"
+    },
+    {
+      "kind": "skipped_test",
+      "type": "node",
+      "nodeType": "annotation",
+      "pattern": "^@(Ignore|Disabled)\\b"
+    },
+    {
+      "kind": "empty_catch",
+      "type": "emptyBlock",
+      "nodeType": "catch_block",
+      "bodyType": "block"
+    }
+  ],
+  "modules": {
+    "statements": [
+      {
+        "nodeType": "import",
+        "moduleField": "",
+        "moduleType": "qualified_identifier",
+        "wildcardSuffix": ".*"
+      }
+    ],
+    "resolver": "kotlin",
+    "granularity": "package",
+    "declarations": [
+      {
+        "nodeType": "package_header",
+        "nameField": "",
+        "nameType": "qualified_identifier"
+      }
+    ]
+  },
+  "cohesion": {
+    "wrappers": [],
+    "functionDeclarations": ["function_declaration"],
+    "variableDeclarations": [],
+    "functionValues": [],
+    "classDeclarations": ["class_declaration", "object_declaration"],
+    "classBodyType": "class_body",
+    "constructorParams": {
+      "constructor": "primary_constructor",
+      "parameter": "class_parameter"
+    },
+    "methods": ["function_declaration"],
+    "constructorName": "",
+    "fields": ["property_declaration"],
+    "fieldDeclarators": {
+      "through": "variable_declaration",
+      "declaratorType": "identifier",
+      "nameField": ""
+    },
+    "specDeclarations": {
+      "property_declaration": "property_declaration"
+    },
+    "otherDeclarations": [],
+    "identifiers": ["identifier"],
+    "memberExpression": "navigation_expression",
+    "memberObjectField": "",
+    "memberPropertyField": "",
+    "selfObject": "this",
+    "bareMembers": true,
+    "barrelStatements": ["import", "package_header"],
+    "minStemLength": 4
+  },
+  "security": [
+    {
+      "kind": "dynamic_code",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "[Ee]ngine\\.eval$"
+    },
+    {
+      "kind": "command_exec",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^Runtime\\.getRuntime\\(\\)\\.exec$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "property_declaration",
+      "pattern": "(^|\\s)(val|var)\\s+\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*(:\\s*[\\w<>?]+\\s*)?=\\s*\"[^\"\\s${}]{8,}\"$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "assignment",
+      "pattern": "^[\\w.]*\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*=\\s*\"[^\"\\s${}]{8,}\"$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string_literal",
+      "pattern": "^\"(ghp_[A-Za-z0-9]{30,}|github_pat_\\w{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[\\w-]{10,})"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string_literal",
+      "pattern": "BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "node",
+      "nodeType": "identifier",
+      "pattern": "^ALLOW_ALL_HOSTNAME_VERIFIER$"
+    },
+    {
+      "kind": "command_exec",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^ProcessBuilder$",
+      "argsPattern": "^\\(\\s*\"(sh|bash|zsh|dash|cmd(\\.exe)?|powershell|pwsh)\""
+    },
+    {
+      "kind": "unsafe_deserialization",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^(java\\.io\\.)?(ObjectInputStream|XMLDecoder)$"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "node",
+      "nodeType": "call_expression",
+      "pattern": "^HostnameVerifier\\s*\\{[^}]*->\\s*true\\s*\\}"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^NoopHostnameVerifier$"
+    },
+    {
+      "kind": "sql_concat",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "(^|\\.)(executeQuery|executeUpdate|execute|createQuery|createNativeQuery|prepareStatement|queryForList|queryForObject|query|update|rawQuery|execSQL)$",
+      "argsPattern": "^\\(\\s*(\"[^\"]*\"\\s*\\+|\"[^\"]*\\$[\\w{]|String\\.format\\(|\"[^\"]*\"\\.format\\()"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "node",
+      "nodeType": "call_expression",
+      "pattern": "^[\\w.]*setHostnameVerifier\\s*(\\(\\s*)?\\{[^}]*->\\s*true\\s*\\}\\s*\\)?$"
     }
   ]
 }

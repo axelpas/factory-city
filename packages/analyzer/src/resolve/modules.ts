@@ -121,10 +121,12 @@ interface JavaIndex {
   packages: Map<string, string[]>;
 }
 
-const javaIndexes = new WeakMap<ReadonlySet<string>, JavaIndex>();
+const javaIndexes = new WeakMap<ReadonlySet<string>, Map<string, JavaIndex>>();
 
-function javaIndexOf(files: ReadonlySet<string>): JavaIndex {
-  const known = javaIndexes.get(files);
+function javaIndexOf(files: ReadonlySet<string>, ext = ".java"): JavaIndex {
+  const byExt = javaIndexes.get(files) ?? new Map<string, JavaIndex>();
+  javaIndexes.set(files, byExt);
+  const known = byExt.get(ext);
   if (known) return known;
   const classes = new Map<string, string[]>();
   const packages = new Map<string, string[]>();
@@ -138,13 +140,14 @@ function javaIndexOf(files: ReadonlySet<string>): JavaIndex {
     }
   };
   for (const file of files) {
-    if (!file.endsWith(".java")) continue;
-    add(classes, file.slice(0, -".java".length), file);
+    if (!file.endsWith(ext)) continue;
+    add(classes, file.slice(0, -ext.length), file);
     const dir = dirOf(file);
     if (dir) add(packages, dir, file);
   }
-  javaIndexes.set(files, { classes, packages });
-  return { classes, packages };
+  const index = { classes, packages };
+  byExt.set(ext, index);
+  return index;
 }
 
 /**
@@ -175,6 +178,28 @@ export function resolveJava(spec: string, from: string, files: ReadonlySet<strin
  */
 export function resolveCsharp(spec: string, ctx: ResolveContext): string[] {
   const segments = spec.split(".");
+  for (let keep = segments.length; keep >= 1; keep--) {
+    const files = ctx.namespaces.get(segments.slice(0, keep).join("."));
+    if (files) return files;
+  }
+  return [];
+}
+
+/**
+ * The files a Kotlin import stands for. A class is looked up by its name in the folders of its package, as in Java;
+ * a top-level function or property has no file named after it, so the files that declare the package it sits in
+ * are linked instead. `a.b.*` is the package.
+ */
+export function resolveKotlin(spec: string, from: string, ctx: ResolveContext): string[] {
+  const wildcard = spec.endsWith(".*");
+  const name = wildcard ? spec.slice(0, -2) : spec;
+  const index = javaIndexOf(ctx.files, ".kt");
+  const segments = name.split(".");
+  for (let keep = segments.length; keep >= 2; keep--) {
+    const hits = index.classes.get(segments.slice(0, keep).join("."));
+    const file = hits ? nearest(hits, from) : undefined;
+    if (file) return [file];
+  }
   for (let keep = segments.length; keep >= 1; keep--) {
     const files = ctx.namespaces.get(segments.slice(0, keep).join("."));
     if (files) return files;

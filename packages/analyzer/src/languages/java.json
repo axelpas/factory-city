@@ -185,15 +185,17 @@
     },
     {
       "kind": "tls_disabled",
-      "type": "node",
+      "type": "call",
       "nodeType": "method_invocation",
-      "pattern": "^[\\w.()]*setHostnameVerifier\\(\\s*\\([^)]*\\)\\s*->\\s*true\\s*\\)"
+      "pattern": "(^|\\.)setHostnameVerifier$",
+      "argsPattern": "^\\(\\s*\\([^)]*\\)\\s*->\\s*true\\s*\\)"
     },
     {
       "kind": "sql_concat",
-      "type": "node",
+      "type": "call",
       "nodeType": "method_invocation",
-      "pattern": "\\.(executeQuery|executeUpdate|execute|createQuery|createNativeQuery|prepareStatement|queryForList|queryForObject|query|update)\\(\\s*(\"[^\"]*\"\\s*\\+|String\\.format\\(|\"[^\"]*\"\\.formatted\\()"
+      "pattern": "(^|\\.)(executeQuery|executeUpdate|execute|createQuery|createNativeQuery|prepareStatement|queryForList|queryForObject|query|update)$",
+      "argsPattern": "^\\(\\s*(\"[^\"]*\"\\s*\\+|String\\.format\\(|\"[^\"]*\"\\.formatted\\()"
     }
   ]
 }

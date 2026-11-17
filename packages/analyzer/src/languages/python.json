@@ -134,9 +134,10 @@
     },
     {
       "kind": "unsafe_deserialization",
-      "type": "node",
+      "type": "call",
       "nodeType": "call",
-      "pattern": "^yaml\\.load\\((?![^)]*Loader\\s*=\\s*(yaml\\.)?C?Safe)"
+      "pattern": "^yaml\\.load$",
+      "argsPattern": "^\\((?![^)]*Loader\\s*=\\s*(yaml\\.)?C?Safe)"
     },
     {
       "kind": "unsafe_html",
@@ -182,9 +183,10 @@
     },
     {
       "kind": "sql_concat",
-      "type": "node",
+      "type": "call",
       "nodeType": "call",
-      "pattern": "^[\\w.]*\\b(execute|executemany|raw|read_sql|read_sql_query)\\(\\s*(f[\"']|[\"'][^\"']*[\"']\\s*[+%]|[\"'][^\"']*[\"']\\.format\\()"
+      "pattern": "(^|\\.)(execute|executemany|raw|read_sql|read_sql_query)$",
+      "argsPattern": "^\\(\\s*(f[\"']|[\"'][^\"']*[\"']\\s*[+%]|[\"'][^\"']*[\"']\\.format\\()"
     }
   ]
 }

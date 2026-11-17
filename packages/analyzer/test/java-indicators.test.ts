@@ -199,3 +199,7 @@ it("java security > never keeps what a secret says, and does not rate test files
     [],
   );
 });
+
+it("java security > counts a nested call once", async () => {
+  expect((await sec('wrap(st.executeQuery("select " + id));')).security_sql_concat).toBe(1);
+});
