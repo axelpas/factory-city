@@ -38,6 +38,17 @@ factory-city timeline . --by issue     # one frame per issue (or --by commit, --
 factory-city view                      # serve the viewer and open it
 ```
 
+## Use it from Claude Code
+
+A skill in this repository lets Claude Code analyze the project you are working in, summarize its health and open its city. Copy it once:
+
+```sh
+mkdir -p ~/.claude/skills && cp -R skills/factory-city ~/.claude/skills/
+export FACTORY_CITY_CLI="$(pwd)/packages/analyzer/dist/cli/main.js"   # if `factory-city` is not on your PATH
+```
+
+Then ask Claude Code for the health of your codebase, its hotspots, or its code city. The skill only reads the project: the data goes to `~/.factory-city/`.
+
 ## How to read the city
 
 - **A building is a file, a plinth is a folder.** The ground a building takes shows how much code it holds; its height shows how complex it is; its color shows the metric you chose.
