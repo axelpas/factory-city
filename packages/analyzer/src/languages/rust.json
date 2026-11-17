@@ -1,7 +1,7 @@
 {
   "id": "rust",
   "label": "Rust",
-  "tier": 2,
+  "tier": 1,
   "grammar": "rust",
   "extensions": [".rs"],
   "comment": ["line_comment", "block_comment"],
@@ -27,19 +27,154 @@
       "kind": "lint_disable",
       "type": "node",
       "nodeType": "attribute_item",
-      "pattern": "^#\\[allow\\("
+      "pattern": "^#\\[(allow|expect)\\("
     },
     {
       "kind": "lint_disable",
       "type": "node",
       "nodeType": "inner_attribute_item",
-      "pattern": "^#!\\[allow\\("
+      "pattern": "^#!\\[(allow|expect)\\("
     },
     {
       "kind": "skipped_test",
       "type": "node",
       "nodeType": "attribute_item",
       "pattern": "^#\\[ignore"
+    },
+    {
+      "kind": "unsafe_code",
+      "type": "node",
+      "nodeType": "unsafe_block"
+    },
+    {
+      "kind": "empty_catch",
+      "type": "node",
+      "nodeType": "match_arm",
+      "pattern": "^Err\\(\\s*_\\s*\\)\\s*=>\\s*(\\{\\s*\\}|\\(\\))\\s*,?$"
+    }
+  ],
+  "modules": {
+    "statements": [
+      {
+        "nodeType": "use_declaration",
+        "moduleField": "argument"
+      },
+      {
+        "nodeType": "mod_item",
+        "moduleField": "name",
+        "specPrefix": "mod:",
+        "skipWhenField": "body"
+      }
+    ],
+    "resolver": "rust"
+  },
+  "cohesion": {
+    "wrappers": [],
+    "containers": ["mod_item"],
+    "functionDeclarations": ["function_item"],
+    "variableDeclarations": [],
+    "functionValues": [],
+    "classDeclarations": ["impl_item"],
+    "classNameField": "type",
+    "structNodes": ["struct_item"],
+    "methods": ["function_item"],
+    "constructorName": "",
+    "fields": [],
+    "specDeclarations": {
+      "const_item": "const_item",
+      "static_item": "static_item"
+    },
+    "otherDeclarations": ["enum_item", "trait_item", "type_item"],
+    "identifiers": ["identifier", "type_identifier"],
+    "memberExpression": "field_expression",
+    "memberObjectField": "value",
+    "memberPropertyField": "field",
+    "selfObject": "self",
+    "barrelStatements": ["use_declaration", "mod_item"],
+    "minStemLength": 4
+  },
+  "security": [
+    {
+      "kind": "dynamic_code",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^(libloading::)?Library::new$"
+    },
+    {
+      "kind": "command_exec",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^(std::process::|process::)?Command::new$",
+      "argsPattern": "^\\(\\s*\"(sh|bash|zsh|dash|cmd(\\.exe)?|powershell|pwsh)\""
+    },
+    {
+      "kind": "unsafe_html",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^(maud::)?PreEscaped$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "let_declaration",
+      "pattern": "^let\\s+(mut\\s+)?\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*(:[^=]{1,40})?=\\s*\"(?![a-z_]+\")(?![A-Z_]+\")(?!\\S*/)[^\"\\s${}]{8,}\";?$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "const_item",
+      "pattern": "^(pub(\\([^)]*\\))?\\s+)?const\\s+\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*:[^=]{1,40}=\\s*\"(?![a-z_]+\")(?![A-Z_]+\")(?!\\S*/)[^\"\\s${}]{8,}\";?$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "static_item",
+      "pattern": "^(pub(\\([^)]*\\))?\\s+)?static\\s+\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*:[^=]{1,40}=\\s*\"(?![a-z_]+\")(?![A-Z_]+\")(?!\\S*/)[^\"\\s${}]{8,}\";?$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "field_initializer",
+      "pattern": "^\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*:\\s*\"(?![a-z_]+\")(?![A-Z_]+\")(?!\\S*/)[^\"\\s${}]{8,}\"$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string_literal",
+      "pattern": "^\"(ghp_[A-Za-z0-9]{30,}|github_pat_\\w{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[\\w-]{10,})"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string_literal",
+      "pattern": "BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "raw_string_literal",
+      "pattern": "BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "(^|\\.)danger_accept_invalid_(certs|hostnames)$",
+      "argsPattern": "^\\(\\s*true\\s*\\)"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "(^|\\.)set_verify$",
+      "argsPattern": "NONE"
+    },
+    {
+      "kind": "sql_concat",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "(^|::|\\.)(query|query_as|query_scalar|execute|prepare|raw_sql|batch_execute|simple_query)$",
+      "argsPattern": "^\\(\\s*(&\\s*)?(format!\\s*\\(|\"[^\"]*\"\\s*\\.to_(string|owned)\\(\\)\\s*\\+|String::from\\(\"[^\"]*\"\\)\\s*\\+)"
     }
   ]
 }

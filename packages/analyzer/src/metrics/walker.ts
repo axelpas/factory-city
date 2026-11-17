@@ -158,6 +158,7 @@ export class Walker {
     node: Node,
     statement: NonNullable<LanguageConfig["modules"]>["statements"][number],
   ) {
+    if (statement.skipWhenField && node.childForFieldName(statement.skipWhenField)) return;
     const modules = (
       statement.moduleType
         ? node.namedChildren.filter(
@@ -179,9 +180,10 @@ export class Walker {
       const base = (
         module.type === "aliased_import" ? (module.childForFieldName("name") ?? module) : module
       ).text
+        .replace(/\s+as\s+\w+/g, "")
         .replace(/\s+/g, "")
         .replace(/^["'`]|["'`]$/g, "");
-      this.imports.push(wildcard ? `${base}.*` : base);
+      this.imports.push(`${statement.specPrefix ?? ""}${wildcard ? `${base}.*` : base}`);
       for (const name of names) {
         const bare = (name.childForFieldName("name") ?? name).text;
         this.imports.push(base.endsWith(".") ? `${base}${bare}` : `${base}.${bare}`);

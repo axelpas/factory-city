@@ -200,3 +200,91 @@ export function resolveKotlin(spec: string, from: string, ctx: ResolveContext): 
   const pkg = wildcard || !/^[a-z]/.test(last) ? name : segments.slice(0, -1).join(".");
   return ctx.namespaces.get(pkg) ?? [];
 }
+
+/** `a::{b, c::d, self}` and `a::*` as the list of paths they stand for. */
+function expandUse(spec: string): string[] {
+  const open = spec.indexOf("{");
+  if (open < 0) return [spec.replace(/::\*$/, "")];
+  const prefix = spec.slice(0, open).replace(/::$/, "");
+  const inner = spec.slice(open + 1, spec.lastIndexOf("}"));
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i <= inner.length; i++) {
+    const c = inner[i];
+    if (c === "{") depth++;
+    else if (c === "}") depth--;
+    else if ((c === "," && depth === 0) || i === inner.length) {
+      parts.push(inner.slice(start, i));
+      start = i + 1;
+    }
+  }
+  return parts
+    .filter((p) => p !== "")
+    .flatMap((p) => (p === "self" ? [prefix] : expandUse(`${prefix}::${p}`)))
+    .filter((p) => p !== "");
+}
+
+function rustModuleFile(base: string, segments: string[], files: ReadonlySet<string>): string | undefined {
+  for (let keep = segments.length; keep >= 1; keep--) {
+    const path = posix.join(base, ...segments.slice(0, keep));
+    for (const candidate of [`${path}.rs`, `${path}/mod.rs`]) if (files.has(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+/**
+ * The files a Rust `use` or `mod x;` stands for. The module tree is the folder tree: a module `x` of the file `a/b.rs`
+ * is `a/b/x.rs` or `a/b/x/mod.rs` (next to it for `lib.rs`, `main.rs` and `mod.rs`). `crate::` starts at the nearest
+ * `src` folder, `super::` at the parent module, `self::` here; another crate is looked up among the crates of the
+ * project by the name its `Cargo.toml` gives. Trailing names (a type, a function) are dropped until a module file
+ * answers. `std`, `core` and dependencies have no file.
+ */
+export function resolveRust(spec: string, from: string, ctx: ResolveContext): string[] {
+  const dir = dirOf(from);
+  const stem = posix.basename(from).replace(/\.rs$/, "");
+  const here = ["lib", "main", "mod"].includes(stem) ? dir : posix.join(dir, stem);
+  if (spec.startsWith("mod:")) {
+    const name = spec.slice(4);
+    return [posix.join(here, `${name}.rs`), posix.join(here, name, "mod.rs")]
+      .filter((f) => ctx.files.has(f))
+      .slice(0, 1);
+  }
+  const out = new Set<string>();
+  for (const path of expandUse(spec)) {
+    const [head, ...rest] = path.split("::");
+    let found: string | undefined;
+    if (head === "crate" || head === "self" || head === "super") {
+      const src = head === "crate" ? srcOf(dir) : head === "self" ? here : dir;
+      if (src === undefined) continue;
+      const segments = head === "super" ? rest : rest;
+      found =
+        rustModuleFile(src, segments, ctx.files) ??
+        (head === "crate" && segments.length > 0
+          ? ["lib.rs", "main.rs"].map((r) => posix.join(src, r)).find((f) => ctx.files.has(f))
+          : undefined) ??
+        (head === "super" ? parentModuleFile(dir, ctx.files) : undefined);
+    } else if (head && ctx.rustCrates.has(head)) {
+      const src = posix.join(ctx.rustCrates.get(head) as string, "src");
+      found = rest.length > 0 ? rustModuleFile(src, rest, ctx.files) : undefined;
+      found ??= ["lib.rs", "main.rs"].map((r) => posix.join(src, r)).find((f) => ctx.files.has(f));
+    }
+    if (found && found !== from) out.add(found);
+  }
+  return [...out];
+}
+
+/** The folder of the nearest `src` above a folder, which holds the root module of the crate. */
+function srcOf(dir: string): string | undefined {
+  let d = dir;
+  for (;;) {
+    if (posix.basename(d) === "src") return d;
+    if (d === "") return undefined;
+    d = dirOf(d);
+  }
+}
+
+/** The file of the module that holds the folder: `mod.rs`, `<folder>.rs`, or the crate root. */
+function parentModuleFile(dir: string, files: ReadonlySet<string>): string | undefined {
+  return [`${dir}/mod.rs`, `${dir}.rs`, `${dir}/lib.rs`, `${dir}/main.rs`].find((f) => files.has(f));
+}

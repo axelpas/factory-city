@@ -89,6 +89,17 @@ async function loadGoModules(paths: readonly string[], read: Reader): Promise<Ma
   return modules;
 }
 
+/** The crates of the project: the folder of each `Cargo.toml` that names a package, by that name (`-` read as `_`). */
+async function loadRustCrates(paths: readonly string[], read: Reader): Promise<Map<string, string>> {
+  const crates = new Map<string, string>();
+  for (const path of paths.filter((p) => posix.basename(p) === "Cargo.toml")) {
+    const text = (await read(path)) ?? "";
+    const pkg = /\[package\][^[]*?\bname\s*=\s*"([^"]+)"/s.exec(text)?.[1];
+    if (pkg) crates.set(pkg.replace(/-/g, "_"), dirOf(path));
+  }
+  return crates;
+}
+
 /** The files that declare each name, from what each file declares. */
 function namespacesOf(declares: ReadonlyMap<string, string[]>): Map<string, string[]> {
   const out = new Map<string, string[]>();
@@ -124,6 +135,7 @@ export async function loadResolveContext(
     configs,
     packages: await loadPackages(usable, load),
     goModules: await loadGoModules(usable, read),
+    rustCrates: await loadRustCrates(usable, read),
     namespaces: namespacesOf(declares),
   };
 }

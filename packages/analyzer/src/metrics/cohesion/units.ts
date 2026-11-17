@@ -135,8 +135,7 @@ function constructorFields(cls: Node, cfg: CohesionConfig): string[] {
 /** A class: its methods become units, its fields are kept to link the methods that share them. */
 function addClass(node: Node, name: string, d: Declarations, cfg: CohesionConfig): void {
   d.declared.add(name);
-  const members: ClassMembers = { methods: new Map(), fields: new Set() };
-  d.classMembers.set(name, members);
+  const members = membersOf(d, name);
   for (const field of constructorFields(node, cfg)) members.fields.add(field);
   const body =
     node.childForFieldName("body") ?? node.namedChildren.find((c) => c?.type === cfg.classBodyType);
@@ -228,6 +227,18 @@ function addSpecs(node: Node, d: Declarations, spec: string): void {
   }
 }
 
+/** A struct: a declared name, and the fields of its type for the methods that share them. */
+function addStruct(node: Node, d: Declarations): void {
+  const name = node.childForFieldName("name")?.text;
+  if (!name) return;
+  d.declared.add(name);
+  const members = membersOf(d, name);
+  for (const field of node.childForFieldName("body")?.namedChildren ?? []) {
+    const id = field?.childForFieldName("name")?.text;
+    if (id) members.fields.add(id);
+  }
+}
+
 function addDeclaration(top: Node, d: Declarations, cfg: CohesionConfig): void {
   const assigned = assignedName(top, cfg);
   if (assigned) {
@@ -240,10 +251,12 @@ function addDeclaration(top: Node, d: Declarations, cfg: CohesionConfig): void {
   if (r && node.type === r.typeDeclaration) return addTypes(node, d, cfg, r);
   const specKind = cfg.specDeclarations?.[node.type];
   if (specKind) return addSpecs(node, d, specKind);
+  if (cfg.structNodes?.includes(node.type)) return addStruct(node, d);
   const name = node.childForFieldName("name")?.text;
+  const className = cfg.classNameField ? receiverType(node.childForFieldName(cfg.classNameField)) : name;
   if (cfg.functionDeclarations.includes(node.type) && name) d.units.push(unitOf(node, name, undefined, cfg));
   else if (cfg.variableDeclarations.includes(node.type)) addVariables(node, d, cfg);
-  else if (cfg.classDeclarations.includes(node.type) && name) addClass(node, name, d, cfg);
+  else if (cfg.classDeclarations.includes(node.type) && className) addClass(node, className, d, cfg);
   else if (cfg.otherDeclarations.includes(node.type) && name) d.declared.add(name);
 }
 

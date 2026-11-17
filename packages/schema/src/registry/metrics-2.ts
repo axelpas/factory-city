@@ -100,6 +100,17 @@ export const METRICS_2: readonly MetricDefinition[] = [
     limits: "Only for languages whose configuration has the rule.",
   }),
   metric({
+    id: "escape_unsafe_code",
+    label: "Unsafe blocks",
+    definition: "A block where the compiler's guarantees are turned off: Rust `unsafe`.",
+    computation: "Counted by the language's declarative rule set.",
+    why: "The compiler no longer checks memory safety inside it; the reader must.",
+    unit: "places",
+    direction: "higher-is-worse",
+    level: 0,
+    limits: "Only for languages whose configuration has the rule; some uses are needed and justified.",
+  }),
+  metric({
     id: "escape_lint_disable",
     label: "Lint-disable comments",
     definition:

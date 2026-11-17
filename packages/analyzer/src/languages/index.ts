@@ -66,11 +66,15 @@ export interface ModulesConfig {
     wildcardType?: string;
     /** The statement ends with this text when it imports a whole package (Kotlin `.*`, an anonymous token). */
     wildcardSuffix?: string;
+    /** Added in front of the module name, to tell this kind of statement from the others (Rust `mod:` for `mod x;`). */
+    specPrefix?: string;
+    /** The statement says nothing about another file when it has this field (Rust `mod x { ... }` has a body). */
+    skipWhenField?: string;
     /** Field with the names imported from the module: each may be a module of its own (`from a import b`). */
     namesField?: string;
   }>;
   /** How the names are turned into files of the project (see `resolve/modules.ts`). */
-  resolver: "python" | "go" | "java" | "csharp" | "kotlin";
+  resolver: "python" | "go" | "java" | "csharp" | "kotlin" | "rust";
   /** `package` when an import names a group of files (a Go package, a C# namespace): it counts once in `imports_out`. */
   granularity?: "package";
   /** Nodes that declare a name other files can import (a C# namespace): the node type and the field with the name. */
@@ -127,6 +131,10 @@ export interface CohesionConfig {
   constructorParams?: { constructor: string; parameter: string };
   /** Nodes that hold declarations of the top level without being one (a C# namespace): their members are read as top level. */
   containers?: string[];
+  /** Type declarations whose name is in `name` and whose fields are in the `body`'s `fieldNode` (Rust `struct_item`). */
+  structNodes?: string[];
+  /** The field that names a class when it is not `name` (Rust `impl_item` has `type`). */
+  classNameField?: string;
   /** Declarations holding specs that each declare names (Go: `const_declaration` holds `const_spec`s). */
   specDeclarations?: Record<string, string>;
   barrelStatements: string[];

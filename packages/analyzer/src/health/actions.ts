@@ -11,6 +11,7 @@ const SHORTCUT_NAMES: Record<string, string> = {
   skipped_test: "skipped tests",
   focused_test: "focused tests",
   empty_catch: "empty catch blocks",
+  unsafe_code: "unsafe blocks",
 };
 
 /** What a rule needs to word its advice. */
