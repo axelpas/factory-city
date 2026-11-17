@@ -7,6 +7,8 @@ const MIN_CO_SHARE = 0.6;
 const CONVENTIONAL_FIX = /^(fix|hotfix)(\([^)]*\))?!?:/i;
 /** What a commit subject says when it fixes something about security; the configuration adds to it. */
 const SECURITY_FIX = /\b(security|CVE-\d|vulnerab|XSS|CSRF|injection|sanitiz|exploit)/i;
+/** A subject of these conventional types talks about security without fixing it: a feature, a doc, a test. */
+const NOT_A_FIX = /^(feat|docs|test|style|refactor|chore|build|ci|perf)(\([^)]*\))?!?:/i;
 
 export interface HistoryOptions {
   recentDays: number;
@@ -176,7 +178,10 @@ export function computeHistory(
         CONVENTIONAL_FIX.test(commit.subject) ||
         fixPatterns.some((re) => re.test(commit.subject)) ||
         log.fixBranch.has(commit.hash),
-      security: SECURITY_FIX.test(commit.subject) || securityPatterns.some((re) => re.test(commit.subject)),
+      // the default words count unless the subject says it is a feature, a doc or a test; the project's own patterns always count
+      security:
+        (SECURITY_FIX.test(commit.subject) && !NOT_A_FIX.test(commit.subject)) ||
+        securityPatterns.some((re) => re.test(commit.subject)),
     };
     const recent = commit.time >= windowStart && commit.time <= snapshotTime;
     addCommit(acc, commit, { prefix, files }, kinds, recent);

@@ -1,7 +1,8 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Facts } from "@factory-city/schema";
-import { ANALYZER_VERSION, type CachedFile } from "../analyze.js";
+import { CACHE_VERSION } from "../analysis/cache-version.js";
+import type { CachedFile } from "../analyze.js";
 import { autoMapping, importFacts } from "../collectors/facts.js";
 import type { Config } from "../config.js";
 
@@ -40,5 +41,5 @@ export async function loadFileCache(path: string): Promise<Map<string, CachedFil
   const parsed = await readFile(path, "utf8")
     .then((text) => JSON.parse(text) as { version: string; entries: Array<[string, CachedFile]> })
     .catch(() => undefined);
-  return parsed?.version === ANALYZER_VERSION ? new Map(parsed.entries) : new Map();
+  return parsed?.version === CACHE_VERSION ? new Map(parsed.entries) : new Map();
 }

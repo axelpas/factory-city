@@ -112,10 +112,18 @@ export function pathInFolder(uri: string, folder: string): string | undefined {
       return undefined;
     }
   }
-  path = decodeURIComponent(path).replace(/\\/g, "/");
+  // a file: uri was decoded by fileURLToPath; a malformed escape (a literal %) is kept as written
+  if (!uri.startsWith("file:")) {
+    try {
+      path = decodeURIComponent(path);
+    } catch {
+      // keep the path as written
+    }
+  }
+  path = path.replace(/\\/g, "/");
   const root = resolve(folder);
   const rel = isAbsolute(path) ? relative(root, path).replace(/\\/g, "/") : path.replace(/^\.\//, "");
-  return rel.startsWith("..") || isAbsolute(rel) ? undefined : rel;
+  return rel === ".." || rel.startsWith("../") || isAbsolute(rel) ? undefined : rel;
 }
 
 /**

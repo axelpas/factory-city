@@ -84,19 +84,28 @@ export function parsePnpmLock(content: string): LockedPackage[] {
 export function parseYarnLock(content: string): LockedPackage[] {
   const out: LockedPackage[] = [];
   let name: string | undefined;
+  let version: string | undefined;
+  const close = () => {
+    if (name && version) out.push({ name, version });
+    name = undefined;
+    version = undefined;
+  };
   for (const line of content.split(/\r?\n/)) {
     if (/^\S/.test(line) && !line.startsWith("#")) {
+      close();
       const first = line.replace(/:\s*$/, "").split(",")[0]?.trim().replace(/^"|"$/g, "") ?? "";
       name = first.startsWith("__metadata") ? undefined : splitAt(first)?.name;
+      // a patched or workspace entry is named `resolve@patch:resolve`: it is not a registry package
+      if (name?.includes("@patch:") || name?.includes("@workspace:")) name = undefined;
       continue;
     }
-    const version = /^ {2}version:?\s+"?([^"\s]+)"?\s*$/.exec(line)?.[1];
-    if (name && version) {
-      out.push({ name, version });
-      name = undefined;
-    }
+    version = /^ {2}version:?\s+"?([^"\s]+)"?\s*$/.exec(line)?.[1] ?? version;
+    const resolution = /^ {2}resolution:\s+"?([^"]+?)"?\s*$/.exec(line)?.[1];
+    // berry says where the package comes from: only the registry (`@npm:`) is asked about
+    if (resolution !== undefined && !resolution.includes("@npm:")) name = undefined;
   }
-  return unique(out.filter((p) => VERSION.test(p.version)));
+  close();
+  return unique(out.filter((p) => VERSION.test(p.version) && !p.version.includes("use.local")));
 }
 
 export function parseLockfile(kind: LockfileKind, content: string): LockedPackage[] {

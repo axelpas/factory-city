@@ -46,7 +46,7 @@ export async function auditDependencies(
   }
   try {
     const packages = parseLockfile(found.name, (await read(found.entry)).toString("utf8"));
-    opts.log?.(
+    (opts.log ?? ((line) => process.stderr.write(`${line}\n`)))(
       `Dependency audit: sending ${packages.length} package names and versions from ${found.name} to api.osv.dev (nothing else leaves this machine).`,
     );
     const advisories = await queryOsv(packages, opts.auditFetch);

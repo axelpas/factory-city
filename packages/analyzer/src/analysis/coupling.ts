@@ -55,7 +55,9 @@ function countPackages(
   for (const [file, specs] of importsByFile) {
     const values = attributesByPath.get(file);
     if (!values || languageForPath(file)?.modules?.granularity !== "package") continue;
-    values.imports_out = new Set(specs.filter((s) => resolveImportAll(s, file, ctx).length > 0)).size;
+    values.imports_out = new Set(
+      specs.filter((s) => resolveImportAll(s, file, ctx).some((target) => target !== file)),
+    ).size;
   }
 }
 

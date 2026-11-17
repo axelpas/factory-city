@@ -80,7 +80,7 @@ export async function loadBundle(dataDir: string, source?: string): Promise<Bund
     ...(chosen.source === "issue" && existsSync(factoryPath)
       ? { factory: await readJson<Factory>(factoryPath) }
       : {}),
-    ...(existsSync(dependenciesPath)
+    ...(chosen.source === "snapshot" && existsSync(dependenciesPath)
       ? { dependencies: await readJson<DependencyAudit>(dependenciesPath) }
       : {}),
   };

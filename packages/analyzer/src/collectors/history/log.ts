@@ -143,7 +143,14 @@ export async function shortHashes(topLevel: string, revs: readonly string[]): Pr
   const out = new Map<string, string>();
   for (let from = 0; from < revs.length; from += 100) {
     const chunk = revs.slice(from, from + 100);
-    const raw = await git(topLevel, ["log", "--no-walk=unsorted", "--format=%H %h", ...chunk]);
+    const raw = await git(topLevel, [
+      "-c",
+      "log.showSignature=false",
+      "log",
+      "--no-walk=unsorted",
+      "--format=%H %h",
+      ...chunk,
+    ]);
     for (const line of raw.split("\n")) {
       const [full, short] = line.split(" ");
       if (full && short) out.set(full, short);

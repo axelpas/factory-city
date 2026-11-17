@@ -124,8 +124,24 @@ export async function loadSource(
   const report = await tryJson<Report>(`${base(slug)}${reportFile}`);
   const perIssue = manifest.kind === "timeline" && manifest.source.mode === "issue";
   const factory = perIssue ? await tryJson<Factory>(`${base(slug)}factory.json`) : undefined;
-  const dependencies = await tryJson<DependencyAudit>(`${base(slug)}dependencies.json`);
+  // an audit describes one revision: it is shown with a snapshot, never under the frames of a timeline
+  const found =
+    manifest.kind === "snapshot"
+      ? await tryJson<DependencyAudit>(`${base(slug)}dependencies.json`)
+      : undefined;
+  const dependencies = found && isAudit(found) ? found : undefined;
   return { snapshots, manifest, report, factory, ...(dependencies ? { dependencies } : {}) };
+}
+
+/** A file that was cut or edited by hand must not break the Health tab. */
+function isAudit(value: DependencyAudit): boolean {
+  return (
+    value.kind === "dependencies" &&
+    Array.isArray(value.affected) &&
+    typeof value.counts === "object" &&
+    value.counts !== null &&
+    typeof value.checkedAt === "string"
+  );
 }
 
 function isCcJson(value: unknown): value is CcJson {

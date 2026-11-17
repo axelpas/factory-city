@@ -152,7 +152,7 @@ Any text file gets a building; how much is measured depends on the language. `fa
 
 | Tier | Languages | What is measured |
 |---|---|---|
-| 1 | TypeScript, TSX, JavaScript, Python, Go, Java, C#, Kotlin | Size, complexity, nesting, coupling, cohesion, the full set of shortcuts (silenced checks) and security signals |
+| 1 | TypeScript, TSX, JavaScript, Python, Go, Java, C#, Kotlin | Size, complexity, nesting, coupling, cohesion, the shortcuts of the language (silenced checks) and security signals |
 | 2 | C, C++, Rust, PHP, Ruby, Swift | Size, complexity, nesting and some shortcuts. Coupling, cohesion and security signals are unavailable for now. |
 | 3 | Any other text file, with `--all` | Lines and the git metrics only |
 
@@ -209,7 +209,7 @@ The contracts are described in [`docs/data-model.md`](docs/data-model.md) and va
 
 **Does anything leave my machine?** No. Nothing is uploaded and there is no telemetry. With `gh` signed in, the tool reads issue, pull request and CI metadata from GitHub; `--offline` turns that off. The one other exception is `--with audit`, which you must ask for: it sends the **names and versions of the packages in your lockfile** (nothing else, no path, no code, no project name) to [api.osv.dev](https://osv.dev), then the ids of the advisories that matched, and prints what it sends before it sends it. `--offline` refuses it. Source code never appears in the output.
 
-**How is the score computed?** The share of code (by real lines) in files that are low risk on every static dimension available for them: file size, complexity, nesting, coupling, cohesion, shortcuts, duplication. History dimensions stay out, so the score does not depend on how much history exists. Thresholds are listed in the report with their source, or marked "project default, not a standard".
+**How is the score computed?** The share of code (by real lines) in files that are low risk on every static dimension available for them: file size, complexity, nesting, coupling, cohesion, shortcuts, security signals, duplication, and the findings of a scanner when a SARIF file was given (the score is also shown without the security signals and the scanner findings). History dimensions stay out, so the score does not depend on how much history exists. Thresholds are listed in the report with their source, or marked "project default, not a standard".
 
 **What does "unavailable" mean?** The value could not be computed for that file or at that data level. It is stored and shown as n/a, never as zero, and the help says why.
 

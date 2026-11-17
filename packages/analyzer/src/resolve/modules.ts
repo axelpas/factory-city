@@ -172,17 +172,12 @@ export function resolveJava(spec: string, from: string, files: ReadonlySet<strin
 }
 
 /**
- * The files a C# `using` stands for: the files that declare the namespace it names. `using static A.B.C` names a
- * class, so the last names are dropped until a namespace answers. A namespace no file declares (the framework,
- * packages) has no file.
+ * The files a C# `using` stands for: the files that declare the namespace it names. A `using static` or an alias
+ * names a class, not a namespace: it has no file. A namespace no file declares (the framework, packages) has none.
  */
 export function resolveCsharp(spec: string, ctx: ResolveContext): string[] {
-  const segments = spec.split(".");
-  for (let keep = segments.length; keep >= 1; keep--) {
-    const files = ctx.namespaces.get(segments.slice(0, keep).join("."));
-    if (files) return files;
-  }
-  return [];
+  // only the namespace itself: a name that no file declares is a package, and must not fall back on its prefix
+  return ctx.namespaces.get(spec) ?? [];
 }
 
 /**
@@ -200,9 +195,8 @@ export function resolveKotlin(spec: string, from: string, ctx: ResolveContext): 
     const file = hits ? nearest(hits, from) : undefined;
     if (file) return [file];
   }
-  for (let keep = segments.length; keep >= 1; keep--) {
-    const files = ctx.namespaces.get(segments.slice(0, keep).join("."));
-    if (files) return files;
-  }
-  return [];
+  // a top-level function or property is named in lower case: its package is the name without it
+  const last = segments[segments.length - 1] ?? "";
+  const pkg = wildcard || !/^[a-z]/.test(last) ? name : segments.slice(0, -1).join(".");
+  return ctx.namespaces.get(pkg) ?? [];
 }

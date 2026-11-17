@@ -100,3 +100,11 @@ it("sarif > matches the paths of a scanner that ran inside the analyzed subfolde
   // semgrep-like.sarif names src/a.ts and src/b.ts: the scanner ran in pkg/
   expect(values(result).get("pkg/src/a.ts")).toMatchObject({ sarif_findings: 2 });
 });
+
+it("sarif > keeps a path with a literal percent sign and does not mistake ..name for a parent folder", () => {
+  expect(pathInFolder("src/100%.ts", "/work/project")).toBe("src/100%.ts");
+  expect(pathInFolder("src/a%2520b.ts", "/work/project")).toBe("src/a%20b.ts");
+  expect(pathInFolder("..hidden.ts", "/work/project")).toBe("..hidden.ts");
+  expect(pathInFolder("../x.ts", "/work/project")).toBeUndefined();
+  expect(pathInFolder("file:///work/project/src/a%20b.ts", "/work/project")).toBe("src/a b.ts");
+});

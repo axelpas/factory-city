@@ -46,9 +46,20 @@ it("csharp coupling > resolves a namespace to every file that declares it", () =
   expect(resolveCsharp("App.Models", c)).toEqual(["Models/User.cs", "Models/Order.cs"]);
 });
 
-it("csharp coupling > reads a using static or alias target as the namespace that holds the class", () => {
-  const c = ctx([["App.Util", ["Util/Helper.cs"]]]);
-  expect(resolveCsharp("App.Util.Helper", c)).toEqual(["Util/Helper.cs"]);
+it("csharp coupling > does not fall back on the prefix of a name that no file declares", () => {
+  const c = ctx([
+    ["Acme.Billing", ["Billing/Invoice.cs"]],
+    ["Acme", ["Acme.cs"]],
+  ]);
+  // a package of the same company, a using static, an alias of a class: none is a namespace of the project
+  for (const spec of ["Acme.Billing.Missing", "Acme.Billing.Invoice", "Acme.Other.Thing"])
+    expect(resolveCsharp(spec, c), spec).toEqual([]);
+});
+
+it("csharp coupling > a file whose only link is itself has no import", async () => {
+  const dir = makeTree({ "A.cs": "using App.Self;\nnamespace App.Self { class A { } }\n" });
+  const v = values(await analyze({ folder: dir }));
+  expect(v.get("A.cs")?.imports_out).toBe(0);
 });
 
 it("csharp coupling > leaves the framework and packages without a file", () => {

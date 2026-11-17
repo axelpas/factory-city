@@ -260,3 +260,51 @@ it("audit > dependencies.json is written with the analysis, and an earlier one d
   await writeAnalysis(await analyze({ folder: project() }), out);
   expect(existsSync(join(out, "dependencies.json"))).toBe(false);
 });
+
+it("audit > says what it sends on stderr when the caller gave no log, so that --json does not hide it", async () => {
+  const { fetcher } = osvReplay();
+  const written: string[] = [];
+  const original = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written.push(String(chunk));
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    await analyze({ folder: project(), audit: true, auditFetch: fetcher });
+  } finally {
+    process.stderr.write = original;
+  }
+  expect(written.join("")).toContain("sending 3 package names and versions");
+});
+
+it("lockfiles > yarn berry: workspaces, patches and links are not asked about; registry packages are", () => {
+  const berry = `__metadata:
+  version: 6
+
+"@acme/app@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "@acme/app@workspace:."
+
+"lodash@npm:^4.17.15":
+  version: 4.17.15
+  resolution: "lodash@npm:4.17.15"
+
+"resolve@patch:resolve@^1.1.7#optional!builtin<compat/resolve>":
+  version: 1.22.0
+  resolution: "resolve@patch:resolve@npm%3A1.22.0#optional!builtin<compat/resolve>::version=1.22.0&hash=07638b"
+
+"local@file:../local":
+  version: 1.0.0
+  resolution: "local@file:../local::locator=app%40workspace%3A."
+`;
+  expect(parseYarnLock(berry)).toEqual([LODASH]);
+});
+
+it("osv > an answer that covers fewer queries than were sent is an error, never 'no vulnerability'", async () => {
+  const short = (async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ results: [{}] }),
+  })) as unknown as typeof fetch;
+  await expect(queryOsv([LODASH, SCOPED], short)).rejects.toThrow(/fewer results than queries/);
+});

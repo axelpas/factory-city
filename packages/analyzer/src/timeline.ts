@@ -1,8 +1,8 @@
 import { mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { TimelineMode } from "@factory-city/schema";
+import { CACHE_VERSION } from "./analysis/cache-version.js";
 import type { AnalyzeShared } from "./analyze.js";
-import { ANALYZER_VERSION } from "./analyze.js";
 import { enrichFrames } from "./collectors/enrich.js";
 import { computeHistory, loadHistoryLog } from "./collectors/history.js";
 import { loadConfig } from "./config.js";
@@ -133,7 +133,7 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
     warnings: [...plan.warnings, ...lineageWarnings, ...warnings],
   });
   await writeOutputs(dataDir, mode, manifest, last);
-  await writeAtomic(cachePath, JSON.stringify({ version: ANALYZER_VERSION, entries: [...fileCache] }));
+  await writeAtomic(cachePath, JSON.stringify({ version: CACHE_VERSION, entries: [...fileCache] }));
   return {
     manifest,
     dataDir,

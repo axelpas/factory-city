@@ -4,6 +4,7 @@ import type { LockedPackage } from "./lockfile.js";
 /** The one host that is asked: the open vulnerability database of Google. */
 export const OSV_URL = "https://api.osv.dev";
 const BATCH = 1000;
+const TIMEOUT_MS = 30_000;
 
 type Fetch = typeof fetch;
 
@@ -12,13 +13,14 @@ async function post(fetcher: Fetch, path: string, body: unknown): Promise<unknow
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`api.osv.dev answered ${res.status} to ${path}`);
   return res.json();
 }
 
 async function get(fetcher: Fetch, path: string): Promise<unknown> {
-  const res = await fetcher(`${OSV_URL}${path}`);
+  const res = await fetcher(`${OSV_URL}${path}`, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!res.ok) throw new Error(`api.osv.dev answered ${res.status} to ${path}`);
   return res.json();
 }
@@ -48,6 +50,9 @@ export async function queryOsv(
     const answer = (await post(fetcher, "/v1/querybatch", {
       queries: chunk.map((p) => ({ package: { name: p.name, ecosystem: "npm" }, version: p.version })),
     })) as { results?: Array<{ vulns?: Array<{ id?: string }> }> };
+    // an answer that does not cover every query must not be read as "no vulnerability"
+    if ((answer.results?.length ?? 0) !== chunk.length)
+      throw new Error("api.osv.dev answered fewer results than queries");
     chunk.forEach((p, i) => {
       const found = (answer.results?.[i]?.vulns ?? []).map((v) => v.id).filter((id): id is string => !!id);
       if (found.length > 0) ids.set(`${p.name}@${p.version}`, found);

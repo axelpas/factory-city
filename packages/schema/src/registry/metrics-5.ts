@@ -128,7 +128,7 @@ export const METRICS_5: readonly MetricDefinition[] = [
     label: "Security fixes",
     definition: "Number of commits that fixed something about security and changed the file.",
     computation:
-      "Commits whose subject has a security word (security, CVE, vulnerability, XSS, CSRF, injection, sanitize, exploit) or matches securityFixPatterns, counted for each file they changed.",
+      "Commits whose subject has a security word (security, CVE, vulnerability, XSS, CSRF, injection, sanitize, exploit) and is not a feat, docs, test, style, refactor, chore, build, ci or perf commit, or whose subject matches securityFixPatterns (these always count), counted for each file they changed.",
     why: "A file that keeps needing security fixes may keep producing them.",
     unit: "commits",
     direction: "higher-is-worse",

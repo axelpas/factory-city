@@ -49,9 +49,8 @@ export async function analyzeAndWrite(path: string, opts: AnalyzeFlags, quiet = 
     sarif: (opts.sarif ?? []).map((f) => resolve(f)),
     audit: features(opts).has("audit"),
     offline: opts.offline,
-    log: (line) => {
-      if (!opts.json) console.error(line);
-    },
+    // on stderr, so that --json still says what is sent without touching the output
+    log: (line) => console.error(line),
   });
   const slug = slugFor(folder);
   const dataDir = opts.out ? resolve(opts.out) : join(outputRoot(), slug);

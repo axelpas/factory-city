@@ -50,7 +50,14 @@ it("kotlin coupling > resolves a class to the file named after it, and a functio
 
 it("kotlin coupling > leaves the standard library and dependencies without a file", () => {
   const c = ctx(["src/com/x/Main.kt"], [["com.x", ["src/com/x/Main.kt"]]]);
-  for (const spec of ["kotlin.collections.List", "java.util.*", "org.junit.Test"])
+  // a library class of the same prefix as the project must not fall back on the project's package
+  for (const spec of [
+    "kotlin.collections.List",
+    "java.util.*",
+    "org.junit.Test",
+    "com.x.Missing",
+    "com.x.lib.Client",
+  ])
     expect(resolveKotlin(spec, "src/com/x/Main.kt", c), spec).toEqual([]);
 });
 

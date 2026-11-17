@@ -10,9 +10,9 @@ export async function addScannerFindings(
   opts: AnalyzeOptions,
   attributesByPath: FileValues,
   warnings: string[],
-): Promise<{ external: ExternalFindings[]; rated: boolean }> {
+): Promise<{ external: ExternalFindings[] }> {
   const files = opts.sarif ?? [];
-  if (files.length === 0) return { external: [], rated: false };
+  if (files.length === 0) return { external: [] };
   const runs = (await Promise.all(files.map((file) => readSarif(file)))).flat();
   const analyzed = new Map([...attributesByPath].map(([path, v]) => [path, { isTest: v.is_test === 1 }]));
   const { perFile, external } = attachSarif(runs, opts.folder, analyzed, opts.path);
@@ -27,5 +27,5 @@ export async function addScannerFindings(
         `${e.tool}: ${apart} of ${e.results} result(s) are not attached to an analyzed file (${e.apart.noLocation} without location, ${e.apart.outside} outside the folder, ${e.apart.notAnalyzed} on files not analyzed, ${e.apart.tests} on test files).`,
       );
   }
-  return { external, rated: perFile.size > 0 };
+  return { external };
 }

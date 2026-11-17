@@ -22,6 +22,18 @@ function calleeOf(node: Node): string | undefined {
   return name ? (object ? `${object.text}.${name.text}` : name.text) : undefined;
 }
 
+const ARGS_REGEX = new Map<string, RegExp>();
+
+/** The pattern of a rule's arguments, compiled once. */
+function argsRegex(pattern: string): RegExp {
+  let re = ARGS_REGEX.get(pattern);
+  if (!re) {
+    re = new RegExp(pattern);
+    ARGS_REGEX.set(pattern, re);
+  }
+  return re;
+}
+
 /** A call whose callee matches the rule, such as `eval(...)` or `test.skip(...)`. */
 function matchesCall(rule: ShortcutRule, re: RegExp | undefined, node: Node): boolean {
   if (node.type !== (rule.nodeType ?? "call_expression")) return false;
@@ -31,7 +43,7 @@ function matchesCall(rule: ShortcutRule, re: RegExp | undefined, node: Node): bo
   const args = (
     node.childForFieldName("arguments") ?? node.namedChildren.find((c) => c?.type === "value_arguments")
   )?.text;
-  return args !== undefined && new RegExp(rule.argsPattern).test(args);
+  return args !== undefined && argsRegex(rule.argsPattern).test(args);
 }
 
 export class Walker {
