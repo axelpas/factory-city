@@ -288,3 +288,63 @@ function srcOf(dir: string): string | undefined {
 function parentModuleFile(dir: string, files: ReadonlySet<string>): string | undefined {
   return [`${dir}/mod.rs`, `${dir}.rs`, `${dir}/lib.rs`, `${dir}/main.rs`].find((f) => files.has(f));
 }
+
+/** The top-level parts of a comma-separated list, braces kept whole. */
+function splitTop(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i <= text.length; i++) {
+    const c = text[i];
+    if (c === "{") depth++;
+    else if (c === "}") depth--;
+    else if ((c === "," && depth === 0) || i === text.length) {
+      parts.push(text.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  return parts.filter((p) => p !== "");
+}
+
+/** The class names of a PHP `use` clause: `A\B`, `A\{B, C\D}` and `A\B, C\D`. */
+function phpUses(clause: string): string[] {
+  const out: string[] = [];
+  for (const item of splitTop(clause)) {
+    const open = item.indexOf("{");
+    if (open < 0) {
+      out.push(item.replace(/^\\/, ""));
+      continue;
+    }
+    const prefix = item.slice(0, open).replace(/\\$/, "").replace(/^\\/, "");
+    for (const inner of splitTop(item.slice(open + 1, item.lastIndexOf("}"))))
+      out.push(`${prefix}\\${inner}`);
+  }
+  return out;
+}
+
+/**
+ * The files a PHP `use` or `require` stands for. A class is the file named after it among the files that declare its
+ * namespace (the usual one class per file); `use function` and `use const` name no file. A `require` or `include`
+ * with a string path is read from the folder of the file, then from the root of the project, `__DIR__` being the
+ * folder of the file. Classes of the framework and of `vendor/` have no file.
+ */
+export function resolvePhp(spec: string, from: string, ctx: ResolveContext): string[] {
+  if (spec.startsWith("req:")) {
+    const path = /['"]([^'"]+)['"]/.exec(spec)?.[1];
+    if (!path) return [];
+    const relative = posix.normalize(posix.join(dirOf(from), path.replace(/^\.\//, "")));
+    const fromRoot = posix.normalize(path.replace(/^\.?\//, ""));
+    return [relative, fromRoot].filter((f) => f !== from && ctx.files.has(f)).slice(0, 1);
+  }
+  const clause = spec.replace(/^use:\s*use\s+/, "").replace(/;\s*$/, "");
+  if (/^(function|const)\s/.test(clause)) return [];
+  const out = new Set<string>();
+  for (const fqn of phpUses(clause)) {
+    const cut = fqn.lastIndexOf("\\");
+    if (cut < 0) continue;
+    const name = fqn.slice(cut + 1);
+    for (const file of ctx.namespaces.get(fqn.slice(0, cut)) ?? [])
+      if (posix.basename(file) === `${name}.php` && file !== from) out.add(file);
+  }
+  return [...out];
+}

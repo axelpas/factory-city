@@ -66,6 +66,8 @@ export interface ModulesConfig {
     wildcardType?: string;
     /** The statement ends with this text when it imports a whole package (Kotlin `.*`, an anonymous token). */
     wildcardSuffix?: string;
+    /** The module is the whole statement as written, whitespace folded (PHP `use A\\B;`, `require 'x.php';`). */
+    wholeText?: boolean;
     /** Added in front of the module name, to tell this kind of statement from the others (Rust `mod:` for `mod x;`). */
     specPrefix?: string;
     /** The statement says nothing about another file when it has this field (Rust `mod x { ... }` has a body). */
@@ -74,7 +76,7 @@ export interface ModulesConfig {
     namesField?: string;
   }>;
   /** How the names are turned into files of the project (see `resolve/modules.ts`). */
-  resolver: "python" | "go" | "java" | "csharp" | "kotlin" | "rust";
+  resolver: "python" | "go" | "java" | "csharp" | "kotlin" | "rust" | "php";
   /** `package` when an import names a group of files (a Go package, a C# namespace): it counts once in `imports_out`. */
   granularity?: "package";
   /** Nodes that declare a name other files can import (a C# namespace): the node type and the field with the name. */
@@ -94,6 +96,7 @@ export interface CohesionConfig {
   fields: string[];
   otherDeclarations: string[];
   identifiers: string[];
+  /** The node type of a member access; several types separated by `|` when a call has its own (PHP). */
   memberExpression: string;
   /** Fields of a member expression, `object` and `property` when absent (Python: `object` and `attribute`). */
   memberObjectField?: string;

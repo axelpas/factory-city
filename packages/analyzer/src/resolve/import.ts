@@ -5,6 +5,7 @@ import {
   resolveGo,
   resolveJava,
   resolveKotlin,
+  resolvePhp,
   resolvePython,
   resolveRust,
 } from "./modules.js";
@@ -64,6 +65,7 @@ export function resolveImportAll(spec: string, from: string, ctx: ResolveContext
   if (resolver === "csharp") return resolveCsharp(spec, ctx);
   if (resolver === "kotlin") return resolveKotlin(spec, from, ctx);
   if (resolver === "rust") return resolveRust(spec, from, ctx);
+  if (resolver === "php") return resolvePhp(spec, from, ctx);
   const one = resolveImport(spec, from, ctx);
   return one ? [one] : [];
 }

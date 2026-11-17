@@ -159,6 +159,14 @@ export class Walker {
     statement: NonNullable<LanguageConfig["modules"]>["statements"][number],
   ) {
     if (statement.skipWhenField && node.childForFieldName(statement.skipWhenField)) return;
+    if (statement.wholeText) {
+      const text = node.text
+        .replace(/\s+as\s+\w+/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      this.imports.push(`${statement.specPrefix ?? ""}${text}`);
+      return;
+    }
     const modules = (
       statement.moduleType
         ? node.namedChildren.filter(

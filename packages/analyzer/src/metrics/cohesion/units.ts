@@ -41,7 +41,7 @@ function collect(
 ): void {
   if (skip && node.id === skip.id) return;
   if (cfg.identifiers.includes(node.type)) tokens.add(node.text);
-  if (node.type === cfg.memberExpression) {
+  if (cfg.memberExpression.split("|").includes(node.type)) {
     // without field names (Kotlin) the object is the first child and the property the last
     const positional = cfg.memberObjectField === "";
     const object = positional
@@ -112,7 +112,7 @@ function declaredFields(member: Node, cfg: CohesionConfig): string[] {
   const holder = d.through ? member.namedChildren.find((c) => c?.type === d.through) : member;
   return (holder?.namedChildren ?? [])
     .filter((c) => c?.type === d.declaratorType)
-    .map((c) => (d.nameField === "" ? c?.text : c?.childForFieldName(d.nameField)?.text))
+    .map((c) => (d.nameField === "" ? c?.text : c?.childForFieldName(d.nameField)?.text)?.replace(/^\$/, ""))
     .filter((n): n is string => n !== undefined);
 }
 

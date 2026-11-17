@@ -1,7 +1,7 @@
 {
   "id": "php",
   "label": "PHP",
-  "tier": 2,
+  "tier": 1,
   "grammar": "php",
   "extensions": [".php"],
   "comment": ["comment"],
@@ -41,13 +41,201 @@
     {
       "kind": "lint_disable",
       "type": "comment",
-      "pattern": "phpcs:(ignore|disable)|@phpstan-ignore|@psalm-suppress|@codeCoverageIgnore"
+      "pattern": "phpcs:(ignore|disable)|@codingStandardsIgnore|NOSONAR|@codeCoverageIgnore|@SuppressWarnings"
+    },
+    {
+      "kind": "type_ignore",
+      "type": "comment",
+      "pattern": "@phpstan-ignore|phpstan-ignore-next-line|phpstan-ignore-line|@psalm-suppress|psalm-suppress"
+    },
+    {
+      "kind": "lint_disable",
+      "type": "node",
+      "nodeType": "error_suppression_expression",
+      "pattern": "^@"
+    },
+    {
+      "kind": "skipped_test",
+      "type": "call",
+      "nodeType": "member_call_expression",
+      "pattern": "(^|\\.)(markTestSkipped|markTestIncomplete)$"
     },
     {
       "kind": "empty_catch",
       "type": "emptyBlock",
       "nodeType": "catch_clause",
       "bodyField": "body"
+    }
+  ],
+  "modules": {
+    "statements": [
+      {
+        "nodeType": "namespace_use_declaration",
+        "moduleField": "",
+        "wholeText": true,
+        "specPrefix": "use:"
+      },
+      {
+        "nodeType": "require_expression",
+        "moduleField": "",
+        "wholeText": true,
+        "specPrefix": "req:"
+      },
+      {
+        "nodeType": "require_once_expression",
+        "moduleField": "",
+        "wholeText": true,
+        "specPrefix": "req:"
+      },
+      {
+        "nodeType": "include_expression",
+        "moduleField": "",
+        "wholeText": true,
+        "specPrefix": "req:"
+      },
+      {
+        "nodeType": "include_once_expression",
+        "moduleField": "",
+        "wholeText": true,
+        "specPrefix": "req:"
+      }
+    ],
+    "resolver": "php",
+    "declarations": [
+      {
+        "nodeType": "namespace_definition",
+        "nameField": "name"
+      }
+    ]
+  },
+  "cohesion": {
+    "wrappers": [],
+    "functionDeclarations": ["function_definition"],
+    "variableDeclarations": [],
+    "functionValues": [],
+    "classDeclarations": ["class_declaration", "trait_declaration", "interface_declaration"],
+    "methods": ["method_declaration"],
+    "constructorName": "__construct",
+    "fields": ["property_declaration"],
+    "fieldDeclarators": {
+      "declaratorType": "property_element",
+      "nameField": "name"
+    },
+    "otherDeclarations": ["const_declaration"],
+    "identifiers": ["name"],
+    "memberExpression": "member_access_expression|member_call_expression",
+    "memberObjectField": "object",
+    "memberPropertyField": "name",
+    "selfObject": "$this",
+    "barrelStatements": ["namespace_use_declaration", "namespace_definition", "php_tag"],
+    "minStemLength": 4
+  },
+  "security": [
+    {
+      "kind": "dynamic_code",
+      "type": "call",
+      "nodeType": "function_call_expression",
+      "pattern": "^(eval|create_function)$"
+    },
+    {
+      "kind": "command_exec",
+      "type": "call",
+      "nodeType": "function_call_expression",
+      "pattern": "^(exec|shell_exec|system|passthru|popen|proc_open|pcntl_exec)$"
+    },
+    {
+      "kind": "command_exec",
+      "type": "node",
+      "nodeType": "shell_command_expression",
+      "pattern": "."
+    },
+    {
+      "kind": "unsafe_deserialization",
+      "type": "call",
+      "nodeType": "function_call_expression",
+      "pattern": "^unserialize$",
+      "argsPattern": "^\\((?![\\s\\S]*allowed_classes)"
+    },
+    {
+      "kind": "unsafe_html",
+      "type": "node",
+      "nodeType": "echo_statement",
+      "pattern": "^echo\\s+(?![^;]*(htmlspecialchars|htmlentities|esc_html|esc_attr))[^;]*\\$_(GET|POST|REQUEST|COOKIE)\\b"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "assignment_expression",
+      "pattern": "^\\$\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*=\\s*[\"'](?![a-z_]+[\"'])(?![A-Z_]+[\"'])(?!\\S*/)[^\"'\\s${}]{8,}[\"']$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "property_element",
+      "pattern": "^\\$\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*=\\s*[\"'](?![a-z_]+[\"'])(?![A-Z_]+[\"'])(?!\\S*/)[^\"'\\s${}]{8,}[\"']$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "const_element",
+      "pattern": "^\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*=\\s*[\"'](?![a-z_]+[\"'])(?![A-Z_]+[\"'])(?!\\S*/)[^\"'\\s${}]{8,}[\"']$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "array_element_initializer",
+      "pattern": "^[\"']\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*[\"']\\s*=>\\s*[\"'](?![a-z_]+[\"'])(?![A-Z_]+[\"'])(?!\\S*/)[^\"'\\s${}]{8,}[\"']$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string",
+      "pattern": "^[\"'](ghp_[A-Za-z0-9]{30,}|github_pat_\\w{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[\\w-]{10,})"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string",
+      "pattern": "BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "encapsed_string",
+      "pattern": "BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "call",
+      "nodeType": "function_call_expression",
+      "pattern": "^curl_setopt$",
+      "argsPattern": "CURLOPT_SSL_VERIFY(PEER|HOST)\\s*,\\s*(false|0)"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "node",
+      "nodeType": "array_element_initializer",
+      "pattern": "^[\"'](verify|verify_peer|verify_peer_name)[\"']\\s*=>\\s*false$"
+    },
+    {
+      "kind": "sql_concat",
+      "type": "call",
+      "nodeType": "member_call_expression",
+      "pattern": "(^|\\.)(query|exec|prepare|execute|rawQuery|statement|unprepared)$",
+      "argsPattern": "^\\(\\s*(\"[^\"]*\"\\s*\\.|'[^']*'\\s*\\.|\"[^\"]*\\$\\w)"
+    },
+    {
+      "kind": "sql_concat",
+      "type": "call",
+      "nodeType": "function_call_expression",
+      "pattern": "^(mysqli_query|mysql_query|pg_query|sqlite_query)$",
+      "argsPattern": "^\\(\\s*(\\$\\w+\\s*,\\s*)?(\"[^\"]*\"\\s*\\.|'[^']*'\\s*\\.|\"[^\"]*\\$\\w)"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "encapsed_string",
+      "pattern": "^\"(ghp_[A-Za-z0-9]{30,}|github_pat_\\w{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[\\w-]{10,})"
     }
   ]
 }
