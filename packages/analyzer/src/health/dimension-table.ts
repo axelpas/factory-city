@@ -67,6 +67,14 @@ export const DIMENSIONS: readonly RiskDimension[] = [
     source: `${DEFAULT} (a signal is a place to look at, not a proven flaw)`,
   },
   {
+    id: "security_fixes",
+    label: "Security fixes",
+    metric: "security_fix_commits_recent",
+    kind: "history",
+    bounds: [0, 1, 2],
+    source: `${DEFAULT} (read from commit subjects)`,
+  },
+  {
     id: "duplication",
     label: "Duplication",
     metric: "duplication_ratio",

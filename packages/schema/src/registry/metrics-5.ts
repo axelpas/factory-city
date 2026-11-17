@@ -97,4 +97,42 @@ export const METRICS_5: readonly MetricDefinition[] = [
     level: 0,
     limits: "TypeScript and JavaScript only; test files are not rated.",
   }),
+  metric({
+    id: "sensitive_path",
+    label: "Sensitive path",
+    definition:
+      "Whether the path of the file looks like sensitive code: sign-in, permissions, secrets, crypto, payment.",
+    computation:
+      "The path matches the default words (auth, oauth, crypto, payment, billing, secret, token, session, password, credential, permission, acl, rbac, login, jwt) or a pattern of the configuration (sensitivePatterns). 1 or 0. Test files are not rated.",
+    why: "A signal or a change matters more where a mistake costs more.",
+    unit: "flag",
+    direction: "higher-is-worse",
+    level: 0,
+    limits:
+      "A guess from names: code that is sensitive but named otherwise is missed, and a name can mislead. Add patterns in factory-city.config.json.",
+  }),
+  metric({
+    id: "security_fix_commits",
+    label: "Security fixes",
+    definition: "Number of commits that fixed something about security and changed the file.",
+    computation:
+      "Commits whose subject has a security word (security, CVE, vulnerability, XSS, CSRF, injection, sanitize, exploit) or matches securityFixPatterns, counted for each file they changed.",
+    why: "A file that keeps needing security fixes may keep producing them.",
+    unit: "commits",
+    direction: "higher-is-worse",
+    level: 1,
+    limits: "Read from commit subjects only: a fix that does not say so is missed.",
+  }),
+  metric({
+    id: "security_fix_commits_recent",
+    label: "Recent security fixes",
+    definition: "Security fixes in the recent window.",
+    computation:
+      "The same count, over the recent window ending at the analyzed revision (30 days by default).",
+    why: "Shows where security fixes are landing now.",
+    unit: "commits",
+    direction: "higher-is-worse",
+    level: 1,
+    limits: "Read from commit subjects only.",
+  }),
 ];

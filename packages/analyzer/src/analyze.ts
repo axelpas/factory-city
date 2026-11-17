@@ -3,6 +3,7 @@ import { addCoupling } from "./analysis/coupling.js";
 import { addDuplication, measureFiles } from "./analysis/files.js";
 import { addHistory } from "./analysis/history.js";
 import { buildOutputs } from "./analysis/output.js";
+import { addSensitivePaths } from "./analysis/sensitivity.js";
 import type { AnalysisResult, AnalyzeOptions } from "./analysis/types.js";
 import { bump, emptySummary, makeFolderSkipper, selectEntries } from "./select.js";
 import { DiskSource } from "./source/disk.js";
@@ -66,6 +67,8 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
       );
     for (const [key, n] of Object.entries(summary.warnings))
       warnings.push(`${n} entr${n === 1 ? "y" : "ies"} skipped: ${key}.`);
+
+    if (await addSensitivePaths(opts, measured.attributesByPath)) measured.present.add("sensitive_path");
 
     const duplicates = opts.duplication
       ? await addDuplication(source, measured.analyzedEntries, measured.attributesByPath, opts)

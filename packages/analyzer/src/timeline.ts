@@ -82,6 +82,7 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
       computeHistory(log, state.currentTime, state.reachable, repo.prefix, files, {
         recentDays: config.windows.recentDays,
         fixPatterns: config.fixPatterns,
+        securityFixPatterns: config.securityFixPatterns,
       }),
   };
 

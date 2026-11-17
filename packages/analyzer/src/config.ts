@@ -7,6 +7,10 @@ export interface Config {
   windows: { recentDays: number; reworkDays: number };
   /** Extra regular expressions that mark a commit subject as a fix. */
   fixPatterns: string[];
+  /** Extra regular expressions on a commit subject that mark a security fix (added to the defaults). */
+  securityFixPatterns: string[];
+  /** Extra regular expressions on a file path that mark sensitive code (added to the defaults). */
+  sensitivePatterns: string[];
   /** Extra regular expressions that find an issue number in a commit message; group 1 is the number. */
   issuePatterns: string[];
   /** Author labels: the first rule whose pattern matches "Name <email>" gives the label. */
@@ -61,6 +65,8 @@ export type FactField =
 export const DEFAULT_CONFIG: Config = {
   windows: { recentDays: 30, reworkDays: 14 },
   fixPatterns: [],
+  securityFixPatterns: [],
+  sensitivePatterns: [],
   issuePatterns: [],
   authorLabels: [],
   thresholds: {},
@@ -95,6 +101,8 @@ export async function loadConfig(folder: string): Promise<Config> {
       reworkDays: days(windows, "reworkDays", DEFAULT_CONFIG.windows.reworkDays, path),
     },
     fixPatterns: patternsOf(json, "fixPatterns", path),
+    securityFixPatterns: patternsOf(json, "securityFixPatterns", path),
+    sensitivePatterns: patternsOf(json, "sensitivePatterns", path),
     issuePatterns: patternsOf(json, "issuePatterns", path),
     authorLabels: authorLabelsOf(json, path),
     thresholds: thresholdsOf(json, path),

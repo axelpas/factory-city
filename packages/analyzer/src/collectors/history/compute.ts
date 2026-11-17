@@ -5,10 +5,14 @@ const MAX_COUPLING_FILES = 50;
 const MIN_CO_COMMITS = 3;
 const MIN_CO_SHARE = 0.6;
 const CONVENTIONAL_FIX = /^(fix|hotfix)(\([^)]*\))?!?:/i;
+/** What a commit subject says when it fixes something about security; the configuration adds to it. */
+const SECURITY_FIX = /\b(security|CVE-\d|vulnerab|XSS|CSRF|injection|sanitiz|exploit)/i;
 
 export interface HistoryOptions {
   recentDays: number;
   fixPatterns: string[];
+  /** Added to the default security words. */
+  securityFixPatterns?: string[];
 }
 
 export interface FileHistory {
@@ -21,6 +25,8 @@ export interface FileHistory {
   authors: Set<string>;
   fixCommits: number;
   fixCommitsRecent: number;
+  securityFixCommits: number;
+  securityFixCommitsRecent: number;
   coChangeFiles: number;
 }
 
@@ -47,28 +53,38 @@ function emptyHistory(time: number): FileHistory {
     authors: new Set(),
     fixCommits: 0,
     fixCommitsRecent: 0,
+    securityFixCommits: 0,
+    securityFixCommitsRecent: 0,
     coChangeFiles: 0,
   };
 }
 
 /** What one commit changed in one file, added to the history of the file. */
+/** What a commit is: a fix, and a fix about security. */
+interface CommitKinds {
+  fix: boolean;
+  security: boolean;
+}
+
 function addChange(
   h: FileHistory,
   commit: Commit,
   change: Commit["changes"][number],
-  isFix: boolean,
+  kinds: CommitKinds,
   recent: boolean,
 ) {
   h.commits++;
   h.authors.add(commit.author);
   h.firstTime = Math.min(h.firstTime, commit.time);
   h.lastTime = Math.max(h.lastTime, commit.time);
-  if (isFix) h.fixCommits++;
+  if (kinds.fix) h.fixCommits++;
+  if (kinds.security) h.securityFixCommits++;
   if (!recent) return;
   h.recentCommits++;
   h.linesAddedRecent += change.added;
   h.linesDeletedRecent += change.deleted;
-  if (isFix) h.fixCommitsRecent++;
+  if (kinds.fix) h.fixCommitsRecent++;
+  if (kinds.security) h.securityFixCommitsRecent++;
 }
 
 /** Counts a pair of files for every two files a commit touched together (small commits only). */
@@ -113,7 +129,13 @@ interface Scope {
 }
 
 /** One commit: its changes to the files of the scope are added to their histories, and its pairs counted. */
-function addCommit(acc: Accumulator, commit: Commit, scope: Scope, isFix: boolean, recent: boolean): void {
+function addCommit(
+  acc: Accumulator,
+  commit: Commit,
+  scope: Scope,
+  kinds: CommitKinds,
+  recent: boolean,
+): void {
   const cut = scope.prefix ? scope.prefix.length + 1 : 0;
   const touched = new Set<string>();
   for (const change of commit.changes) {
@@ -125,7 +147,7 @@ function addCommit(acc: Accumulator, commit: Commit, scope: Scope, isFix: boolea
     acc.history.set(rel, h);
     if (touched.has(rel)) continue;
     touched.add(rel);
-    addChange(h, commit, change, isFix, recent);
+    addChange(h, commit, change, kinds, recent);
   }
   countPairs(acc.pairs, touched);
 }
@@ -144,16 +166,20 @@ export function computeHistory(
 ): HistoryResult {
   const commits = reachable ? log.commits.filter((c) => reachable.has(c.hash)) : log.commits;
   const fixPatterns = options.fixPatterns.map((p) => new RegExp(p, "i"));
+  const securityPatterns = (options.securityFixPatterns ?? []).map((p) => new RegExp(p, "i"));
   const windowStart = snapshotTime - options.recentDays * DAY;
   // newest to oldest: a rename tells that older commits of the old path belong to the new one
   const acc: Accumulator = { alias: new Map(), history: new Map(), pairs: new Map() };
   for (const commit of commits) {
-    const isFix =
-      CONVENTIONAL_FIX.test(commit.subject) ||
-      fixPatterns.some((re) => re.test(commit.subject)) ||
-      log.fixBranch.has(commit.hash);
+    const kinds: CommitKinds = {
+      fix:
+        CONVENTIONAL_FIX.test(commit.subject) ||
+        fixPatterns.some((re) => re.test(commit.subject)) ||
+        log.fixBranch.has(commit.hash),
+      security: SECURITY_FIX.test(commit.subject) || securityPatterns.some((re) => re.test(commit.subject)),
+    };
     const recent = commit.time >= windowStart && commit.time <= snapshotTime;
-    addCommit(acc, commit, { prefix, files }, isFix, recent);
+    addCommit(acc, commit, { prefix, files }, kinds, recent);
   }
   return {
     files: acc.history,
@@ -176,6 +202,8 @@ export function historyMetrics(h: FileHistory, snapshotTime: number): Record<str
     fix_commits: h.fixCommits,
     fix_commits_recent: h.fixCommitsRecent,
     fix_ratio: h.commits === 0 ? 0 : h.fixCommits / h.commits,
+    security_fix_commits: h.securityFixCommits,
+    security_fix_commits_recent: h.securityFixCommitsRecent,
     co_change_files: h.coChangeFiles,
   };
 }

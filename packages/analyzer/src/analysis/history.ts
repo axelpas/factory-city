@@ -32,7 +32,11 @@ async function addCommitHistory(
           repo.prefix,
           rev,
           files,
-          { recentDays: config.windows.recentDays, fixPatterns: config.fixPatterns },
+          {
+            recentDays: config.windows.recentDays,
+            fixPatterns: config.fixPatterns,
+            securityFixPatterns: config.securityFixPatterns,
+          },
           scopeOf(repo.prefix, opts.path),
         );
     for (const [path, h] of history.files) {
