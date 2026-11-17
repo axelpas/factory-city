@@ -44,9 +44,8 @@ async function launch(): Promise<BrowserLike> {
   }
   const attempts: object[] = [{ channel: "chrome", args: GL_ARGS }, { args: GL_ARGS }];
   for (const options of attempts) {
-    try {
-      return await driver.chromium.launch({ headless: true, ...options });
-    } catch {}
+    const browser = await driver.chromium.launch({ headless: true, ...options }).catch(() => undefined);
+    if (browser) return browser;
   }
   throw new Error(
     "No browser found to render with. Install Google Chrome, or run `npx playwright-core install chromium`.",
@@ -55,38 +54,16 @@ async function launch(): Promise<BrowserLike> {
 
 /** Renders the viewer's current picture of a project to a PNG, through the same export code as the app. */
 export async function renderImage(options: RenderImageOptions): Promise<void> {
-  const server = await startServer({
-    viewerDir: defaultViewerDir(),
-    current: options.entry.slug,
-    extra: [options.entry],
-    port: 0,
-  });
-  let browser: BrowserLike | undefined;
-  try {
-    browser = await launch();
-    const page = await browser.newPage({
-      viewport: { width: Math.min(options.width, 1920), height: Math.min(options.height, 1080) },
-      deviceScaleFactor: 1,
-    });
-    const query = new URLSearchParams({ project: options.entry.slug });
-    if (options.source) query.set("source", options.source);
-    if (options.preset) query.set("preset", options.preset);
-    if (options.theme) query.set("theme", options.theme);
-    await page.goto(`${server.url}?${query.toString()}`);
-    await page.waitForFunction("window.factoryCity && window.factoryCity.ready === true", undefined, {
-      timeout: 120_000,
-    });
-    const dataUrl = await page.evaluate<string | null>(
-      `window.factoryCity.capture(${Math.round(options.width)}, ${Math.round(options.height)}, ${options.overlay !== false}${options.frame === undefined ? "" : `, ${Math.round(options.frame)}`}) ?? null`,
-    );
-    if (!dataUrl?.startsWith("data:image/png;base64,")) {
-      throw new Error("The viewer produced no picture (WebGL may be unavailable in this browser).");
-    }
-    await writeFile(options.out, Buffer.from(dataUrl.slice("data:image/png;base64,".length), "base64"));
-  } finally {
-    await browser?.close();
-    await server.close();
+  const frame = options.frame === undefined ? "" : `, ${Math.round(options.frame)}`;
+  const dataUrl = await withPage(options, (page) =>
+    page.evaluate<string | null>(
+      `window.factoryCity.capture(${Math.round(options.width)}, ${Math.round(options.height)}, ${options.overlay !== false}${frame}) ?? null`,
+    ),
+  );
+  if (!dataUrl?.startsWith("data:image/png;base64,")) {
+    throw new Error("The viewer produced no picture (WebGL may be unavailable in this browser).");
   }
+  await writeFile(options.out, Buffer.from(dataUrl.slice("data:image/png;base64,".length), "base64"));
 }
 
 export interface RenderVideoOptions extends Omit<RenderImageOptions, "out"> {
