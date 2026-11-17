@@ -260,3 +260,23 @@ it("python security > counts a chained or nested call once", async () => {
   expect((await sec('rows = cursor.execute(f"select {a}").fetchall()\n')).security_sql_concat).toBe(1);
   expect((await sec("data = yaml.load(stream).get('k')\n")).security_unsafe_deserialization).toBe(1);
 });
+
+it("python security > yaml.load is safe with a safe loader however the call is written", async () => {
+  for (const code of [
+    "yaml.load(f(x), Loader=yaml.SafeLoader)\n",
+    "yaml.load(x, yaml.SafeLoader)\n",
+    "yaml.load(read(path), Loader=yaml.CSafeLoader)\n",
+  ])
+    expect(await sec(code), code).toEqual({});
+  expect((await sec("yaml.load(f(x))\n")).security_unsafe_deserialization).toBe(1);
+  expect((await sec("yaml.load(f(x), Loader=yaml.FullLoader)\n")).security_unsafe_deserialization).toBe(1);
+});
+
+it("python security > a field named like a secret that holds a path or a field name is not one", async () => {
+  for (const code of [
+    'TOKEN_URL = "/oauth/token"\n',
+    'PASSWORD_FIELD = "password_confirmation"\n',
+    'api_key_header = "https://x.io/k"\n',
+  ])
+    expect(await sec(code), code).toEqual({});
+});

@@ -108,10 +108,12 @@ export async function revisionTime(topLevel: string, rev: string): Promise<numbe
 export async function reachability(
   topLevel: string,
   revs: readonly string[],
+  chunk = 200,
 ): Promise<(rev: string) => Set<string>> {
   const parents = new Map<string, string[]>();
-  if (revs.length > 0) {
-    const raw = await git(topLevel, ["rev-list", "--parents", ...revs]);
+  // a few hundred revisions per command: a command line has a length limit (32 KB on Windows)
+  for (let from = 0; from < revs.length; from += chunk) {
+    const raw = await git(topLevel, ["rev-list", "--parents", ...revs.slice(from, from + chunk)]);
     for (const line of raw.split("\n")) {
       if (!line) continue;
       const [hash, ...rest] = line.split(" ");
@@ -136,25 +138,23 @@ export async function reachability(
 }
 
 /**
- * Short hash of each revision, asked in a few calls instead of one per revision (`rev-parse --short` takes a
- * single revision). `%h` is abbreviated the way `rev-parse --short` does it.
+ * Short hash of each revision, as `git rev-parse --short` gives it (which is not always what `%h` of `git log`
+ * gives: that one also steers clear of prefixes shared with a blob or a tree). The command takes a single
+ * revision, so a few of them run at the same time instead of one after the other.
  */
-export async function shortHashes(topLevel: string, revs: readonly string[]): Promise<Map<string, string>> {
+export async function shortHashes(
+  topLevel: string,
+  revs: readonly string[],
+  concurrency = 8,
+): Promise<Map<string, string>> {
   const out = new Map<string, string>();
-  for (let from = 0; from < revs.length; from += 100) {
-    const chunk = revs.slice(from, from + 100);
-    const raw = await git(topLevel, [
-      "-c",
-      "log.showSignature=false",
-      "log",
-      "--no-walk=unsorted",
-      "--format=%H %h",
-      ...chunk,
-    ]);
-    for (const line of raw.split("\n")) {
-      const [full, short] = line.split(" ");
-      if (full && short) out.set(full, short);
+  let next = 0;
+  const worker = async () => {
+    while (next < revs.length) {
+      const rev = revs[next++] as string;
+      out.set(rev, (await git(topLevel, ["rev-parse", "--short", `${rev}^{commit}`])).trim());
     }
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, revs.length) }, worker));
   return out;
 }

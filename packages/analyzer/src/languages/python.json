@@ -137,7 +137,7 @@
       "type": "call",
       "nodeType": "call",
       "pattern": "^yaml\\.load$",
-      "argsPattern": "^\\((?![^)]*Loader\\s*=\\s*(yaml\\.)?C?Safe)"
+      "argsPattern": "^\\((?![\\s\\S]*(Loader\\s*=|,)\\s*(yaml\\.)?C?Safe)"
     },
     {
       "kind": "unsafe_html",
@@ -149,7 +149,7 @@
       "kind": "hardcoded_secret",
       "type": "node",
       "nodeType": "assignment",
-      "pattern": "^([A-Za-z_]*)([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*(:\\s*[\\w\\[\\], .]+\\s*)?=\\s*[\"'][^\"'\\s${}]{8,}[\"']$"
+      "pattern": "^([A-Za-z_]*)([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*(:[\\w\\[\\], .]{1,80})?\\s*=\\s*[\"'](?![a-z_]+[\"'])(?![A-Z_]+[\"'])(?!\\S*/)[^\"'\\s${}]{8,}[\"']$"
     },
     {
       "kind": "hardcoded_secret",

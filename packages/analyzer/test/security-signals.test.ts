@@ -92,3 +92,24 @@ it("security signals > never keep what a secret says", async () => {
   expect(everything).not.toContain(FAKE_TOKEN);
   expect(result.metrics.security_hardcoded_secret).toBe(2);
 });
+
+it("security signals > hardcoded secret: a name that holds a path, a URL or a field name is not a secret", async () => {
+  for (const code of [
+    'const TOKEN_URL = "/oauth/token";',
+    'const tokenEndpoint = "https://auth.example.com/token";',
+    'const PASSWORD_FIELD = "password_confirmation";',
+    'const SECRET_KEY_NAME = "SESSION_SECRET_VALUE";',
+  ])
+    expect(kinds((await signals(code)).metrics), code).toEqual({});
+  // a value with letters, digits or dashes still is one
+  expect(kinds((await signals('const password = "correct-horse-battery";')).metrics)).toMatchObject({
+    security_hardcoded_secret: 1,
+  });
+});
+
+it("security signals > unsafe html: emptying an element or writing a plain literal is not a signal", async () => {
+  for (const code of ['el.innerHTML = "";', "el.innerHTML = '<b>x</b>';", "el.innerHTML = `<b>x</b>`;"])
+    expect(kinds((await signals(code)).metrics), code).toEqual({});
+  expect(kinds((await signals("el.innerHTML = html;")).metrics)).toMatchObject({ security_unsafe_html: 1 });
+  expect(kinds((await signals("el.innerHTML += part;")).metrics)).toMatchObject({ security_unsafe_html: 1 });
+});

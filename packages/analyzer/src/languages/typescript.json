@@ -144,7 +144,7 @@
       "kind": "unsafe_html",
       "type": "node",
       "nodeType": "assignment_expression",
-      "pattern": "\\.(innerHTML|outerHTML)\\s*\\+?="
+      "pattern": "\\.(innerHTML|outerHTML)\\s*\\+?=(?!\\s*(\"[^\"]*\"|'[^']*'|`[^`$]*`)\\s*;?$)"
     },
     {
       "kind": "unsafe_html",
@@ -161,13 +161,13 @@
       "kind": "hardcoded_secret",
       "type": "node",
       "nodeType": "variable_declarator",
-      "pattern": "([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA]pi[_-]?[kK]ey|API_?KEY)\\w*\\s*(:\\s*\\w+\\s*)?=\\s*[\"'`][^\"'`\\s$]{8,}[\"'`]$"
+      "pattern": "^\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA]pi[_-]?[kK]ey|API_?KEY)\\w*\\s*(:[\\w\\s]{1,80})?=\\s*[\"'`](?![a-z_]+[\"'`])(?![A-Z_]+[\"'`])(?!\\S*/)[^\"'`\\s$]{8,}[\"'`]$"
     },
     {
       "kind": "hardcoded_secret",
       "type": "node",
       "nodeType": "pair",
-      "pattern": "^[\"']?([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA]pi[_-]?[kK]ey|API_?KEY)\\w*[\"']?\\s*:\\s*[\"'`][^\"'`\\s$]{8,}[\"'`]$"
+      "pattern": "^[\"']?([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA]pi[_-]?[kK]ey|API_?KEY)\\w*[\"']?\\s*:\\s*[\"'`](?![a-z_]+[\"'`])(?![A-Z_]+[\"'`])(?!\\S*/)[^\"'`\\s$]{8,}[\"'`]$"
     },
     {
       "kind": "hardcoded_secret",
@@ -204,6 +204,12 @@
       "type": "call",
       "pattern": "(^|\\.)(query|execute|raw|queryRawUnsafe|executeRawUnsafe)$",
       "argsPattern": "^\\(\\s*(`[^`]*\\$\\{|\"[^\"]*\"\\s*\\+|'[^']*'\\s*\\+)"
+    },
+    {
+      "kind": "unsafe_html",
+      "type": "node",
+      "nodeType": "augmented_assignment_expression",
+      "pattern": "\\.(innerHTML|outerHTML)\\s*\\+="
     }
   ]
 }
