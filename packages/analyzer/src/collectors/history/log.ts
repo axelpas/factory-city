@@ -100,3 +100,54 @@ export async function reachableCommits(topLevel: string, rev: string): Promise<S
 export async function revisionTime(topLevel: string, rev: string): Promise<number> {
   return Number((await git(topLevel, ["show", "-s", "--format=%ct", `${rev}^{commit}`])).trim());
 }
+
+/**
+ * The non-merge commits reachable from each of several revisions, from one `git rev-list --parents` instead of
+ * one `git rev-list` per revision. The answer for a revision is the same as `reachableCommits` gives.
+ */
+export async function reachability(
+  topLevel: string,
+  revs: readonly string[],
+): Promise<(rev: string) => Set<string>> {
+  const parents = new Map<string, string[]>();
+  if (revs.length > 0) {
+    const raw = await git(topLevel, ["rev-list", "--parents", ...revs]);
+    for (const line of raw.split("\n")) {
+      if (!line) continue;
+      const [hash, ...rest] = line.split(" ");
+      parents.set(hash as string, rest);
+    }
+  }
+  return (rev) => {
+    const seen = new Set<string>();
+    const out = new Set<string>();
+    const stack = [rev];
+    while (stack.length > 0) {
+      const hash = stack.pop() as string;
+      if (seen.has(hash)) continue;
+      seen.add(hash);
+      const up = parents.get(hash);
+      if (up === undefined) continue;
+      if (up.length <= 1) out.add(hash);
+      for (const p of up) stack.push(p);
+    }
+    return out;
+  };
+}
+
+/**
+ * Short hash of each revision, asked in a few calls instead of one per revision (`rev-parse --short` takes a
+ * single revision). `%h` is abbreviated the way `rev-parse --short` does it.
+ */
+export async function shortHashes(topLevel: string, revs: readonly string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (let from = 0; from < revs.length; from += 100) {
+    const chunk = revs.slice(from, from + 100);
+    const raw = await git(topLevel, ["log", "--no-walk=unsorted", "--format=%H %h", ...chunk]);
+    for (const line of raw.split("\n")) {
+      const [full, short] = line.split(" ");
+      if (full && short) out.set(full, short);
+    }
+  }
+  return out;
+}

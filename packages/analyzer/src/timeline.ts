@@ -77,6 +77,7 @@ export async function buildTimeline(opts: TimelineOptions, dataDir: string): Pro
   const shared: AnalyzeShared = {
     provenance: (hash) => (lineage ? { metrics: lineage.at.get(hash), labels: lineage.labels } : undefined),
     config,
+    repo,
     fileCache,
     history: async (_rev, files) =>
       computeHistory(log, state.currentTime, state.reachable, repo.prefix, files, {

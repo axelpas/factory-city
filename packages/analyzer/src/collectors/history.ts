@@ -13,8 +13,10 @@ export {
   loadHistoryLog,
   parseLog,
   type RawCommit,
+  reachability,
   reachableCommits,
   revisionTime,
+  shortHashes,
 } from "./history/log.js";
 
 export async function collectHistory(

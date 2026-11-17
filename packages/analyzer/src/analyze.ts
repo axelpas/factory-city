@@ -21,7 +21,7 @@ async function openSource(
   warnings: string[],
 ): Promise<{ source: Source; git: { available: boolean; shallow: boolean }; repo: RepoInfo | undefined }> {
   const folder = resolve(opts.folder);
-  const repo = await findRepo(folder);
+  const repo = opts.shared?.repo ?? (await findRepo(folder));
   const git = { available: repo !== undefined, shallow: repo?.shallow ?? false };
   if (opts.rev) {
     if (!repo)
@@ -30,7 +30,7 @@ async function openSource(
       );
     if (!repo.hasCommits)
       throw new Error("This repository has no commit yet. Commit something, or run without --rev.");
-    return { source: await GitSource.open(folder, repo, opts.rev), git, repo };
+    return { source: await GitSource.open(folder, repo, opts.rev, opts.shared), git, repo };
   }
   if (repo?.hasCommits && !opts.dirty) {
     return { source: await GitSource.open(folder, repo, "HEAD"), git, repo };

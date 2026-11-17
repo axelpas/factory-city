@@ -5,6 +5,8 @@ import type { Config } from "../config.js";
 import type { HealthFile } from "../health/health.js";
 import type { ContentProblem } from "../inspect.js";
 import type { FileMetrics } from "../metrics/file-metrics.js";
+import type { BlobReader } from "../source/blob-reader.js";
+import type { RepoInfo } from "../source/git.js";
 
 export interface AnalyzeOptions {
   folder: string;
@@ -38,6 +40,12 @@ export type CachedFile = { problem: ContentProblem } | { result: FileMetrics };
 
 export interface AnalyzeShared {
   fileCache: Map<string, CachedFile>;
+  /** The repository, looked up once for all frames. */
+  repo?: RepoInfo;
+  /** Short hash of each revision (by full hash), asked once for all frames. */
+  shortHashes?: ReadonlyMap<string, string>;
+  /** One `git cat-file --batch` process for all frames; the timeline closes it. */
+  blobReader?: BlobReader;
   /** The configuration, read once for all frames. */
   config?: Config;
   /** History of the files at a revision; replaces the per-call `git log`. */

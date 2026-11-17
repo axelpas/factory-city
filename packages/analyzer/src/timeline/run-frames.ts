@@ -2,7 +2,8 @@ import type { Frame } from "@factory-city/schema";
 import type { AnalysisResult } from "../analysis/types.js";
 import type { AnalyzeShared } from "../analyze.js";
 import { analyze } from "../analyze.js";
-import { reachableCommits } from "../collectors/history.js";
+import { reachability, shortHashes } from "../collectors/history.js";
+import { BlobReader } from "../source/blob-reader.js";
 import type { FrameRecorder } from "./recorder.js";
 import type { Rev, TimelineOptions } from "./types.js";
 
@@ -30,11 +31,28 @@ export interface RunInput {
 export async function runFrames(
   i: RunInput,
 ): Promise<{ frames: Frame[]; last: AnalysisResult; lookups: number }> {
+  // what the frames have in common is looked up once: hashes, reachable commits, one process to read blobs
+  const hashes = i.revs.map((r) => r.hash);
+  const reachable = await reachability(i.topLevel, hashes);
+  i.shared.shortHashes = await shortHashes(i.topLevel, hashes);
+  i.shared.blobReader = new BlobReader(i.topLevel);
+  try {
+    return await playFrames(i, reachable);
+  } finally {
+    i.shared.blobReader.close();
+    i.shared.blobReader = undefined;
+  }
+}
+
+async function playFrames(
+  i: RunInput,
+  reachable: (rev: string) => Set<string>,
+): Promise<{ frames: Frame[]; last: AnalysisResult; lookups: number }> {
   const frames: Frame[] = [];
   let last: AnalysisResult | undefined;
   let lookups = 0;
   for (const [index, rev] of i.revs.entries()) {
-    i.state.reachable = await reachableCommits(i.topLevel, rev.hash);
+    i.state.reachable = reachable(rev.hash);
     i.state.currentTime = rev.time;
     const sizeBefore = i.fileCache.size;
     const result = await analyze({
