@@ -8,6 +8,7 @@ Status: draft, Phase A. All contracts are versioned and validated by JSON Schema
 | Timeline manifest | `timeline.json` | source info, analyzer version, data level, metric registry, category labels, ignore summary, issue coverage report, ordered frames |
 | Factory | `factory.json` | KPIs per period and per group, with sample sizes |
 | Facts | `facts.json` | normalized import of the user's facts file |
+| Dependencies | `dependencies.json` | known vulnerabilities of the lockfile by severity, the affected package versions with advisory ids, the date and the database (only with `--with audit`; per project, not in the score) |
 | Report | `report.json` | risk profile, score, hotspots, movement, factory lists |
 | Index | `~/.factory-city/index.json` | analyzed projects, for the project switcher |
 

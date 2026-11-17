@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AnalysisResult } from "./analyze.js";
@@ -31,6 +31,10 @@ export async function writeAnalysis(
   await writeAtomic(snapshotPath, JSON.stringify(result.snapshot));
   await writeAtomic(manifestPath, `${JSON.stringify(result.manifest, null, 2)}\n`);
   await writeAtomic(join(dataDir, "report.json"), `${JSON.stringify(result.report, null, 2)}\n`);
+  // the audit of an earlier run must not stay on screen when this run did not ask for one
+  const depsPath = join(dataDir, "dependencies.json");
+  if (result.dependencies) await writeAtomic(depsPath, `${JSON.stringify(result.dependencies, null, 2)}\n`);
+  else await rm(depsPath, { force: true });
   return { snapshotPath, manifestPath };
 }
 

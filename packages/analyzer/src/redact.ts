@@ -96,6 +96,7 @@ export function redactBundle(bundle: Bundle): Bundle {
     manifest: redacted,
     snapshots: bundle.snapshots.map(redactSnapshot),
     ...(bundle.report ? { report: redactReport(bundle.report) } : {}),
+    // dependencies.json lists the packages of the project: it is dropped whole
     // factory.json groups by agent and model and sums costs: it is dropped whole
   };
 }

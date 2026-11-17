@@ -8,7 +8,7 @@ Folders are districts, files are buildings. Code metrics drive each building's g
 
 It is two independent programs that share nothing but data files: an **analyzer** (a command line) and a **viewer** (a static web app). It works on a plain folder, and gets richer with git, then with GitHub, then with an optional facts file.
 
-- **Local first.** No backend, no database, no telemetry, no upload. The only network use is optional `gh` calls for issue and CI metadata (`--offline` turns them off).
+- **Local first.** No backend, no database, no telemetry, no upload. The only network use is optional: `gh` calls for issue and CI metadata, and the dependency audit you ask for with `--with audit` (`--offline` turns both off).
 - **Read-only.** It never checks out, modifies or writes into the code it analyzes. Its output holds paths, metrics, git and issue metadata, never source code.
 - **Honest.** A value that cannot be computed is stored and shown as unavailable, never as zero.
 - **Installs with Node alone.** Pure JavaScript and WebAssembly, no native build at install time.
@@ -153,7 +153,7 @@ A shallow clone gives a truncated level 1: the tool warns and says how to fetch 
 
 ```
 factory-city [path]                 analyze a folder and open its city (the default)
-factory-city analyze  [path]        [--rev <rev>] [--dirty] [--path <dir>] [--all] [--include/--exclude <glob>] [--with duplication] [--sarif <file>] [-o <dir>]
+factory-city analyze  [path]        [--rev <rev>] [--dirty] [--path <dir>] [--all] [--include/--exclude <glob>] [--with duplication] [--sarif <file>] [--with audit] [--offline] [-o <dir>]
 factory-city timeline [repo]        --by commit|issue|day [--branch] [--since] [--until] [--range A..B] [--revs a,b] [--max-frames N] [--facts <file>] [--offline]
 factory-city diff     [repo] [base] [head]   [--image out.png] [--json]
 factory-city report   [path]        the code-health report, in Markdown or --json
@@ -171,6 +171,7 @@ The analyzer writes plain files and the viewer reads them; they share nothing el
 - `snapshot.cc.json`: one snapshot per frame, valid for [CodeCharta](https://codecharta.com)'s `cc.json` schema, so it also opens in its Web Studio. Attributes are numeric; a category is an integer code whose labels live in the manifest; an unavailable value is left out.
 - `analysis.json` and `timeline.<mode>.json`: the manifest (data level, metric registry, ignored files, issue coverage, ordered frames with their metrics and scores).
 - `report.json` and `factory.json`: the code-health report and the factory KPIs.
+- `dependencies.json`: known vulnerabilities of the lockfile, only when `--with audit` was asked for (per project, not per file, not in the score).
 
 The contracts are described in [`docs/data-model.md`](docs/data-model.md) and validated by JSON Schema in both programs.
 
@@ -184,7 +185,7 @@ The contracts are described in [`docs/data-model.md`](docs/data-model.md) and va
 
 ## FAQ
 
-**Does anything leave my machine?** No. Nothing is uploaded and there is no telemetry. With `gh` signed in, the tool reads issue, pull request and CI metadata from GitHub; `--offline` turns that off. Source code never appears in the output.
+**Does anything leave my machine?** No. Nothing is uploaded and there is no telemetry. With `gh` signed in, the tool reads issue, pull request and CI metadata from GitHub; `--offline` turns that off. The one other exception is `--with audit`, which you must ask for: it sends the **names and versions of the packages in your lockfile** (nothing else, no path, no code, no project name) to [api.osv.dev](https://osv.dev), then the ids of the advisories that matched, and prints what it sends before it sends it. `--offline` refuses it. Source code never appears in the output.
 
 **How is the score computed?** The share of code (by real lines) in files that are low risk on every static dimension available for them: file size, complexity, nesting, coupling, cohesion, shortcuts, duplication. History dimensions stay out, so the score does not depend on how much history exists. Thresholds are listed in the report with their source, or marked "project default, not a standard".
 

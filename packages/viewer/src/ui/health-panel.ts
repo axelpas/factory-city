@@ -165,9 +165,8 @@ function withoutSecurityLine(view: HealthView): HTMLElement[] {
   return [
     el("p", {
       class: "muted score-without",
-      text: `Without security signals and scanner findings: ${view.scoreWithoutSecurityText}`,
-      title:
-        "The same score, with the security signals and the scanner findings left out of the rating of every file",
+      text: `${view.scoreWithoutSecurityLabel ?? "Without security"}: ${view.scoreWithoutSecurityText}`,
+      title: "The same score, with these dimensions left out of the rating of every file",
     }),
   ];
 }

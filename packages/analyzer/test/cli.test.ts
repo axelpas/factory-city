@@ -79,5 +79,5 @@ it("factory-city CLI > adds duplication with --with duplication, and refuses an 
   } catch (err) {
     message = String((err as { stderr?: string }).stderr);
   }
-  expect(message).toContain('Unknown --with value "magic". Available: duplication.');
+  expect(message).toContain('Unknown --with value "magic". Available: duplication, audit.');
 });

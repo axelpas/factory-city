@@ -1,5 +1,5 @@
 import type { Layout } from "@factory-city/layout";
-import type { Factory, Report } from "@factory-city/schema";
+import type { DependencyAudit, Factory, Report } from "@factory-city/schema";
 import type { Animator } from "../../anim/animator";
 import type { Available } from "../../data/load";
 import type { Model } from "../../data/model";
@@ -61,6 +61,8 @@ export class Session {
   animator: Animator | undefined;
   report: Report | undefined;
   factory: Factory | undefined;
+  /** Known vulnerabilities of the dependencies, when `analyze --with audit` wrote them. */
+  dependencies: DependencyAudit | undefined;
   factoryPeriod: "last30" | "all" = "last30";
   slug: string | undefined;
   available: Available = {};

@@ -1,4 +1,4 @@
-import type { AnalysisManifest, CcJson, Report } from "@factory-city/schema";
+import type { AnalysisManifest, CcJson, DependencyAudit, Report } from "@factory-city/schema";
 import type { HistoryResult } from "../collectors/history.js";
 import type { FileProvenance } from "../collectors/provenance.js";
 import type { Config } from "../config.js";
@@ -19,6 +19,14 @@ export interface AnalyzeOptions {
   exclude?: string[];
   /** Optional collector (`--with duplication`): copied blocks across the analyzed files. */
   duplication?: boolean;
+  /** Optional collector (`--with audit`): known vulnerabilities of the lockfile, asked to OSV. Needs the network. */
+  audit?: boolean;
+  /** The network is forbidden (`--offline`): the audit refuses to run. */
+  offline?: boolean;
+  /** Where the audit says what it sends; silent without it. */
+  log?: (line: string) => void;
+  /** Replaces `fetch` for the audit, so that tests replay recorded answers. */
+  auditFetch?: typeof fetch;
   /** SARIF files written by third-party scanners (`--sarif`): their results become metrics, labeled as such. */
   sarif?: string[];
   /** State shared by the frames of a timeline: caches and a preloaded history. */
@@ -43,6 +51,8 @@ export interface AnalysisResult {
   blobs: Map<string, string>;
   snapshot: CcJson;
   manifest: AnalysisManifest;
+  /** Known vulnerabilities of the dependencies, when `--with audit` was given and could be done. */
+  dependencies?: DependencyAudit;
   /** Code-health report of the snapshot. */
   report: Report;
   /** Per-file values, for callers that compute more from them (frame health). */

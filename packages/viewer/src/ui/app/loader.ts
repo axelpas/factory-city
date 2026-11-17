@@ -112,6 +112,7 @@ export class Loader {
     session.state = this.newState(data, last, preset, mapping);
     session.report = loaded.report;
     session.factory = loaded.factory;
+    session.dependencies = loaded.dependencies;
     ui.factoryPanel.hidden = true;
     document.title = `${data.project} · Factory City`;
     session.animator = undefined;

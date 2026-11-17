@@ -20,6 +20,8 @@ export interface HealthView {
   scoreText: string;
   /** The score with the security dimension left out, when the code could be rated on it. */
   scoreWithoutSecurityText?: string;
+  /** What the line says is left out: our signals, the scanner findings, or both. */
+  scoreWithoutSecurityLabel?: string;
   notice: string;
   /** Score of every frame, for the trend; empty for a single snapshot. */
   trend: number[];
@@ -90,8 +92,16 @@ function movementOf(current: FrameHealth | undefined, previous: FrameHealth | un
 }
 
 /** The optional field, only when there is a value. */
-function withText(text: string | undefined): { scoreWithoutSecurityText?: string } {
-  return text === undefined ? {} : { scoreWithoutSecurityText: text };
+function withText(
+  text: string | undefined,
+  rows: readonly ProfileRow[],
+): { scoreWithoutSecurityText?: string; scoreWithoutSecurityLabel?: string } {
+  if (text === undefined) return {};
+  const left = [
+    rows.some((r) => r.id === "security") ? "security signals" : undefined,
+    rows.some((r) => r.id === "scanner") ? "scanner findings" : undefined,
+  ].filter((s) => s !== undefined);
+  return { scoreWithoutSecurityText: text, scoreWithoutSecurityLabel: `Without ${left.join(" and ")}` };
 }
 
 const EMPTY: Omit<HealthView, "frame"> = {
@@ -145,7 +155,7 @@ export function healthView(
     available: true,
     score,
     scoreText: fmt.score(score),
-    ...withText(withoutSecurity(report, current, rows, fmt)),
+    ...withText(withoutSecurity(report, current, rows, fmt), rows),
     notice: report.notice,
     trend: isTimeline ? frames.map((h) => h?.score ?? Number.NaN) : [],
     profile: rows,

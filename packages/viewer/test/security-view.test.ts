@@ -55,6 +55,7 @@ it("security in the Health tab > shows the score without security when security 
   const view = healthView(data, 0, reportWith({ size: share, security: share }), fmt);
   expect(view.scoreText).toBe("50.0%");
   expect(view.scoreWithoutSecurityText).toBe("100.0%");
+  expect(view.scoreWithoutSecurityLabel).toBe("Without security signals");
 });
 
 it("security in the Health tab > says nothing about it when the code could not be rated on security", () => {
@@ -103,6 +104,7 @@ it("scanner findings > show the score without them when the scanner dimension wa
   const data = buildTimelineData([snapshot(FRAMES[0] ?? {})]);
   const view = healthView(data, 0, reportWith({ size: share, scanner: share }), fmt);
   expect(view.scoreWithoutSecurityText).toBe("100.0%");
+  expect(view.scoreWithoutSecurityLabel).toBe("Without scanner findings");
 });
 
 it("scanner preset > is offered when files carry scanner findings, and colored by them", () => {

@@ -2,7 +2,14 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { AnalysisManifest, CcJson, Factory, Report, TimelineManifest } from "@factory-city/schema";
+import type {
+  AnalysisManifest,
+  CcJson,
+  DependencyAudit,
+  Factory,
+  Report,
+  TimelineManifest,
+} from "@factory-city/schema";
 
 /** Everything the viewer shows for one source of a project: what a standalone file embeds. */
 export interface Bundle {
@@ -10,6 +17,8 @@ export interface Bundle {
   snapshots: CcJson[];
   report?: Report;
   factory?: Factory;
+  /** Known vulnerabilities of the dependencies, from `analyze --with audit`. */
+  dependencies?: DependencyAudit;
 }
 
 export const SOURCES = ["snapshot", "commit", "day", "issue", "revs", "diff"] as const;
@@ -62,6 +71,7 @@ export async function loadBundle(dataDir: string, source?: string): Promise<Bund
     manifest.kind === "timeline" ? `report.${chosen.source}.json` : "report.json",
   );
   const factoryPath = join(dataDir, "factory.json");
+  const dependenciesPath = join(dataDir, "dependencies.json");
   return {
     source: chosen.source,
     manifest,
@@ -69,6 +79,9 @@ export async function loadBundle(dataDir: string, source?: string): Promise<Bund
     ...(existsSync(reportPath) ? { report: await readJson<Report>(reportPath) } : {}),
     ...(chosen.source === "issue" && existsSync(factoryPath)
       ? { factory: await readJson<Factory>(factoryPath) }
+      : {}),
+    ...(existsSync(dependenciesPath)
+      ? { dependencies: await readJson<DependencyAudit>(dependenciesPath) }
       : {}),
   };
 }
@@ -90,5 +103,7 @@ export async function writeBundle(bundle: Bundle, source: SourceName): Promise<s
     );
   }
   if (bundle.factory) await writeFile(join(dir, "factory.json"), JSON.stringify(bundle.factory));
+  if (bundle.dependencies)
+    await writeFile(join(dir, "dependencies.json"), JSON.stringify(bundle.dependencies));
   return dir;
 }

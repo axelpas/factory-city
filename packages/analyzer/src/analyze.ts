@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { addCoupling } from "./analysis/coupling.js";
+import { auditDependencies, checkAuditAllowed } from "./analysis/dependencies.js";
 import { addDuplication, measureFiles } from "./analysis/files.js";
 import { addHistory } from "./analysis/history.js";
 import { buildOutputs } from "./analysis/output.js";
@@ -41,6 +42,7 @@ async function openSource(
 
 /** Analyzes a folder or a revision: files, coupling, history, then the snapshot, its manifest and the report. */
 export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
+  checkAuditAllowed(opts);
   const warnings: string[] = [];
   const summary = emptySummary();
   const { source, git, repo } = await openSource(opts, warnings);
@@ -85,7 +87,9 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
     );
     const history = await addHistory(opts, repo, measured.attributesByPath, warnings);
 
-    return await buildOutputs({
+    const dependencies = await auditDependencies(opts, entries, (e) => source.read(e), warnings);
+
+    const outputs = await buildOutputs({
       opts,
       source,
       git,
@@ -104,6 +108,7 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalysisResult> {
       blobs: measured.blobs,
       external: scanners.external,
     });
+    return dependencies ? { ...outputs, dependencies } : outputs;
   } finally {
     await source.close();
   }

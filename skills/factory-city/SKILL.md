@@ -47,6 +47,8 @@ factory-city timeline <project> --by issue [--offline] [--max-frames N]  # histo
 
 If the user already has a SARIF file from a security scanner (Semgrep, CodeQL, Bandit, gosec...), add `--sarif <file>` to `analyze`: its findings enter the score, labeled as third-party. Never install or run a scanner for them.
 
+`--with audit` asks the OSV database for the known vulnerabilities of the lockfile. It **sends package names and versions to api.osv.dev**: add it only when the user asks for it, and tell them what it sends first. `--offline` refuses it.
+
 The last lines say where the data was written. Remember that folder as `<data>`.
 
 ## 4. Read the report and summarize

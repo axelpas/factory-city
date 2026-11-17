@@ -984,6 +984,20 @@ button[aria-pressed="true"] {
 .hotspot {
   margin: var(--s-8) 0;
 }
+.dependencies {
+  margin: var(--s-8) 0;
+}
+.dependencies ul {
+  margin: var(--s-2) 0;
+  padding-left: var(--s-16);
+}
+.dep-critical,
+.dep-high {
+  color: var(--c-risk-very-high);
+}
+.dep-moderate {
+  color: var(--c-risk-high);
+}
 .hotspot ul {
   margin: var(--s-2) 0 0;
   padding-left: var(--s-16);

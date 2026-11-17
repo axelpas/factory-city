@@ -17,12 +17,13 @@ export interface AnalyzeFlags {
   exclude?: string[];
   with?: string[];
   sarif?: string[];
+  offline?: boolean;
   out?: string;
   json?: boolean;
 }
 
 /** Optional collectors, asked for with `--with`. */
-const FEATURES = ["duplication"];
+const FEATURES = ["duplication", "audit"];
 
 export function features(opts: AnalyzeFlags): Set<string> {
   const asked = new Set(opts.with ?? []);
@@ -46,6 +47,11 @@ export async function analyzeAndWrite(path: string, opts: AnalyzeFlags, quiet = 
     exclude: opts.exclude,
     duplication: features(opts).has("duplication"),
     sarif: (opts.sarif ?? []).map((f) => resolve(f)),
+    audit: features(opts).has("audit"),
+    offline: opts.offline,
+    log: (line) => {
+      if (!opts.json) console.error(line);
+    },
   });
   const slug = slugFor(folder);
   const dataDir = opts.out ? resolve(opts.out) : join(outputRoot(), slug);
@@ -68,13 +74,19 @@ export function withAnalyzeOptions(cmd: Command): Command {
     .option("--all", "include every text file, with no default exclusion")
     .option("--include <glob>", "include files matching the glob (repeatable)", collect, [])
     .option("--exclude <glob>", "exclude files matching the glob (repeatable)", collect, [])
-    .option("--with <feature>", "add an optional collector: duplication (repeatable)", collect, [])
+    .option(
+      "--with <feature>",
+      "add an optional collector: duplication, audit (repeatable); audit sends package names and versions to api.osv.dev",
+      collect,
+      [],
+    )
     .option(
       "--sarif <file>",
       "read the results of a scanner from its SARIF file (repeatable); nothing is run",
       collect,
       [],
     )
+    .option("--offline", "no network: refuses --with audit")
     .option("-o, --out <dir>", "output folder (default: ~/.factory-city/<project>)")
     .option("--json", "print machine-readable output");
 }

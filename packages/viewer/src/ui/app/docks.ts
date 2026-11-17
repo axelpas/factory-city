@@ -1,7 +1,9 @@
 import { el } from "../../lib/dom";
 import { format } from "../../lib/format";
+import { dependenciesView } from "../../view/dependencies";
 import { factoryView } from "../../view/factory";
 import { healthView } from "../../view/health";
+import { dependenciesBlock } from "../dependencies-block";
 import { renderFactoryPanel } from "../factory-panel";
 import { measureFreeArea } from "../free-area";
 import { renderHealthPanel } from "../health-panel";
@@ -51,6 +53,9 @@ export class Docks {
     if (!s) return;
     const view = healthView(s.data, session.animator?.frame ?? 0, session.report, format);
     renderHealthPanel(ui.healthPanel, view, (path) => this.goToFile(path));
+    // per project, not per frame: it is there only when the audit was asked for
+    if (view.available && session.dependencies)
+      ui.healthPanel.append(dependenciesBlock(dependenciesView(session.dependencies, format)));
   }
 
   /** Flies to a file and outlines it when it exists in the frame shown. */

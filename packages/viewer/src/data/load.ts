@@ -1,6 +1,7 @@
 import type {
   AnalysisManifest,
   CcJson,
+  DependencyAudit,
   Factory,
   Report,
   TimelineManifest,
@@ -21,6 +22,8 @@ export interface Loaded {
   report?: Report;
   /** Factory KPIs: written with a per-issue timeline. */
   factory?: Factory;
+  /** Known vulnerabilities of the dependencies: written by `analyze --with audit`, absent otherwise. */
+  dependencies?: DependencyAudit;
 }
 
 /** What a project's data folder holds: a single snapshot and/or timelines, by mode. */
@@ -121,7 +124,8 @@ export async function loadSource(
   const report = await tryJson<Report>(`${base(slug)}${reportFile}`);
   const perIssue = manifest.kind === "timeline" && manifest.source.mode === "issue";
   const factory = perIssue ? await tryJson<Factory>(`${base(slug)}factory.json`) : undefined;
-  return { snapshots, manifest, report, factory };
+  const dependencies = await tryJson<DependencyAudit>(`${base(slug)}dependencies.json`);
+  return { snapshots, manifest, report, factory, ...(dependencies ? { dependencies } : {}) };
 }
 
 function isCcJson(value: unknown): value is CcJson {

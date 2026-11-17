@@ -23,3 +23,8 @@ A security angle was asked for as an indicator, to challenge (#57, #58, #61). Pa
 - Results of a third-party scanner come in with `--sarif <file>` (the option is separate from `--with`, which takes no value). The dimension `scanner` reads `sarif_findings` with bounds 0, 2, 5, wider than our own signals because a scanner reports far more, and notes count too. It exists only when a file was given.
 - `scoreWithoutSecurity` leaves out both the security signals and the scanner findings.
 - A file with no result is 0 only where the tool demonstrably reads that kind of file (same extension as a file it mentions); otherwise it is unavailable.
+
+## Addendum: dependency audit (#59, 2026-11-17)
+- `--with audit` asks OSV (api.osv.dev) for the known vulnerabilities of the lockfile's package versions, and writes `dependencies.json`. It is the one analysis step that sends something out, so it is opt-in, says what it sends before it sends it, and `--offline` refuses it. It sends package names and versions only.
+- It is not in the score: it is per project, and its answer changes with the date, not with the code. The severity is what the advisory says, never computed here.
+- A missing lockfile or a failed request is a warning, never a failure of the analysis.

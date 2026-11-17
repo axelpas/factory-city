@@ -64,3 +64,14 @@ To find the node types, parse a sample and print the tree with `web-tree-sitter`
 - **Paths:** relative to the analyzed folder, absolute, or `file://`. A scanner that ran inside the folder given with `--path` is matched too.
 - **Counted apart, never lost:** results with no location, outside the folder, on files that were not analyzed, and on test files are counted in the manifest (`external[].apart`) and in a warning.
 - **Limits:** the counts of two tools are not comparable; a tool decides alone what an error is. Not available on `timeline` (a SARIF file describes one revision).
+
+## Dependency audit
+
+`factory-city analyze --with audit` (opt-in). `analysis/dependencies.ts` reads the lockfile at the root of the analyzed folder (`pnpm-lock.yaml`, `package-lock.json`, then `yarn.lock`, the first one found) with the line-based parsers of `collectors/lockfile.ts`, and `collectors/osv.ts` asks api.osv.dev.
+
+- **What is sent:** to `POST /v1/querybatch`, the ecosystem (`npm`), the package name and the version of each entry, 1,000 per request; then, to `GET /v1/vulns/<id>`, the id of each advisory that matched, to read its severity. Nothing else: no path, no project name, no code. The command prints how many names and versions it sends, and to whom, before the first request.
+- **Refused offline:** `--offline` with `--with audit` stops with a message, before anything is done.
+- **Result:** `dependencies.json` (type `DependencyAudit`): the date, the lockfile, the number of package versions sent, counts by severity (each advisory once per affected package version), and the affected versions with their advisory ids, most serious first. The severity is the word the advisory gives (`database_specific.severity`), or `unknown`; no CVSS score is computed.
+- **Not an error:** no lockfile, or a request that fails, is a warning in the manifest and nothing is written. An older `dependencies.json` is removed when a run does not ask for the audit, so that a stale answer is never shown.
+- **Shown:** a Dependencies block at the bottom of the Health tab, with the date, only when the file exists. `--redact` drops it (package names are project data).
+- **Limits:** names and versions of the lockfile only (dev dependencies included); an advisory may not apply to how the package is used; a more recent advisory appears at the next run. npm ecosystem only. Not in the score: it is per project, and the answer changes without the code changing.

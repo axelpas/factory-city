@@ -62,6 +62,26 @@ describe("redaction", () => {
     }
   });
 
+  it("drops the dependency audit: package names are project data", async () => {
+    const bundle = await loadBundle(await sample());
+    const audit = {
+      kind: "dependencies",
+      schemaVersion: 1,
+      analyzerVersion: "t",
+      checkedAt: "2026-11-17T00:00:00.000Z",
+      lockfile: "pnpm-lock.yaml",
+      ecosystem: "npm",
+      database: "osv.dev",
+      packages: 1,
+      counts: { critical: 0, high: 1, moderate: 0, low: 0, unknown: 0 },
+      affected: [
+        { name: "secret-internal-pkg", version: "1.0.0", advisories: [{ id: "GHSA-x", severity: "high" }] },
+      ],
+    } as const;
+    const text = JSON.stringify(redactBundle({ ...bundle, dependencies: audit }));
+    expect(text).not.toContain("secret-internal-pkg");
+  });
+
   it("keeps the city: paths, code metrics, dates, issue numbers and the score", async () => {
     const bundle = await loadBundle(await sample());
     const redacted = redactBundle(bundle);
