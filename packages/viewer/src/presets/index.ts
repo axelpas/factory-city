@@ -9,6 +9,7 @@ import cost from "./cost.json";
 import duplication from "./duplication.json";
 import hotspots from "./hotspots.json";
 import language from "./language.json";
+import riskyAndMoving from "./risky-and-moving.json";
 import security from "./security.json";
 import shortcuts from "./shortcuts.json";
 import structure from "./structure.json";
@@ -46,6 +47,7 @@ export const PRESETS: readonly Preset[] = [
   language as Preset,
   hotspots as Preset,
   bugMagnets as Preset,
+  riskyAndMoving as Preset,
   waste as Preset,
   contention as Preset,
   agents as Preset,

@@ -72,3 +72,21 @@ it("security preset > is not offered without any security metric", () => {
   if (!model) throw new Error("no model");
   expect(presetStatuses(model).find((s) => s.preset.id === "security")?.available).toBe(false);
 });
+
+it("risky and moving preset > needs history, colors by security signals and marks the files that change often", () => {
+  const file = { rloc: 100, mcc: 10, security_signals: 2, recent_commits: 6 };
+  const frame = {
+    "src/a.ts": file,
+    "src/b.ts": { rloc: 50, mcc: 5, security_signals: 0, recent_commits: 1 },
+  };
+  const model = buildTimelineData([snapshot(frame as never)]).frames[0]?.model;
+  if (!model) throw new Error("no model");
+  const status = presetStatuses(model).find((s) => s.preset.id === "risky-and-moving");
+  expect(status?.available).toBe(true);
+  expect(status?.mapping).toMatchObject({ color: "security_signals", marker: { metric: "recent_commits" } });
+  const noHistory = buildTimelineData([
+    snapshot({ "src/a.ts": { rloc: 100, mcc: 10, security_signals: 2 } } as never),
+  ]).frames[0]?.model;
+  if (!noHistory) throw new Error("no model");
+  expect(presetStatuses(noHistory).find((s) => s.preset.id === "risky-and-moving")?.available).toBe(false);
+});

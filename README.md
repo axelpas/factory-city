@@ -67,8 +67,8 @@ Every preset keeps ground area = real lines and height = complexity, so the skyl
 
 | Group | Preset | Question |
 |---|---|---|
-| Code | Structure, Cohesion, Three Cs, Shortcuts, Duplication | Where is the code large, complex and entangled? Which files do several jobs? Where were checks silenced? |
-| History | Hotspots, Bug magnets, Waste, Contention | Where is complex code changing often? Where do fixes keep landing? Where is fresh code thrown away? |
+| Code | Structure, Cohesion, Three Cs, Shortcuts, Security signals, Duplication | Where is the code large, complex and entangled? Which files do several jobs? Where were checks silenced? Where does the code widen the attack surface? |
+| History | Hotspots, Bug magnets, Risky and moving, Waste, Contention | Where is complex code changing often? Where do fixes keep landing? Where do security signals sit in code that keeps changing? Where is fresh code thrown away? |
 | Factory | Agents, Cost | Who wrote what? Where does the money go? |
 | Compare | Change | What did this step do to the city? |
 

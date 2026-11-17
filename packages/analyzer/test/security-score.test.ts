@@ -54,3 +54,17 @@ it("security in the score > a hotspot says which kinds of signal to review, and 
   expect(action?.text).toBe("Review the security signals: 1 dynamic code, 2 hard-coded secrets.");
   expect(JSON.stringify(hot)).not.toMatch(/password|token/i);
 });
+
+it("security in the score > a hotspot on a sensitive path says to look at it first", () => {
+  const file = clean("src/auth/session.ts", {
+    mcc: 40,
+    security_signals: 2,
+    security_dynamic_code: 2,
+    sensitive_path: 1,
+  });
+  const [hot] = findHotspots([file], DIMENSIONS);
+  const action = hot?.actions.find((a) => a.type === "review-security");
+  expect(action?.text).toBe(
+    "Review the security signals: 2 dynamic code. The path suggests sensitive code: look at it first.",
+  );
+});

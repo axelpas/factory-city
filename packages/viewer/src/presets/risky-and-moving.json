@@ -1,0 +1,11 @@
+{
+  "id": "risky-and-moving",
+  "label": "Risky and moving",
+  "group": "History",
+  "level": 1,
+  "question": "Where do security signals sit in code that keeps changing?",
+  "area": "rloc",
+  "height": "mcc",
+  "color": ["security_signals"],
+  "marker": "recent_commits"
+}
