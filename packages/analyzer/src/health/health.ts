@@ -40,7 +40,8 @@ function healthyLines(files: readonly HealthFile[], statics: readonly RiskDimens
   return healthy;
 }
 
-const SECURITY = "security";
+/** The dimensions left out of the score without security: our own signals and the findings of a scanner. */
+const SECURITY = new Set(["security", "scanner"]);
 
 /** Risk profile and score of a set of files, weighted by real lines of code. */
 export function computeHealth(files: readonly HealthFile[], dimensions: readonly RiskDimension[]): Health {
@@ -60,7 +61,7 @@ export function computeHealth(files: readonly HealthFile[], dimensions: readonly
     scoreWithoutSecurity: percent(
       healthyLines(
         files,
-        statics.filter((d) => d.id !== SECURITY),
+        statics.filter((d) => !SECURITY.has(d.id)),
       ),
     ),
     profile,

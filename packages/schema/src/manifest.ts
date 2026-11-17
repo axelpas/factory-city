@@ -12,6 +12,20 @@ export interface IgnoreSummary {
 }
 
 /** `analysis.json`: what the analyzer knows about a snapshot besides the cc.json itself. */
+/** Findings of a scanner that Factory City did not run: it read the file the scanner wrote. */
+export interface ExternalFindings {
+  kind: "sarif";
+  /** The tool that wrote the file, as it says (name and version), never one Factory City ran. */
+  tool: string;
+  version?: string;
+  /** Results in the file. */
+  results: number;
+  /** Results attached to an analyzed file. */
+  counted: number;
+  /** Results that could not be attached to a file, and why: they are counted here, never lost. */
+  apart: { noLocation: number; outside: number; notAnalyzed: number; tests: number };
+}
+
 export interface AnalysisManifest {
   kind: "snapshot";
   schemaVersion: 1;
@@ -29,6 +43,8 @@ export interface AnalysisManifest {
   analyzed: number;
   ignored: IgnoreSummary;
   warnings: string[];
+  /** Results of scanners read from files (`--sarif`): data from third-party tools, labeled as such. */
+  external?: ExternalFindings[];
   snapshot: string;
 }
 

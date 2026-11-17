@@ -1,0 +1,17 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "Semgrep OSS", "semanticVersion": "1.99.0", "rules": [{ "id": "js.eval", "defaultConfiguration": { "level": "error" } }] } },
+      "results": [
+        { "ruleId": "js.eval", "message": { "text": "never kept" }, "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/a.ts" }, "region": { "startLine": 3 } } }] },
+        { "ruleId": "js.eval", "level": "warning", "message": { "text": "never kept" }, "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/a.ts" }, "region": { "startLine": 9 } } }] },
+        { "ruleId": "js.cookie", "level": "note", "message": { "text": "never kept" }, "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "./src/b.ts" } } }] },
+        { "ruleId": "js.eval", "level": "error", "message": { "text": "never kept" }, "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/a.test.ts" } } }] },
+        { "ruleId": "js.eval", "level": "error", "message": { "text": "never kept" }, "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "vendor/lib.js" } } }] },
+        { "ruleId": "js.eval", "level": "error", "message": { "text": "never kept" }, "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "../elsewhere/x.ts" } } }] },
+        { "ruleId": "js.eval", "level": "error", "message": { "text": "never kept" } }
+      ]
+    }
+  ]
+}

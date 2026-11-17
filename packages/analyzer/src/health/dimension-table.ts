@@ -67,6 +67,14 @@ export const DIMENSIONS: readonly RiskDimension[] = [
     source: `${DEFAULT} (a signal is a place to look at, not a proven flaw)`,
   },
   {
+    id: "scanner",
+    label: "Scanner findings",
+    metric: "sarif_findings",
+    kind: "static",
+    bounds: [0, 2, 5],
+    source: `${DEFAULT} (findings of a third-party scanner, read from its SARIF file)`,
+  },
+  {
     id: "security_fixes",
     label: "Security fixes",
     metric: "security_fix_commits_recent",

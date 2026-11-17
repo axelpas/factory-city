@@ -19,6 +19,8 @@ export interface AnalyzeOptions {
   exclude?: string[];
   /** Optional collector (`--with duplication`): copied blocks across the analyzed files. */
   duplication?: boolean;
+  /** SARIF files written by third-party scanners (`--sarif`): their results become metrics, labeled as such. */
+  sarif?: string[];
   /** State shared by the frames of a timeline: caches and a preloaded history. */
   shared?: AnalyzeShared;
 }

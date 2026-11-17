@@ -28,6 +28,14 @@ function reportWith(profile: Report["health"]["profile"]): Report {
         source: "default",
       },
       {
+        id: "scanner",
+        label: "Scanner findings",
+        metric: "sarif_findings",
+        kind: "static",
+        bounds: [0, 2, 5],
+        source: "default",
+      },
+      {
         id: "security",
         label: "Security signals",
         metric: "security_signals",
@@ -89,4 +97,28 @@ it("risky and moving preset > needs history, colors by security signals and mark
   ]).frames[0]?.model;
   if (!noHistory) throw new Error("no model");
   expect(presetStatuses(noHistory).find((s) => s.preset.id === "risky-and-moving")?.available).toBe(false);
+});
+
+it("scanner findings > show the score without them when the scanner dimension was rated", () => {
+  const data = buildTimelineData([snapshot(FRAMES[0] ?? {})]);
+  const view = healthView(data, 0, reportWith({ size: share, scanner: share }), fmt);
+  expect(view.scoreWithoutSecurityText).toBe("100.0%");
+});
+
+it("scanner preset > is offered when files carry scanner findings, and colored by them", () => {
+  const frame = {
+    "src/a.ts": { rloc: 100, mcc: 10, sarif_findings: 2 },
+    "src/b.ts": { rloc: 50, mcc: 5, sarif_findings: 0 },
+  };
+  const model = buildTimelineData([snapshot(frame as never)]).frames[0]?.model;
+  if (!model) throw new Error("no model");
+  const status = presetStatuses(model).find((s) => s.preset.id === "scanner");
+  expect(status?.available).toBe(true);
+  expect(status?.mapping?.color).toBe("sarif_findings");
+});
+
+it("scanner preset > is not offered when no SARIF file was given", () => {
+  const model = buildTimelineData([snapshot(FRAMES[0] ?? {})]).frames[0]?.model;
+  if (!model) throw new Error("no model");
+  expect(presetStatuses(model).find((s) => s.preset.id === "scanner")?.available).toBe(false);
 });

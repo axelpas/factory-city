@@ -53,7 +53,7 @@ export class ScoreBox {
     this.setScore(view.score);
     this.without.hidden = !view.scoreWithoutSecurityText;
     this.without.textContent = view.scoreWithoutSecurityText
-      ? `Without security signals: ${view.scoreWithoutSecurityText}`
+      ? `Without security signals and scanner findings: ${view.scoreWithoutSecurityText}`
       : "";
     const change = view.movement?.qualityDelta;
     this.delta.textContent = change && change !== "unchanged" ? ` ${change}` : "";

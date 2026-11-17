@@ -135,4 +135,32 @@ export const METRICS_5: readonly MetricDefinition[] = [
     level: 1,
     limits: "Read from commit subjects only.",
   }),
+  metric({
+    id: "sarif_findings",
+    higherMeans: "more scanner findings",
+    label: "Scanner findings",
+    definition:
+      "Number of results that a third-party scanner reported for the file, read from its SARIF file.",
+    computation:
+      "Factory City does not run the scanner. Results of the SARIF file (`--sarif`) are attached to the file they point at, all levels together. A file is 0 when the file of the tool mentions a file with the same extension and none of its results is on this file; otherwise it is unavailable. Test files are not rated.",
+    why: "A dedicated scanner sees much more than our own patterns do.",
+    unit: "findings",
+    direction: "higher-is-worse",
+    level: 0,
+    limits:
+      "Only as good as the tool and the rules it ran with. Only the path, the rule, the level and the line are kept, never the message or a snippet. Counts of a tool are not comparable with those of another.",
+  }),
+  metric({
+    id: "sarif_error_findings",
+    higherMeans: "more serious scanner findings",
+    label: "Scanner findings at level error",
+    definition:
+      "Results of the scanner whose level is error (the level the rule has when the result has none).",
+    computation: "The same count, restricted to level error.",
+    why: "The tool itself marks these as the ones that matter most.",
+    unit: "findings",
+    direction: "higher-is-worse",
+    level: 0,
+    limits: "The same as scanner findings; a tool decides alone what an error is.",
+  }),
 ];

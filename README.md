@@ -153,7 +153,7 @@ A shallow clone gives a truncated level 1: the tool warns and says how to fetch 
 
 ```
 factory-city [path]                 analyze a folder and open its city (the default)
-factory-city analyze  [path]        [--rev <rev>] [--dirty] [--path <dir>] [--all] [--include/--exclude <glob>] [--with duplication] [-o <dir>]
+factory-city analyze  [path]        [--rev <rev>] [--dirty] [--path <dir>] [--all] [--include/--exclude <glob>] [--with duplication] [--sarif <file>] [-o <dir>]
 factory-city timeline [repo]        --by commit|issue|day [--branch] [--since] [--until] [--range A..B] [--revs a,b] [--max-frames N] [--facts <file>] [--offline]
 factory-city diff     [repo] [base] [head]   [--image out.png] [--json]
 factory-city report   [path]        the code-health report, in Markdown or --json

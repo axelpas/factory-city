@@ -16,6 +16,7 @@ export interface AnalyzeFlags {
   include?: string[];
   exclude?: string[];
   with?: string[];
+  sarif?: string[];
   out?: string;
   json?: boolean;
 }
@@ -44,6 +45,7 @@ export async function analyzeAndWrite(path: string, opts: AnalyzeFlags, quiet = 
     include: opts.include,
     exclude: opts.exclude,
     duplication: features(opts).has("duplication"),
+    sarif: (opts.sarif ?? []).map((f) => resolve(f)),
   });
   const slug = slugFor(folder);
   const dataDir = opts.out ? resolve(opts.out) : join(outputRoot(), slug);
@@ -67,6 +69,12 @@ export function withAnalyzeOptions(cmd: Command): Command {
     .option("--include <glob>", "include files matching the glob (repeatable)", collect, [])
     .option("--exclude <glob>", "exclude files matching the glob (repeatable)", collect, [])
     .option("--with <feature>", "add an optional collector: duplication (repeatable)", collect, [])
+    .option(
+      "--sarif <file>",
+      "read the results of a scanner from its SARIF file (repeatable); nothing is run",
+      collect,
+      [],
+    )
     .option("-o, --out <dir>", "output folder (default: ~/.factory-city/<project>)")
     .option("--json", "print machine-readable output");
 }

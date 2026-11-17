@@ -45,6 +45,8 @@ factory-city analyze <project> [--exclude "<glob>"]                    # snapsho
 factory-city timeline <project> --by issue [--offline] [--max-frames N]  # history
 ```
 
+If the user already has a SARIF file from a security scanner (Semgrep, CodeQL, Bandit, gosec...), add `--sarif <file>` to `analyze`: its findings enter the score, labeled as third-party. Never install or run a scanner for them.
+
 The last lines say where the data was written. Remember that folder as `<data>`.
 
 ## 4. Read the report and summarize

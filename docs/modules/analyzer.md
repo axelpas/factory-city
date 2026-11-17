@@ -8,6 +8,7 @@ The `factory-city` command line. Depends on `schema` only.
 - `languages/`: one declarative JSON file per language; the engine has no language-specific code. Tiers and the steps to add a language are below.
 - `parse.ts`: `web-tree-sitter`; a grammar is looked up in `grammars/` (the three bundled ones, see `grammars/NOTICE.md`), then in the VS Code WebAssembly grammar package.
 - `collectors/duplication.ts`: optional (`--with duplication`). Copied blocks across the analyzed files, found in memory with the jscpd libraries; gives `duplicated_lines`, `duplication_ratio` and, for the report, the file to deduplicate with.
+- `collectors/sarif.ts`: optional (`--sarif <file>`, repeatable). Reads the SARIF 2.1.0 file that a third-party scanner wrote; nothing is run. See "Scanner findings" below.
 - `metrics/file-metrics.ts`: `loc`, `rloc`, `comment_lines`, `functions`, `mcc`, `max_function_complexity`, `max_nesting_level`.
 - `metrics/cohesion.ts`: LCOM4 generalized to a file (union-find over functions and methods). `metrics/file-metrics.ts` also counts the shortcut kinds from the language's rule set and collects module specifiers.
 - `resolve.ts`: resolves imports to files of the project (relative paths, `.js` to `.ts`, tsconfig and jsconfig `paths` and `baseUrl` with `extends`, workspace packages); builds the import graph, `imports_out`, `imports_in` and `folder_cohesion`. No type checker: resolution is a heuristic.
@@ -51,3 +52,15 @@ To find the node types, parse a sample and print the tree with `web-tree-sitter`
 `factory-city analyze --with duplication` (also on the default command). Blocks of at least 5 lines and 50 tokens that appear twice, within one language, are found with `@jscpd/core` and `@jscpd/tokenizer`, on the content of the analyzed revision, in memory: nothing is written and no source text is kept. `duplicated_lines` counts each copied line of a file once; `duplication_ratio` divides by the file's lines. Without the option the two metrics are absent, the Duplication preset is listed as unavailable with the option to use, and the duplication dimension of the report is unrated. Timelines do not compute duplication.
 
 > **2026-11-16:** a run on this repository (`factory-city analyze . --with duplication`, then `factory-city report <dataDir>`) rates duplication at 1.2% of the lines, with 11% of the code in files above the 5% bound. The report gains a Duplication row only when the option was given; timelines do not compute it. The largest findings are the page setup repeated in `render.ts` and the `git` helper defined several times; `glob.ts` exists in both the analyzer and the viewer on purpose, because the two programs share nothing but data files.
+
+## Scanner findings
+
+`factory-city analyze --sarif results.sarif` reads the results of a scanner (Semgrep, CodeQL, Bandit, gosec and others write SARIF). Factory City never installs or runs the scanner (see `docs/decisions/2026-11-17-external-tools-as-optional-data.md`).
+
+- **Kept:** the path, the rule id, the level and the line of each result. Never the message, never a snippet.
+- **Metrics:** `sarif_findings` (all levels) and `sarif_error_findings`, per analyzed file. A result with no level takes the default level of its rule, else warning.
+- **Score:** the dimension `scanner` reads `sarif_findings` (low at 0, moderate up to 2, high up to 5). It exists only when a SARIF file was given. The score is also given without it and without our security signals (`scoreWithoutSecurity`).
+- **Covered or not:** a file is 0 when the SARIF file mentions a file with the same extension (a result, or an `artifacts` entry) and none of its results is on this file; any other file is unavailable, because a scanner that does not read a language says nothing about it. Test files are not rated.
+- **Paths:** relative to the analyzed folder, absolute, or `file://`. A scanner that ran inside the folder given with `--path` is matched too.
+- **Counted apart, never lost:** results with no location, outside the folder, on files that were not analyzed, and on test files are counted in the manifest (`external[].apart`) and in a warning.
+- **Limits:** the counts of two tools are not comparable; a tool decides alone what an error is. Not available on `timeline` (a SARIF file describes one revision).

@@ -1,0 +1,10 @@
+{
+  "id": "scanner",
+  "label": "Scanner findings",
+  "group": "Code",
+  "level": 0,
+  "question": "Where does a third-party scanner report findings?",
+  "area": "rloc",
+  "height": "mcc",
+  "color": ["sarif_findings"]
+}

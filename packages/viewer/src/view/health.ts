@@ -64,7 +64,7 @@ function profileRows(report: Report, profile: Report["health"]["profile"], fmt: 
   return { rows, unavailable };
 }
 
-/** The score without the security dimension, as text, when security entered the rating of this frame. */
+/** The score without the security signals and the scanner findings, as text, when they entered the rating of this frame. */
 function withoutSecurity(
   report: Report,
   current: FrameHealth | undefined,
@@ -72,7 +72,9 @@ function withoutSecurity(
   fmt: Formatter,
 ): string | undefined {
   const value = current?.scoreWithoutSecurity ?? (current ? undefined : report.health.scoreWithoutSecurity);
-  return value !== undefined && rows.some((r) => r.id === "security") ? fmt.score(value) : undefined;
+  return value !== undefined && rows.some((r) => r.id === "security" || r.id === "scanner")
+    ? fmt.score(value)
+    : undefined;
 }
 
 /** What the frame did to the score and to the hotspots, against the frame before it. */

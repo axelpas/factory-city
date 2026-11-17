@@ -18,3 +18,8 @@ A security angle was asked for as an indicator, to challenge (#57, #58, #61). Pa
 - The score of a TypeScript or JavaScript project can drop when signals are found; the two scores show how much.
 - A signal is a place to look at, not a flaw: the metric help says so, and says that a dedicated scanner is still needed. Results of such scanners come in as data (SARIF, #61).
 - Scanning the history for secrets is not done: it would read old file contents.
+
+## Addendum: scanner findings (#61, 2026-11-17)
+- Results of a third-party scanner come in with `--sarif <file>` (the option is separate from `--with`, which takes no value). The dimension `scanner` reads `sarif_findings` with bounds 0, 2, 5, wider than our own signals because a scanner reports far more, and notes count too. It exists only when a file was given.
+- `scoreWithoutSecurity` leaves out both the security signals and the scanner findings.
+- A file with no result is 0 only where the tool demonstrably reads that kind of file (same extension as a file it mentions); otherwise it is unavailable.

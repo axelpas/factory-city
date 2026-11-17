@@ -1,5 +1,12 @@
 import { basename, resolve } from "node:path";
-import type { AnalysisManifest, AttributeDescriptor, CcJson, FileNode, Report } from "@factory-city/schema";
+import type {
+  AnalysisManifest,
+  AttributeDescriptor,
+  CcJson,
+  ExternalFindings,
+  FileNode,
+  Report,
+} from "@factory-city/schema";
 import { buildCcJson, getMetric, nodeId } from "@factory-city/schema";
 import { type Config, DEFAULT_CONFIG, loadConfig } from "../config.js";
 import { resolveDimensions } from "../health/dimensions.js";
@@ -26,6 +33,8 @@ const ABSOLUTE = new Set([
   "lines_deleted_recent",
   "fix_commits",
   "fix_commits_recent",
+  "sarif_findings",
+  "sarif_error_findings",
   "rework_lines",
   "issues_recent",
 ]);
@@ -92,6 +101,8 @@ export interface AnalysisFacts {
   coChange: Array<[string, string]>;
   duplicates: Map<string, string>;
   blobs: Map<string, string>;
+  /** Scanner results read from files, for the manifest. */
+  external?: ExternalFindings[];
 }
 
 function buildSnapshot(facts: AnalysisFacts, project: string, metricIds: string[]): CcJson {
@@ -142,6 +153,7 @@ function buildManifest(facts: AnalysisFacts, project: string, metricIds: string[
     analyzed: facts.attributesByPath.size,
     ignored: facts.ignored,
     warnings: facts.warnings,
+    ...(facts.external?.length ? { external: facts.external } : {}),
     snapshot: "snapshot.cc.json",
   };
 }
@@ -155,7 +167,10 @@ async function buildReport(
   const { opts, source } = facts;
   const config: Config =
     opts.shared?.config ?? (await loadConfig(resolve(opts.folder)).catch(() => DEFAULT_CONFIG));
-  const dimensions = resolveDimensions(config.thresholds);
+  // the scanner dimension exists only when the user brought a scanner file: no one is told it is missing
+  const dimensions = resolveDimensions(config.thresholds).filter(
+    (d) => d.id !== "scanner" || (opts.sarif?.length ?? 0) > 0,
+  );
   const extras = {
     groups: facts.groupNames,
     imports: facts.importLinks,
