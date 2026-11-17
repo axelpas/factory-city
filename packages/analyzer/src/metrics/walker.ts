@@ -45,7 +45,12 @@ function matchesCall(rule: ShortcutRule, re: RegExp | undefined, node: Node): bo
   if (callee === undefined || re?.test(callee) !== true) return false;
   if (!rule.argsPattern) return true;
   const args = (
-    node.childForFieldName("arguments") ?? node.namedChildren.find((c) => c?.type === "value_arguments")
+    node.childForFieldName("arguments") ??
+    node.namedChildren.find((c) => c?.type === "value_arguments") ??
+    // Swift: the arguments are inside the call suffix
+    node.namedChildren
+      .find((c) => c?.type === "call_suffix")
+      ?.namedChildren.find((c) => c?.type === "value_arguments")
   )?.text;
   return args !== undefined && argsRegex(rule.argsPattern).test(args);
 }

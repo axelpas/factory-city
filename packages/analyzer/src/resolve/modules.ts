@@ -383,3 +383,20 @@ export function resolveC(spec: string, from: string, ctx: ResolveContext): strin
   const file = nearest(hits, from);
   return file ? [file] : [];
 }
+
+/**
+ * The files a Swift `import` stands for: the files of the module, which is a folder, `Sources/<Module>/` for a Swift
+ * package, or a folder of that name that holds Swift files. `import struct A.B` is read as the module `A`. A system
+ * module (`Foundation`, `UIKit`) or a dependency has no file. Test files are not part of a module.
+ */
+export function resolveSwift(spec: string, ctx: ResolveContext): string[] {
+  const module = spec.split(".")[0] ?? "";
+  if (!module) return [];
+  const inFolder = (f: string, folder: string) => f.startsWith(`${folder}/`) || f.includes(`/${folder}/`);
+  const swift = [...ctx.files].filter(
+    (f) => f.endsWith(".swift") && !/(^|\/)(Tests?|[A-Za-z]*Tests)\//.test(f),
+  );
+  const inSources = swift.filter((f) => inFolder(f, `Sources/${module}`));
+  if (inSources.length > 0) return inSources;
+  return swift.filter((f) => inFolder(f, module));
+}

@@ -10,6 +10,7 @@ import {
   resolvePython,
   resolveRuby,
   resolveRust,
+  resolveSwift,
 } from "./modules.js";
 import { dirOf } from "./paths.js";
 import type { Pkg, ResolveContext, TsConfig } from "./types.js";
@@ -70,6 +71,7 @@ export function resolveImportAll(spec: string, from: string, ctx: ResolveContext
   if (resolver === "php") return resolvePhp(spec, from, ctx);
   if (resolver === "ruby") return resolveRuby(spec, from, ctx);
   if (resolver === "c") return resolveC(spec, from, ctx);
+  if (resolver === "swift") return resolveSwift(spec, ctx);
   const one = resolveImport(spec, from, ctx);
   return one ? [one] : [];
 }

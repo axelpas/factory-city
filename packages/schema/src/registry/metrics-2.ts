@@ -100,6 +100,18 @@ export const METRICS_2: readonly MetricDefinition[] = [
     limits: "Only for languages whose configuration has the rule.",
   }),
   metric({
+    id: "escape_force_cast",
+    label: "Forced casts and tries",
+    definition:
+      "A cast or a call that crashes when it fails instead of handling the failure: Swift `as!` and `try!`.",
+    computation: "Counted by the language's declarative rule set.",
+    why: "The program stops where the failure could have been handled.",
+    unit: "places",
+    direction: "higher-is-worse",
+    level: 0,
+    limits: "Only for languages whose configuration has the rule; some are justified.",
+  }),
+  metric({
     id: "escape_unsafe_code",
     label: "Unsafe blocks",
     definition: "A block where the compiler's guarantees are turned off: Rust `unsafe`.",

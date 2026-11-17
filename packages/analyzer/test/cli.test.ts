@@ -53,7 +53,7 @@ it("factory-city CLI > lists the three tiers of languages", () => {
   const text = run(["languages"]);
   expect(text).toMatch(/TypeScript\s+tier 1/);
   expect(text).toMatch(/Python\s+tier 1/);
-  expect(text).toMatch(/Swift\s+tier 2 .*\(unavailable: coupling, cohesion/);
+  expect(text).toMatch(/Swift\s+tier 1/);
   expect(text).toContain("tier 3  any other text file, with --all");
   const listed = JSON.parse(run(["languages", "--json"])) as Array<{ id: string; tier: number }>;
   // the tier is what the language covers, as the command says it
@@ -61,7 +61,7 @@ it("factory-city CLI > lists the three tiers of languages", () => {
     const full = l.covers.coupling && l.covers.cohesion && l.covers.shortcuts && l.covers.security;
     expect(l.tier, l.id).toBe(full ? 1 : 2);
   }
-  expect(listed.some((l) => l.tier === 2)).toBe(true);
+  expect(listed.every((l) => l.tier === 1)).toBe(true);
 });
 
 it("factory-city CLI > analyzes a small Python project", () => {

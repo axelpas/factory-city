@@ -76,7 +76,7 @@ export interface ModulesConfig {
     namesField?: string;
   }>;
   /** How the names are turned into files of the project (see `resolve/modules.ts`). */
-  resolver: "python" | "go" | "java" | "csharp" | "kotlin" | "rust" | "php" | "ruby" | "c";
+  resolver: "python" | "go" | "java" | "csharp" | "kotlin" | "rust" | "php" | "ruby" | "c" | "swift";
   /** Imports written as calls with a string argument (Ruby `require "x"`): the callee, and what is put in front of the path. */
   calls?: {
     nodeType: string;

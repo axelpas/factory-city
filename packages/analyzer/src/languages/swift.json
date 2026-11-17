@@ -1,7 +1,7 @@
 {
   "id": "swift",
   "label": "Swift",
-  "tier": 2,
+  "tier": 1,
   "grammar": "swift",
   "extensions": [".swift"],
   "comment": ["comment", "multiline_comment"],
@@ -40,7 +40,153 @@
     {
       "kind": "lint_disable",
       "type": "comment",
-      "pattern": "swiftlint:disable"
+      "pattern": "swiftlint:disable|sourcery:disable"
+    },
+    {
+      "kind": "force_cast",
+      "type": "node",
+      "nodeType": "as_operator",
+      "pattern": "^as!$"
+    },
+    {
+      "kind": "force_cast",
+      "type": "node",
+      "nodeType": "try_operator",
+      "pattern": "^try!$"
+    },
+    {
+      "kind": "skipped_test",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^(XCTSkip|XCTSkipIf|XCTSkipUnless)$"
+    },
+    {
+      "kind": "skipped_test",
+      "type": "node",
+      "nodeType": "attribute",
+      "pattern": "^@Test\\(.*\\.disabled"
+    },
+    {
+      "kind": "empty_catch",
+      "type": "emptyBlock",
+      "nodeType": "catch_block",
+      "bodyType": "statements",
+      "emptyWhenMissing": true
+    }
+  ],
+  "modules": {
+    "statements": [
+      {
+        "nodeType": "import_declaration",
+        "moduleField": "",
+        "moduleType": "identifier"
+      }
+    ],
+    "resolver": "swift",
+    "granularity": "package"
+  },
+  "cohesion": {
+    "wrappers": [],
+    "functionDeclarations": ["function_declaration"],
+    "variableDeclarations": [],
+    "functionValues": [],
+    "classDeclarations": ["class_declaration", "protocol_declaration"],
+    "methods": ["function_declaration"],
+    "constructorName": "",
+    "fields": ["property_declaration"],
+    "fieldDeclarators": {
+      "declaratorType": "pattern",
+      "nameField": "bound_identifier"
+    },
+    "specDeclarations": {
+      "property_declaration": "property_declaration"
+    },
+    "otherDeclarations": ["typealias_declaration"],
+    "identifiers": ["simple_identifier", "type_identifier"],
+    "memberExpression": "navigation_expression",
+    "memberObjectField": "target",
+    "memberPropertyField": "suffix",
+    "selfObject": "self",
+    "bareMembers": true,
+    "barrelStatements": ["import_declaration"],
+    "minStemLength": 4
+  },
+  "security": [
+    {
+      "kind": "dynamic_code",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^NSExpression$",
+      "argsPattern": "^\\(\\s*format"
+    },
+    {
+      "kind": "command_exec",
+      "type": "node",
+      "nodeType": "line_string_literal",
+      "pattern": "^\"(/usr)?/bin/(sh|bash|zsh|dash)\"$"
+    },
+    {
+      "kind": "unsafe_deserialization",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^NSKeyedUnarchiver\\.unarchive(Object|TopLevelObjectWithData)$"
+    },
+    {
+      "kind": "unsafe_deserialization",
+      "type": "node",
+      "nodeType": "assignment",
+      "pattern": "requiresSecureCoding\\s*=\\s*false$"
+    },
+    {
+      "kind": "unsafe_html",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "(^|\\.)(loadHTMLString|evaluateJavaScript)$",
+      "argsPattern": "^\\(\\s*\"[^\"]*\\\\\\("
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "property_declaration",
+      "pattern": "(^|\\s)(let|var)\\s+\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*(:\\s*[\\w?<>\\[\\]]+\\s*)?=\\s*\"(?![a-z_]+\")(?![A-Z_]+\")(?!\\S*/)[^\"\\s\\\\]{8,}\"$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "assignment",
+      "pattern": "^[\\w.]*\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*=\\s*\"(?![a-z_]+\")(?![A-Z_]+\")(?!\\S*/)[^\"\\s\\\\]{8,}\"$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "line_string_literal",
+      "pattern": "^\"(ghp_[A-Za-z0-9]{30,}|github_pat_\\w{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[\\w-]{10,})"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "multi_line_string_literal",
+      "pattern": "BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^URLCredential$",
+      "argsPattern": "^\\(\\s*trust:"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "^DisabledTrustEvaluator$"
+    },
+    {
+      "kind": "sql_concat",
+      "type": "call",
+      "nodeType": "call_expression",
+      "pattern": "(^|\\.)(execute|executeQuery|executeUpdate|prepare|run|query|exec)$",
+      "argsPattern": "^\\(\\s*(\"[^\"]*\"\\s*\\+|\"[^\"]*\\\\\\()"
     }
   ]
 }

@@ -51,7 +51,7 @@ function collect(
     const property = positional
       ? node.namedChildren[node.namedChildren.length - 1]
       : node.childForFieldName(cfg.memberPropertyField ?? "property");
-    if (object?.text === self && property) selfTokens.add(property.text);
+    if (object?.text === self && property) selfTokens.add(property.text.replace(/^[.?!]+/, ""));
   }
   for (const child of node.namedChildren) if (child) collect(child, cfg, tokens, selfTokens, self, skip);
 }

@@ -12,6 +12,7 @@ const SHORTCUT_NAMES: Record<string, string> = {
   focused_test: "focused tests",
   empty_catch: "empty catch blocks",
   unsafe_code: "unsafe blocks",
+  force_cast: "forced casts and tries",
 };
 
 /** What a rule needs to word its advice. */
