@@ -1,7 +1,7 @@
 {
   "id": "ruby",
   "label": "Ruby",
-  "tier": 2,
+  "tier": 1,
   "grammar": "ruby",
   "extensions": [".rb", ".rake"],
   "comment": ["comment"],
@@ -31,7 +31,165 @@
     {
       "kind": "lint_disable",
       "type": "comment",
-      "pattern": "rubocop:disable|:nocov:"
+      "pattern": "rubocop:(disable|todo)|:nocov:|reek:|standard:disable"
+    },
+    {
+      "kind": "type_ignore",
+      "type": "comment",
+      "pattern": "#\\s*typed:\\s*(false|ignore)|steep:ignore"
+    },
+    {
+      "kind": "type_ignore",
+      "type": "call",
+      "nodeType": "call",
+      "pattern": "^T\\.unsafe$",
+      "argsPattern": "."
+    },
+    {
+      "kind": "skipped_test",
+      "type": "call",
+      "nodeType": "call",
+      "pattern": "^(skip|pending|xit|xspecify|xdescribe|xcontext)$"
+    },
+    {
+      "kind": "focused_test",
+      "type": "call",
+      "nodeType": "call",
+      "pattern": "^(fit|fdescribe|fcontext|fspecify|focus)$"
+    },
+    {
+      "kind": "empty_catch",
+      "type": "emptyBlock",
+      "nodeType": "rescue",
+      "bodyField": "body",
+      "emptyWhenMissing": true,
+      "emptyTypes": ["nil"]
+    }
+  ],
+  "modules": {
+    "statements": [],
+    "resolver": "ruby",
+    "calls": {
+      "nodeType": "call",
+      "functionField": "method",
+      "argumentsField": "arguments",
+      "callees": {
+        "require": "req:",
+        "require_relative": "rel:",
+        "load": "req:"
+      }
+    }
+  },
+  "cohesion": {
+    "wrappers": [],
+    "containers": ["module"],
+    "functionDeclarations": ["method"],
+    "variableDeclarations": [],
+    "functionValues": [],
+    "classDeclarations": ["class"],
+    "methods": ["method", "singleton_method"],
+    "constructorName": "initialize",
+    "fields": [],
+    "fieldsFromConstructor": true,
+    "attributeCalls": ["attr_reader", "attr_writer", "attr_accessor"],
+    "assignments": {
+      "statement": "assignment",
+      "node": "assignment",
+      "nameField": "left"
+    },
+    "otherDeclarations": ["module"],
+    "identifiers": ["identifier", "constant"],
+    "selfTokenTypes": ["instance_variable"],
+    "memberExpression": "call",
+    "memberObjectField": "receiver",
+    "memberPropertyField": "method",
+    "selfObject": "self",
+    "bareMembers": true,
+    "barrelStatements": [],
+    "minStemLength": 4
+  },
+  "security": [
+    {
+      "kind": "dynamic_code",
+      "type": "call",
+      "nodeType": "call",
+      "pattern": "(^|\\.)(eval|instance_eval|class_eval|module_eval)$",
+      "argsPattern": "."
+    },
+    {
+      "kind": "command_exec",
+      "type": "call",
+      "nodeType": "call",
+      "pattern": "(^|\\.)(system|exec|spawn|popen|popen3|capture2|capture2e|capture3)$",
+      "argsPattern": "^\\(?\\s*(\"[^\"]*#\\{|[@a-z_])"
+    },
+    {
+      "kind": "command_exec",
+      "type": "node",
+      "nodeType": "subshell",
+      "pattern": "#\\{"
+    },
+    {
+      "kind": "unsafe_deserialization",
+      "type": "call",
+      "nodeType": "call",
+      "pattern": "^(Marshal\\.(load|restore)|YAML\\.(load|load_file|unsafe_load)|Psych\\.(load|unsafe_load)|Oj\\.load|JSON\\.load)$"
+    },
+    {
+      "kind": "unsafe_html",
+      "type": "call",
+      "nodeType": "call",
+      "pattern": "^raw$",
+      "argsPattern": "."
+    },
+    {
+      "kind": "unsafe_html",
+      "type": "node",
+      "nodeType": "identifier",
+      "pattern": "^html_safe$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "assignment",
+      "pattern": "^[@\\w.]*\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*\\s*=\\s*[\"'](?![a-z_]+[\"'])(?![A-Z_]+[\"'])(?!\\S*/)[^\"'\\s${}#]{8,}[\"']$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "pair",
+      "pattern": "^:?[\"']?\\w*([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA][pP][iI][_-]?[kK][eE][yY])\\w*[\"']?\\s*(:|=>)\\s*[\"'](?![a-z_]+[\"'])(?![A-Z_]+[\"'])(?!\\S*/)[^\"'\\s${}#]{8,}[\"']$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string",
+      "pattern": "^[\"'](ghp_[A-Za-z0-9]{30,}|github_pat_\\w{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[\\w-]{10,})"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string",
+      "pattern": "BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "node",
+      "nodeType": "scope_resolution",
+      "pattern": "^OpenSSL::SSL::VERIFY_NONE$"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "node",
+      "nodeType": "pair",
+      "pattern": "^(verify|ssl_verify|verify_ssl|verify_peer|verify_mode):\\s*false$"
+    },
+    {
+      "kind": "sql_concat",
+      "type": "call",
+      "nodeType": "call",
+      "pattern": "(^|\\.)(where|execute|find_by_sql|select_all|exists\\?|joins|order|group|having|pluck|update_all|delete_all|from)$",
+      "argsPattern": "^\\(?\\s*(\"[^\"]*#\\{|'[^']*'\\s*\\+|\"[^\"]*\"\\s*\\+)"
     }
   ]
 }

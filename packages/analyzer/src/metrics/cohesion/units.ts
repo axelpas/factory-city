@@ -41,6 +41,7 @@ function collect(
 ): void {
   if (skip && node.id === skip.id) return;
   if (cfg.identifiers.includes(node.type)) tokens.add(node.text);
+  if (cfg.selfTokenTypes?.includes(node.type)) selfTokens.add(node.text.replace(/^@+/, ""));
   if (cfg.memberExpression.split("|").includes(node.type)) {
     // without field names (Kotlin) the object is the first child and the property the last
     const positional = cfg.memberObjectField === "";
@@ -100,9 +101,10 @@ function addVariables(node: Node, d: Declarations, cfg: CohesionConfig): void {
 function assignedName(statement: Node, cfg: CohesionConfig): string | undefined {
   const a = cfg.assignments;
   if (!a || statement.type !== a.statement) return undefined;
-  const assignment = statement.namedChildren.find((c) => c?.type === a.node);
+  const assignment =
+    statement.type === a.node ? statement : statement.namedChildren.find((c) => c?.type === a.node);
   const name = assignment?.childForFieldName(a.nameField);
-  return name?.type === "identifier" ? name.text : undefined;
+  return name && ["identifier", "constant"].includes(name.type) ? name.text : undefined;
 }
 
 /** The field names a member declares through declarators (`int a, b;`), when the language writes them so. */
@@ -132,6 +134,15 @@ function constructorFields(cls: Node, cfg: CohesionConfig): string[] {
   return out;
 }
 
+/** The fields a class-body call declares through symbols (`attr_accessor :a, :b`). */
+function attributeFields(member: Node | null, cfg: CohesionConfig): string[] {
+  if (!member || !cfg.attributeCalls || member.type !== "call") return [];
+  if (!cfg.attributeCalls.includes(member.childForFieldName("method")?.text ?? "")) return [];
+  return (member.childForFieldName("arguments")?.namedChildren ?? [])
+    .filter((a) => a?.type === "simple_symbol")
+    .map((a) => (a as Node).text.replace(/^:/, ""));
+}
+
 /** A class: its methods become units, its fields are kept to link the methods that share them. */
 function addClass(node: Node, name: string, d: Declarations, cfg: CohesionConfig): void {
   d.declared.add(name);
@@ -140,6 +151,7 @@ function addClass(node: Node, name: string, d: Declarations, cfg: CohesionConfig
   const body =
     node.childForFieldName("body") ?? node.namedChildren.find((c) => c?.type === cfg.classBodyType);
   for (const raw of body?.namedChildren ?? []) {
+    for (const field of attributeFields(raw, cfg)) members.fields.add(field);
     const assigned = raw ? assignedName(raw, cfg) : undefined;
     if (assigned) {
       members.fields.add(assigned);

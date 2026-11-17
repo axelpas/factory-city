@@ -17,6 +17,10 @@ function calleeOf(node: Node): string | undefined {
   if (fn) return fn.text;
   // Kotlin: a call has no field, its callee is the first child
   if (node.type === "call_expression") return node.namedChildren[0]?.text;
+  // Ruby: the receiver and the method
+  const method = node.childForFieldName("method");
+  const receiver = node.childForFieldName("receiver");
+  if (method) return receiver ? `${receiver.text}.${method.text}` : method.text;
   const name = node.childForFieldName("name");
   const object = node.childForFieldName("object");
   return name ? (object ? `${object.text}.${name.text}` : name.text) : undefined;
@@ -107,6 +111,7 @@ export class Walker {
     const body = rule.bodyType
       ? node.namedChildren.find((c) => c?.type === rule.bodyType)
       : node.childForFieldName(rule.bodyField ?? "body");
+    if (!body && rule.emptyWhenMissing) return true;
     const idle = new Set(rule.emptyTypes ?? []);
     return body?.namedChildren.every((c) => !c || this.cm.has(c.type) || idle.has(c.type)) === true;
   }
@@ -141,6 +146,7 @@ export class Walker {
    * Each name taken from a module is added as a module of its own (`c.d`): the resolver keeps the ones that exist.
    */
   private collectModules(node: Node): void {
+    this.collectCall(node);
     const declaration = this.lang.modules?.declarations?.find((d) => d.nodeType === node.type);
     const nameNode = declaration
       ? declaration.nameType
@@ -152,6 +158,16 @@ export class Walker {
     // several rules may read one statement: each reads the kind of module it names
     for (const statement of this.lang.modules?.statements.filter((s) => s.nodeType === node.type) ?? [])
       this.collectStatement(node, statement);
+  }
+
+  /** An import written as a call: `require "x"`, with what the callee puts in front of the path. */
+  private collectCall(node: Node): void {
+    const calls = this.lang.modules?.calls;
+    if (!calls || node.type !== calls.nodeType) return;
+    const callee = node.childForFieldName(calls.functionField)?.text;
+    const prefix = callee === undefined ? undefined : calls.callees[callee];
+    const first = node.childForFieldName(calls.argumentsField)?.namedChildren[0];
+    if (prefix !== undefined && first?.type === "string") this.imports.push(`${prefix}${stringValue(first)}`);
   }
 
   private collectStatement(

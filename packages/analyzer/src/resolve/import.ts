@@ -7,6 +7,7 @@ import {
   resolveKotlin,
   resolvePhp,
   resolvePython,
+  resolveRuby,
   resolveRust,
 } from "./modules.js";
 import { dirOf } from "./paths.js";
@@ -66,6 +67,7 @@ export function resolveImportAll(spec: string, from: string, ctx: ResolveContext
   if (resolver === "kotlin") return resolveKotlin(spec, from, ctx);
   if (resolver === "rust") return resolveRust(spec, from, ctx);
   if (resolver === "php") return resolvePhp(spec, from, ctx);
+  if (resolver === "ruby") return resolveRuby(spec, from, ctx);
   const one = resolveImport(spec, from, ctx);
   return one ? [one] : [];
 }

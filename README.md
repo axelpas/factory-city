@@ -152,8 +152,8 @@ Any text file gets a building; how much is measured depends on the language. `fa
 
 | Tier | Languages | What is measured |
 |---|---|---|
-| 1 | TypeScript, TSX, JavaScript, Python, Go, Java, C#, Kotlin, Rust, PHP | Size, complexity, nesting, coupling, cohesion, the shortcuts of the language (silenced checks) and security signals |
-| 2 | C, C++, Ruby, Swift | Size, complexity, nesting and some shortcuts. Coupling, cohesion and security signals are unavailable for now. |
+| 1 | TypeScript, TSX, JavaScript, Python, Go, Java, C#, Kotlin, Rust, PHP, Ruby | Size, complexity, nesting, coupling, cohesion, the shortcuts of the language (silenced checks) and security signals |
+| 2 | C, C++, Swift | Size, complexity, nesting and some shortcuts. Coupling, cohesion and security signals are unavailable for now. |
 | 3 | Any other text file, with `--all` | Lines and the git metrics only |
 
 A metric a language does not have is shown as unavailable, never as zero. The git metrics (change, fixes, rework, authorship) work for every language. Adding a language is a grammar and one JSON file: see [Extending it](#extending-it).

@@ -348,3 +348,20 @@ export function resolvePhp(spec: string, from: string, ctx: ResolveContext): str
   }
   return [...out];
 }
+
+/**
+ * The file a Ruby `require` stands for. `require_relative "x"` is read from the folder of the file; `require "a/b"`
+ * is read along the load path, which a project sets as it likes, so the file whose path ends with `a/b.rb` is taken,
+ * the closest to the importer first. A gem or the standard library has no file.
+ */
+export function resolveRuby(spec: string, from: string, ctx: ResolveContext): string[] {
+  const withExt = (p: string) => (p.endsWith(".rb") ? p : `${p}.rb`);
+  if (spec.startsWith("rel:")) {
+    const file = posix.normalize(posix.join(dirOf(from), withExt(spec.slice(4))));
+    return file !== from && ctx.files.has(file) ? [file] : [];
+  }
+  const path = withExt(spec.slice(4).replace(/^\.?\//, ""));
+  const hits = [...ctx.files].filter((f) => f !== from && (f === path || f.endsWith(`/${path}`)));
+  const file = nearest(hits, from);
+  return file ? [file] : [];
+}

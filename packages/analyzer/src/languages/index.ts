@@ -76,7 +76,14 @@ export interface ModulesConfig {
     namesField?: string;
   }>;
   /** How the names are turned into files of the project (see `resolve/modules.ts`). */
-  resolver: "python" | "go" | "java" | "csharp" | "kotlin" | "rust" | "php";
+  resolver: "python" | "go" | "java" | "csharp" | "kotlin" | "rust" | "php" | "ruby";
+  /** Imports written as calls with a string argument (Ruby `require "x"`): the callee, and what is put in front of the path. */
+  calls?: {
+    nodeType: string;
+    functionField: string;
+    argumentsField: string;
+    callees: Record<string, string>;
+  };
   /** `package` when an import names a group of files (a Go package, a C# namespace): it counts once in `imports_out`. */
   granularity?: "package";
   /** Nodes that declare a name other files can import (a C# namespace): the node type and the field with the name. */
@@ -138,6 +145,10 @@ export interface CohesionConfig {
   structNodes?: string[];
   /** The field that names a class when it is not `name` (Rust `impl_item` has `type`). */
   classNameField?: string;
+  /** Node types whose text is a member of the object itself (Ruby `@items`): the name is the text without the `@`. */
+  selfTokenTypes?: string[];
+  /** Calls in a class body that declare fields through symbol arguments (Ruby `attr_reader :a`). */
+  attributeCalls?: string[];
   /** Declarations holding specs that each declare names (Go: `const_declaration` holds `const_spec`s). */
   specDeclarations?: Record<string, string>;
   barrelStatements: string[];
@@ -157,6 +168,8 @@ export interface ShortcutRule {
   bodyField?: string;
   /** For `emptyBlock`: when the body has no field, the type of the child that is the body (Python: `block`). */
   bodyType?: string;
+  /** For `emptyBlock`: a node with no body at all counts as empty (Ruby `rescue` with nothing after it). */
+  emptyWhenMissing?: boolean;
   /** For `call`: a pattern the text of the arguments must match too (`exec.Command` with a shell as first argument). */
   argsPattern?: string;
   /** For `emptyBlock`: statement types that do nothing, beside comments (Python: `pass_statement`). */
