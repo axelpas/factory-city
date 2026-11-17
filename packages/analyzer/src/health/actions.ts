@@ -6,6 +6,7 @@ const SHORTCUT_NAMES: Record<string, string> = {
   ts_ignore: "@ts-ignore",
   ts_expect_error: "@ts-expect-error",
   ts_nocheck: "@ts-nocheck",
+  type_ignore: "type-checker suppressions",
   lint_disable: "lint-disable comments",
   skipped_test: "skipped tests",
   focused_test: "focused tests",
@@ -52,6 +53,7 @@ function removeShortcuts({ file, is }: Context): Advice | undefined {
 const SECURITY_KINDS: Record<string, string> = {
   dynamic_code: "dynamic code",
   command_exec: "command execution",
+  unsafe_deserialization: "unsafe deserialization",
   unsafe_html: "unsafe HTML",
   hardcoded_secret: "hard-coded secrets",
   tls_disabled: "disabled TLS checks",

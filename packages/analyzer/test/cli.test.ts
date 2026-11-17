@@ -52,11 +52,11 @@ it("factory-city CLI > fails with an actionable message when --rev is used outsi
 it("factory-city CLI > lists the three tiers of languages", () => {
   const text = run(["languages"]);
   expect(text).toMatch(/TypeScript\s+tier 1/);
-  expect(text).toMatch(/Python\s+tier 2/);
-  expect(text).toMatch(/Swift\s+tier 2/);
+  expect(text).toMatch(/Python\s+tier 1/);
+  expect(text).toMatch(/Swift\s+tier 2 .*\(unavailable: coupling, cohesion/);
   expect(text).toContain("tier 3  any other text file, with --all");
   const listed = JSON.parse(run(["languages", "--json"])) as Array<{ id: string; tier: number }>;
-  expect(listed.filter((l) => l.tier === 2).length).toBeGreaterThanOrEqual(11);
+  expect(listed.filter((l) => l.tier === 2).length).toBeGreaterThanOrEqual(10);
 });
 
 it("factory-city CLI > analyzes a small Python project", () => {

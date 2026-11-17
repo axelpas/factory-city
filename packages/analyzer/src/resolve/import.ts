@@ -1,4 +1,6 @@
 import { posix } from "node:path";
+import { languageForPath } from "../languages/index.js";
+import { resolvePython } from "./modules.js";
 import { dirOf } from "./paths.js";
 import type { Pkg, ResolveContext, TsConfig } from "./types.js";
 
@@ -49,6 +51,8 @@ function matchPattern(pattern: string, spec: string): string | undefined {
 
 /** Resolves a module specifier to a file of the project, or undefined for external packages. */
 export function resolveImport(spec: string, from: string, ctx: ResolveContext): string | undefined {
+  // the language of the importing file says how its modules are named
+  if (languageForPath(from)?.modules?.resolver === "python") return resolvePython(spec, from, ctx.files);
   if (spec.startsWith("./") || spec.startsWith("../") || spec === "." || spec === "..") {
     return tryFile(posix.join(dirOf(from), spec), ctx.files);
   }

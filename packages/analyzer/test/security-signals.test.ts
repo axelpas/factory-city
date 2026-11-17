@@ -79,7 +79,9 @@ it("security signals > does not rate test files: the metrics are absent, never z
 });
 
 it("security signals > are unavailable for a language without rules", async () => {
-  const { metrics } = await signals("def f():\n    return eval('1')\n", "python");
+  const python = LANGUAGES.find((l) => l.id === "python") as (typeof LANGUAGES)[number];
+  const bare = { ...python, security: [] };
+  const { metrics } = computeMetrics(await getParser(bare.grammar), bare, "def f():\n    return eval('1')\n");
   expect(Object.keys(metrics).filter((k) => k.startsWith("security_"))).toEqual([]);
 });
 

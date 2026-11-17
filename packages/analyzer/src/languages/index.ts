@@ -35,6 +35,11 @@ export interface LanguageConfig {
   nestingExceptParent: Record<string, string[]>;
   /** Where module dependencies come from; absent for languages without coupling support. */
   imports?: ImportsConfig;
+  /**
+   * Where module dependencies come from in languages whose imports are names, not quoted paths (Python, Go, Java...).
+   * Absent for languages without coupling support.
+   */
+  modules?: ModulesConfig;
   /** Which syntax nodes make up the file's units for cohesion; absent when cohesion is unavailable. */
   cohesion?: CohesionConfig;
   /** Declarative rules for places where a check was silenced. */
@@ -50,8 +55,22 @@ export interface ImportsConfig {
   calls: { nodeType: string; functionField: string; argumentsField: string; callees: string[] };
 }
 
+/** An import statement of a language whose modules are named: the field holding the module, and the names taken from it. */
+export interface ModulesConfig {
+  statements: Array<{
+    nodeType: string;
+    moduleField: string;
+    /** Field with the names imported from the module: each may be a module of its own (`from a import b`). */
+    namesField?: string;
+  }>;
+  /** How the names are turned into files of the project (see `resolve/modules.ts`). */
+  resolver: "python";
+}
+
 export interface CohesionConfig {
   wrappers: string[];
+  /** The field of a wrapper node that holds what it wraps; `declaration` when absent. */
+  wrapperField?: string;
   functionDeclarations: string[];
   variableDeclarations: string[];
   functionValues: string[];
@@ -62,7 +81,14 @@ export interface CohesionConfig {
   otherDeclarations: string[];
   identifiers: string[];
   memberExpression: string;
+  /** Fields of a member expression, `object` and `property` when absent (Python: `object` and `attribute`). */
+  memberObjectField?: string;
+  memberPropertyField?: string;
   selfObject: string;
+  /** Top-level `name = value` statements that declare a name: the statement, the assignment inside it, the name field. */
+  assignments?: { statement: string; node: string; nameField: string };
+  /** True when the fields of a class are the members its constructor sets through the self object (Python). */
+  fieldsFromConstructor?: boolean;
   barrelStatements: string[];
   /** Two functions whose names start with the same word of at least this length are linked. */
   minStemLength: number;
@@ -78,6 +104,10 @@ export interface ShortcutRule {
   pattern?: string;
   nodeType?: string;
   bodyField?: string;
+  /** For `emptyBlock`: when the body has no field, the type of the child that is the body (Python: `block`). */
+  bodyType?: string;
+  /** For `emptyBlock`: statement types that do nothing, beside comments (Python: `pass_statement`). */
+  emptyTypes?: string[];
 }
 
 type RawConfig = Partial<LanguageConfig> &
@@ -136,4 +166,33 @@ export function languageForPath(path: string): LanguageConfig | undefined {
   const dot = path.lastIndexOf(".");
   if (dot < 0) return undefined;
   return BY_EXTENSION.get(path.slice(dot).toLowerCase());
+}
+
+/** The indicators a language is measured on. Size, complexity and nesting come with every grammar. */
+export interface Coverage {
+  size: true;
+  complexity: true;
+  nesting: true;
+  coupling: boolean;
+  cohesion: boolean;
+  shortcuts: boolean;
+  security: boolean;
+}
+
+export function coverageOf(language: LanguageConfig): Coverage {
+  return {
+    size: true,
+    complexity: true,
+    nesting: true,
+    coupling: language.imports !== undefined || language.modules !== undefined,
+    cohesion: language.cohesion !== undefined,
+    shortcuts: language.shortcuts.length > 0,
+    security: language.security.length > 0,
+  };
+}
+
+/** Tier 1 is every indicator; a language that lacks one is Tier 2. */
+export function isFullyCovered(language: LanguageConfig): boolean {
+  const c = coverageOf(language);
+  return c.coupling && c.cohesion && c.shortcuts && c.security;
 }

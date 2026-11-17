@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
-import { LANGUAGES, languageForPath } from "../src/languages/index.js";
+import { isFullyCovered, LANGUAGES, languageForPath } from "../src/languages/index.js";
 import { computeMetrics } from "../src/metrics/file-metrics.js";
 import { getParser, loadGrammar } from "../src/parse.js";
 import { isTestPath } from "../src/select.js";
@@ -39,10 +39,17 @@ const TIER2: Array<[id: string, file: string, rloc: number]> = [
   ["swift", "Sample.swift", 21],
 ];
 
+/** The languages that are measured on every indicator, hence Tier 1; the others are still Tier 2. */
+const FULL = ["python"];
+
+it("tiers > a language is Tier 1 exactly when every indicator is covered", () => {
+  for (const l of LANGUAGES) expect(isFullyCovered(l) ? 1 : 2, l.id).toBe(l.tier);
+});
+
 it.each(TIER2)("%s: measures the sample program", async (id, file, rloc) => {
   const { language, metrics, syntaxErrors, imports } = await measureFile(file);
   expect(language.id).toBe(id);
-  expect(language.tier).toBe(2);
+  expect(language.tier).toBe(FULL.includes(id) ? 1 : 2);
   expect(syntaxErrors).toBe(false);
   expect(metrics.comment_lines).toBe(1);
   expect(metrics.rloc).toBe(rloc);
@@ -55,14 +62,16 @@ it.each(TIER2)("%s: measures the sample program", async (id, file, rloc) => {
   expect(metrics.max_nesting_level).toBe(2);
   expect(metrics.escape_lint_disable).toBe(1);
   expect(metrics.escape_hatches).toBe(1);
-  // coupling and cohesion are not configured for Tier 2: unavailable, not zero
-  expect(imports).toEqual([]);
-  expect(metrics.cohesion_groups).toBeUndefined();
-  expect(metrics.lack_of_cohesion).toBeUndefined();
+  // a language without coupling or cohesion configured: unavailable, not zero
+  if (!FULL.includes(id)) {
+    expect(imports).toEqual([]);
+    expect(metrics.cohesion_groups).toBeUndefined();
+    expect(metrics.lack_of_cohesion).toBeUndefined();
+  }
 });
 
 it("Tier 2 languages > covers the eleven languages of the specification", () => {
-  const ids = LANGUAGES.filter((l) => l.tier === 2).map((l) => l.id);
+  const ids = LANGUAGES.map((l) => l.id);
   for (const [id] of TIER2) expect(ids).toContain(id);
 });
 

@@ -29,13 +29,21 @@ Decisions: `decisions/2026-11-14-parsing-web-tree-sitter.md`, `decisions/2026-11
 
 | Tier | Languages | What is measured |
 |---|---|---|
-| 1 | TypeScript, TSX, JavaScript | Size, complexity, nesting, coupling, cohesion, the full set of shortcuts |
-| 2 | Python, Go, Java, C#, C, C++ (and `.h` headers, read with the C++ grammar), Rust, PHP, Ruby, Kotlin, Swift | Size, complexity, nesting, and the shortcuts the configuration lists (lint-disable markers everywhere; skipped tests and empty catch blocks in some). Coupling and cohesion are unavailable. |
+| 1 | TypeScript, TSX, JavaScript, Python | Size, complexity, nesting, coupling, cohesion, shortcuts and security signals: every indicator |
+| 2 | Go, Java, C#, C, C++ (and `.h` headers, read with the C++ grammar), Rust, PHP, Ruby, Kotlin, Swift | Size, complexity, nesting, and the shortcuts the configuration lists. The other indicators are covered one language at a time (#60). |
 | 3 | Any other text file, with `--all` | Lines (`loc`) and the git metrics only |
+
+A language is Tier 1 exactly when it has every indicator (a test checks it). Coverage by indicator, as `factory-city languages` prints it:
+
+| Language | Coupling | Cohesion | Shortcuts | Security signals |
+|---|---|---|---|---|
+| TypeScript, TSX, JavaScript | yes | yes | full set | yes |
+| Python | yes | yes | lint, type-checker, skipped tests, empty except | yes |
+| Go, Java, C#, C, C++, Rust, PHP, Ruby, Kotlin, Swift | unavailable | unavailable | lint-disable markers, some skipped tests and empty catches | unavailable |
 
 `factory-city languages` prints the list. A metric a tier does not have is absent from the snapshot: unavailable, never zero. A file with syntax errors is still measured, and the manifest counts such files in a warning.
 
-Known limits of Tier 2: a Python docstring is a string, so it counts as code; a `default` clause counts as a branch in the languages whose grammar gives it the same node as a `case`; Ruby blocks add nesting but are not counted as functions; test files are recognized by name only (`*_test.go`, `test_*.py`, `*Test.java`, `*Tests.cs`, `*_spec.rb`, `*Spec.kt` and the `test` folders).
+Known limits of Tier 2: a Python docstring is a string, so it counts as code; Python module names are matched against the project's files by name (the closest file wins, a project module named like a standard-library one is linked), and a Python class's fields are the members its `__init__` sets; a `default` clause counts as a branch in the languages whose grammar gives it the same node as a `case`; Ruby blocks add nesting but are not counted as functions; test files are recognized by name only (`*_test.go`, `test_*.py`, `*Test.java`, `*Tests.cs`, `*_spec.rb`, `*Spec.kt` and the `test` folders).
 
 ## How to add a language
 
@@ -43,7 +51,7 @@ Known limits of Tier 2: a Python docstring is a string, so it counts as code; a 
 2. **Configuration.** Add `packages/analyzer/src/languages/<id>.json`: `id`, `label`, `tier`, `grammar`, `extensions`, then the node types of the grammar that count as `comment`, `functions`, `branches` (one decision point each), `logical` (the node and the operators that add a branch, such as `&&`), `nesting` (structures that add a level) and `nestingExceptParent` (an else-if must not go one level deeper). `shortcuts` is a list of rules: `comment` (a pattern in a comment), `node` (a node type and a pattern on its text), `call` (a pattern on the callee), `emptyBlock` (a node whose body holds no statement). A configuration may `extends` another one and only state what differs.
 3. **Register.** Import the file in `languages/index.ts` and append it to the list. Append only: the position in the list is the category code stored in snapshots.
 4. **Fixture and tests.** Add `test/fixtures/languages/sample.<ext>`, the same small program as the others, and its line in the table of `test/languages.test.ts`. The tests check the metrics of the sample, that every node type named in the configuration exists in the grammar, and that no extension is claimed twice.
-5. **Optional.** `imports` and `cohesion` blocks turn on coupling and cohesion; today only the TypeScript family has them, and the import resolver (`resolve.ts`) knows JavaScript module resolution only.
+5. **Indicators.** `imports` (quoted module paths, TypeScript style) or `modules` (named modules, with a `resolver`), `cohesion` and `security` blocks turn on coupling, cohesion and security signals; `resolve/modules.ts` holds the resolver of each module system (Python today). A language with all of them is Tier 1.
 
 To find the node types, parse a sample and print the tree with `web-tree-sitter` (`tree.rootNode.toString()`), or read the grammar's `node-types.json`.
 

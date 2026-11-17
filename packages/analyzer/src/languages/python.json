@@ -1,7 +1,7 @@
 {
   "id": "python",
   "label": "Python",
-  "tier": 2,
+  "tier": 1,
   "grammar": "python",
   "extensions": [".py", ".pyw"],
   "comment": ["comment"],
@@ -35,13 +35,156 @@
     {
       "kind": "lint_disable",
       "type": "comment",
-      "pattern": "#\\s*(noqa|type:\\s*ignore|pylint:\\s*disable|ruff:\\s*noqa|pyright:\\s*ignore)"
+      "pattern": "#\\s*(noqa|pylint:\\s*disable|ruff:\\s*noqa|flake8:\\s*noqa|nosec|fmt:\\s*off)"
+    },
+    {
+      "kind": "type_ignore",
+      "type": "comment",
+      "pattern": "#\\s*(type:\\s*ignore|pyright:\\s*(ignore|basic)|mypy:\\s*ignore-errors)"
     },
     {
       "kind": "skipped_test",
       "type": "node",
       "nodeType": "decorator",
-      "pattern": "^@(pytest\\.mark\\.skip|unittest\\.skip)"
+      "pattern": "^@(pytest\\.mark\\.(skip|skipif|xfail)|unittest\\.(skip|skipIf|skipUnless|expectedFailure))"
+    },
+    {
+      "kind": "skipped_test",
+      "type": "call",
+      "nodeType": "call",
+      "pattern": "^(pytest\\.(skip|xfail)|self\\.skipTest)$"
+    },
+    {
+      "kind": "empty_catch",
+      "type": "emptyBlock",
+      "nodeType": "except_clause",
+      "bodyType": "block",
+      "emptyTypes": ["pass_statement"]
+    }
+  ],
+  "modules": {
+    "statements": [
+      {
+        "nodeType": "import_statement",
+        "moduleField": "name"
+      },
+      {
+        "nodeType": "import_from_statement",
+        "moduleField": "module_name",
+        "namesField": "name"
+      }
+    ],
+    "resolver": "python"
+  },
+  "cohesion": {
+    "wrappers": ["decorated_definition"],
+    "wrapperField": "definition",
+    "functionDeclarations": ["function_definition"],
+    "variableDeclarations": [],
+    "functionValues": [],
+    "classDeclarations": ["class_definition"],
+    "methods": ["function_definition"],
+    "constructorName": "__init__",
+    "fields": [],
+    "otherDeclarations": [],
+    "identifiers": ["identifier"],
+    "memberExpression": "attribute",
+    "memberObjectField": "object",
+    "memberPropertyField": "attribute",
+    "selfObject": "self",
+    "assignments": {
+      "statement": "expression_statement",
+      "node": "assignment",
+      "nameField": "left"
+    },
+    "fieldsFromConstructor": true,
+    "barrelStatements": ["import_statement", "import_from_statement"],
+    "minStemLength": 4
+  },
+  "security": [
+    {
+      "kind": "dynamic_code",
+      "type": "call",
+      "nodeType": "call",
+      "pattern": "^(eval|exec)$"
+    },
+    {
+      "kind": "command_exec",
+      "type": "call",
+      "nodeType": "call",
+      "pattern": "^os\\.(system|popen)$"
+    },
+    {
+      "kind": "command_exec",
+      "type": "node",
+      "nodeType": "keyword_argument",
+      "pattern": "^shell\\s*=\\s*True$"
+    },
+    {
+      "kind": "unsafe_deserialization",
+      "type": "call",
+      "nodeType": "call",
+      "pattern": "^(pickle|cPickle|dill|marshal|shelve|jsonpickle)\\.(load|loads|decode)$"
+    },
+    {
+      "kind": "unsafe_deserialization",
+      "type": "call",
+      "nodeType": "call",
+      "pattern": "^yaml\\.unsafe_load$"
+    },
+    {
+      "kind": "unsafe_deserialization",
+      "type": "node",
+      "nodeType": "call",
+      "pattern": "^yaml\\.load\\((?![^)]*Loader\\s*=\\s*(yaml\\.)?C?Safe)"
+    },
+    {
+      "kind": "unsafe_html",
+      "type": "call",
+      "nodeType": "call",
+      "pattern": "^(mark_safe|django\\.utils\\.safestring\\.mark_safe|Markup|markupsafe\\.Markup|flask\\.Markup)$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "assignment",
+      "pattern": "^([A-Za-z_]*)([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA]pi[_-]?[kK]ey|API_?KEY)\\w*\\s*(:\\s*[\\w\\[\\], .]+\\s*)?=\\s*[\"'][^\"'\\s${}]{8,}[\"']$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string",
+      "pattern": "^[\"'](ghp_[A-Za-z0-9]{30,}|github_pat_\\w{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[\\w-]{10,})"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string",
+      "pattern": "BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "node",
+      "nodeType": "keyword_argument",
+      "pattern": "^verify\\s*=\\s*False$"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "call",
+      "nodeType": "call",
+      "pattern": "^ssl\\._create_unverified_context$"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "node",
+      "nodeType": "attribute",
+      "pattern": "^ssl\\.CERT_NONE$"
+    },
+    {
+      "kind": "sql_concat",
+      "type": "node",
+      "nodeType": "call",
+      "pattern": "^[\\w.]*\\b(execute|executemany|raw|read_sql|read_sql_query)\\(\\s*(f[\"']|[\"'][^\"']*[\"']\\s*[+%]|[\"'][^\"']*[\"']\\.format\\()"
     }
   ]
 }

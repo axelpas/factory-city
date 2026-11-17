@@ -14,7 +14,7 @@ export const METRICS_5: readonly MetricDefinition[] = [
     direction: "higher-is-worse",
     level: 0,
     limits:
-      "A signal is a pattern, not a proof: a justified use counts as well, and a flaw without a pattern is missed. Rules exist for TypeScript and JavaScript only; other languages are unavailable. Not a replacement for a dedicated security scanner.",
+      "A signal is a pattern, not a proof: a justified use counts as well, and a flaw without a pattern is missed. Languages without rules are unavailable. Not a replacement for a dedicated security scanner.",
   }),
   metric({
     id: "security_signal_density",
@@ -37,7 +37,19 @@ export const METRICS_5: readonly MetricDefinition[] = [
     unit: "places",
     direction: "higher-is-worse",
     level: 0,
-    limits: "TypeScript and JavaScript only; test files are not rated.",
+    limits: "Only for languages whose configuration has rules for it; test files are not rated.",
+  }),
+  metric({
+    id: "security_unsafe_deserialization",
+    label: "Unsafe deserialization",
+    definition:
+      "Objects rebuilt from data that can run code while loading: pickle, marshal, yaml.load without a safe loader.",
+    computation: "Counted by the language's declarative rule set.",
+    why: "Data that was not checked can run code of its author when it is loaded.",
+    unit: "places",
+    direction: "higher-is-worse",
+    level: 0,
+    limits: "Only for languages whose configuration has rules for it; test files are not rated.",
   }),
   metric({
     id: "security_command_exec",
@@ -48,7 +60,7 @@ export const METRICS_5: readonly MetricDefinition[] = [
     unit: "places",
     direction: "higher-is-worse",
     level: 0,
-    limits: "TypeScript and JavaScript only; test files are not rated.",
+    limits: "Only for languages whose configuration has rules for it; test files are not rated.",
   }),
   metric({
     id: "security_unsafe_html",
@@ -60,7 +72,7 @@ export const METRICS_5: readonly MetricDefinition[] = [
     unit: "places",
     direction: "higher-is-worse",
     level: 0,
-    limits: "TypeScript and JavaScript only; test files are not rated.",
+    limits: "Only for languages whose configuration has rules for it; test files are not rated.",
   }),
   metric({
     id: "security_hardcoded_secret",
@@ -72,7 +84,7 @@ export const METRICS_5: readonly MetricDefinition[] = [
     unit: "places",
     direction: "higher-is-worse",
     level: 0,
-    limits: "TypeScript and JavaScript only; test files are not rated.",
+    limits: "Only for languages whose configuration has rules for it; test files are not rated.",
   }),
   metric({
     id: "security_tls_disabled",
@@ -84,7 +96,7 @@ export const METRICS_5: readonly MetricDefinition[] = [
     unit: "places",
     direction: "higher-is-worse",
     level: 0,
-    limits: "TypeScript and JavaScript only; test files are not rated.",
+    limits: "Only for languages whose configuration has rules for it; test files are not rated.",
   }),
   metric({
     id: "security_sql_concat",
@@ -95,7 +107,7 @@ export const METRICS_5: readonly MetricDefinition[] = [
     unit: "places",
     direction: "higher-is-worse",
     level: 0,
-    limits: "TypeScript and JavaScript only; test files are not rated.",
+    limits: "Only for languages whose configuration has rules for it; test files are not rated.",
   }),
   metric({
     id: "sensitive_path",

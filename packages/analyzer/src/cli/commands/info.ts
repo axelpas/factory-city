@@ -1,7 +1,7 @@
 import { METRICS } from "@factory-city/schema";
 import type { Command } from "commander";
 import { doctor } from "../../doctor.js";
-import { LANGUAGES } from "../../languages/index.js";
+import { coverageOf, LANGUAGES } from "../../languages/index.js";
 
 /** Registers the commands of this module on the program. */
 export function registerInfo(program: Command): void {
@@ -25,15 +25,25 @@ export function registerInfo(program: Command): void {
       if (opts.json) {
         console.log(
           JSON.stringify(
-            LANGUAGES.map(({ id, label, tier, extensions }) => ({ id, label, tier, extensions })),
+            LANGUAGES.map((l) => ({
+              id: l.id,
+              label: l.label,
+              tier: l.tier,
+              extensions: l.extensions,
+              covers: coverageOf(l),
+            })),
             null,
             2,
           ),
         );
         return;
       }
-      for (const l of LANGUAGES)
-        console.log(`${l.label.padEnd(14)} tier ${l.tier}  ${l.extensions.join(" ")}`);
+      for (const l of LANGUAGES) {
+        const c = coverageOf(l);
+        const missing = (["coupling", "cohesion", "shortcuts", "security"] as const).filter((k) => !c[k]);
+        const note = missing.length > 0 ? `  (unavailable: ${missing.join(", ")})` : "";
+        console.log(`${l.label.padEnd(14)} tier ${l.tier}  ${l.extensions.join(" ")}${note}`);
+      }
       console.log(
         `${"Other text".padEnd(14)} tier 3  any other text file, with --all: line and git metrics only`,
       );

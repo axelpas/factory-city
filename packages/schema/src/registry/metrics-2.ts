@@ -23,13 +23,13 @@ export const METRICS_2: readonly MetricDefinition[] = [
     label: "Silenced checks",
     definition: "Number of places where a check was silenced instead of the problem solved.",
     computation:
-      "Sum of the kinds below, each counted separately by the language's rule set: any, @ts-ignore, @ts-expect-error, @ts-nocheck, lint-disable comments, skipped or focused tests, empty catch blocks.",
+      "Sum of the kinds below, each counted separately by the language's rule set: any, @ts-ignore, @ts-expect-error, @ts-nocheck, type-checker suppressions (`# type: ignore`), lint-disable comments, skipped or focused tests, empty catch blocks.",
     why: "Each one hides a problem the tools would otherwise report.",
     unit: "places",
     direction: "higher-is-worse",
     level: 0,
     limits:
-      "Complete rule sets exist for TypeScript and JavaScript; other languages have a few rules. A deliberate, justified use counts as well.",
+      "Only the kinds a language has are counted for it (see the supported languages table); a kind a language does not have is unavailable for it. A deliberate, justified use counts as well.",
   }),
   metric({
     id: "escape_hatch_density",
@@ -88,6 +88,18 @@ export const METRICS_2: readonly MetricDefinition[] = [
     limits: "TypeScript and JavaScript only.",
   }),
   metric({
+    id: "escape_type_ignore",
+    label: "Type-checker suppressions",
+    definition:
+      "A comment that tells the type checker to skip a line or a file: `# type: ignore`, `# pyright: ignore`.",
+    computation: "Counted by the language's declarative rule set.",
+    why: "Hides every type error on the line.",
+    unit: "places",
+    direction: "higher-is-worse",
+    level: 0,
+    limits: "Only for languages whose configuration has the rule.",
+  }),
+  metric({
     id: "escape_lint_disable",
     label: "Lint-disable comments",
     definition:
@@ -119,7 +131,7 @@ export const METRICS_2: readonly MetricDefinition[] = [
     unit: "places",
     direction: "higher-is-worse",
     level: 0,
-    limits: "TypeScript and JavaScript only.",
+    limits: "Only for languages that have the notion (TypeScript, JavaScript, Ruby, Rust...); not Python.",
   }),
   metric({
     id: "escape_empty_catch",

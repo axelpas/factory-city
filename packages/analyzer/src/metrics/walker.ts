@@ -74,8 +74,11 @@ export class Walker {
   }
 
   private isEmptyBlock(rule: ShortcutRule, node: Node): boolean {
-    const body = node.childForFieldName(rule.bodyField ?? "body");
-    return body?.namedChildren.every((c) => !c || this.cm.has(c.type)) === true;
+    const body = rule.bodyType
+      ? node.namedChildren.find((c) => c?.type === rule.bodyType)
+      : node.childForFieldName(rule.bodyField ?? "body");
+    const idle = new Set(rule.emptyTypes ?? []);
+    return body?.namedChildren.every((c) => !c || this.cm.has(c.type) || idle.has(c.type)) === true;
   }
 
   /** Counts the places where a check was silenced, by the language's rules. */
@@ -89,6 +92,7 @@ export class Walker {
   /** Collects the module a node imports: an import statement, or a call such as `require`. */
   private collectImport(node: Node): void {
     const type = node.type;
+    this.collectModules(node);
     const imp = this.lang.imports;
     if (!imp) return;
     if (imp.statements.includes(type)) {
@@ -99,6 +103,28 @@ export class Walker {
       const first = node.childForFieldName(imp.calls.argumentsField)?.namedChildren[0];
       if (callee && imp.calls.callees.includes(callee) && first?.type === "string")
         this.imports.push(stringValue(first));
+    }
+  }
+
+  /**
+   * Collects the modules a statement imports in a language whose modules are names (`import a.b`, `from .c import d`).
+   * Each name taken from a module is added as a module of its own (`c.d`): the resolver keeps the ones that exist.
+   */
+  private collectModules(node: Node): void {
+    const statement = this.lang.modules?.statements.find((s) => s.nodeType === node.type);
+    if (!statement) return;
+    const modules = node.childrenForFieldName(statement.moduleField).filter((n): n is Node => n !== null);
+    const names = statement.namesField
+      ? node.childrenForFieldName(statement.namesField).filter((n): n is Node => n !== null)
+      : [];
+    for (const module of modules) {
+      // `import a.b as c` names the module in its `name` field
+      const base = (module.childForFieldName("name") ?? module).text.replace(/\s+/g, "");
+      this.imports.push(base);
+      for (const name of names) {
+        const bare = (name.childForFieldName("name") ?? name).text;
+        this.imports.push(base.endsWith(".") ? `${base}${bare}` : `${base}.${bare}`);
+      }
     }
   }
 

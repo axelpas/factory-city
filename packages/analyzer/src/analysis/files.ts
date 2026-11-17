@@ -59,7 +59,7 @@ function record(
   const { entry, language, isTest } = candidate;
   out.analyzedEntries.push(entry);
   if (entry.blobId) out.blobs.set(entry.path, entry.blobId);
-  if (language?.imports) out.importsByFile.set(entry.path, result.imports);
+  if (language?.imports || language?.modules) out.importsByFile.set(entry.path, result.imports);
   if (result.syntaxErrors) out.syntaxErrorFiles++;
   if (result.groups) out.groupNames.set(entry.path, result.groups);
   const values: Record<string, number> = { ...result.metrics, is_test: isTest ? 1 : 0 };
