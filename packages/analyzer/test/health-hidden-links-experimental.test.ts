@@ -61,7 +61,9 @@ describe("report in Markdown", () => {
 
   it("shows the risk profile and what is unavailable", () => {
     expect(md).toContain("| Complexity | 44% | 22% | 33% | 0% | 90% |");
-    expect(md).toContain("Unavailable at this data level or for this code: Cohesion, Duplication, Rework.");
+    expect(md).toContain(
+      "Unavailable at this data level or for this code: Cohesion, Security signals, Duplication, Rework.",
+    );
   });
 
   it("lists every threshold with its source", () => {

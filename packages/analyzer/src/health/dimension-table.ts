@@ -59,6 +59,14 @@ export const DIMENSIONS: readonly RiskDimension[] = [
     source: DEFAULT,
   },
   {
+    id: "security",
+    label: "Security signals",
+    metric: "security_signals",
+    kind: "static",
+    bounds: [0, 1, 3],
+    source: `${DEFAULT} (a signal is a place to look at, not a proven flaw)`,
+  },
+  {
     id: "duplication",
     label: "Duplication",
     metric: "duplication_ratio",

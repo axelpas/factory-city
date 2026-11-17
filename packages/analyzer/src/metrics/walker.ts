@@ -26,7 +26,10 @@ export class Walker {
   readonly commentRanges = new Map<number, Array<[number, number]>>();
   readonly imports: string[] = [];
   readonly shortcuts = new Map<string, number>();
+  /** Security signals by kind: how many places, never what they say. */
+  readonly security = new Map<string, number>();
   private readonly rules: Array<{ rule: ShortcutRule; re: RegExp | undefined }>;
+  private readonly securityRules: Array<{ rule: ShortcutRule; re: RegExp | undefined }>;
   private readonly stack: FunctionFrame[] = [];
   private readonly fn: Set<string>;
   private readonly br: Set<string>;
@@ -45,10 +48,12 @@ export class Walker {
     this.nest = new Set(lang.nesting);
     this.logicalTypes = new Set(lang.logical.nodeTypes);
     this.logicalOps = new Set(lang.logical.operators);
-    this.rules = lang.shortcuts.map((rule) => ({
+    const compile = (rule: ShortcutRule) => ({
       rule,
       re: rule.pattern ? new RegExp(rule.pattern) : undefined,
-    }));
+    });
+    this.rules = lang.shortcuts.map(compile);
+    this.securityRules = lang.security.map(compile);
   }
 
   private count(kind: string): void {
@@ -76,6 +81,9 @@ export class Walker {
   /** Counts the places where a check was silenced, by the language's rules. */
   private countShortcuts(node: Node): void {
     for (const { rule, re } of this.rules) if (this.matches(rule, re, node)) this.count(rule.kind);
+    for (const { rule, re } of this.securityRules) {
+      if (this.matches(rule, re, node)) this.security.set(rule.kind, (this.security.get(rule.kind) ?? 0) + 1);
+    }
   }
 
   /** Collects the module a node imports: an import statement, or a call such as `require`. */

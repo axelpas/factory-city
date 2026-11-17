@@ -39,6 +39,8 @@ export interface LanguageConfig {
   cohesion?: CohesionConfig;
   /** Declarative rules for places where a check was silenced. */
   shortcuts: ShortcutRule[];
+  /** Declarative rules for security signals: places that widen the attack surface (never proof of a flaw). */
+  security: ShortcutRule[];
 }
 
 export interface ImportsConfig {
@@ -112,6 +114,7 @@ function resolve(raw: RawConfig, all: Map<string, RawConfig>): LanguageConfig {
     nesting: [],
     nestingExceptParent: {},
     shortcuts: [],
+    security: [],
     ...base,
     ...raw,
   } as LanguageConfig;

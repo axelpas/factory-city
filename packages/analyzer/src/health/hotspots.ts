@@ -23,6 +23,7 @@ const KEY_METRICS = [
   "imports_out",
   "cohesion_groups",
   "escape_hatches",
+  "security_signals",
   "recent_commits",
   "fix_commits_recent",
   "rework_ratio",

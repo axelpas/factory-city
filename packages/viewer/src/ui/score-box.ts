@@ -24,11 +24,12 @@ export class ScoreBox {
     this.value,
     this.delta,
   );
+  private readonly without = el("p", { class: "muted score-without", attrs: { hidden: "" } });
   private readonly message = el("p", { class: "muted", attrs: { hidden: "" } });
   private shown = Number.NaN;
 
   constructor() {
-    this.element.append(this.row, this.body, this.message);
+    this.element.append(this.row, this.without, this.body, this.message);
   }
 
   /** The score under the playhead: cheap, called at every image. */
@@ -50,6 +51,10 @@ export class ScoreBox {
       return;
     }
     this.setScore(view.score);
+    this.without.hidden = !view.scoreWithoutSecurityText;
+    this.without.textContent = view.scoreWithoutSecurityText
+      ? `Without security signals: ${view.scoreWithoutSecurityText}`
+      : "";
     const change = view.movement?.qualityDelta;
     this.delta.textContent = change && change !== "unchanged" ? ` ${change}` : "";
     // a higher score is better: green when it went up, red when it went down

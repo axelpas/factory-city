@@ -49,6 +49,29 @@ function removeShortcuts({ file, is }: Context): Advice | undefined {
   return ["remove-shortcuts", `Remove shortcuts${kinds.length ? `: ${kinds.join(", ")}` : ""}.`];
 }
 
+const SECURITY_KINDS: Record<string, string> = {
+  dynamic_code: "dynamic code",
+  command_exec: "command execution",
+  unsafe_html: "unsafe HTML",
+  hardcoded_secret: "hard-coded secrets",
+  tls_disabled: "disabled TLS checks",
+  sql_concat: "SQL built by concatenation",
+};
+
+/** Looking at the security signals, by kind, and a word when the file is on a sensitive path. */
+function reviewSecurity({ file, is }: Context): Advice | undefined {
+  if (!is("security")) return undefined;
+  const v = file.values;
+  const kinds = Object.entries(SECURITY_KINDS)
+    .filter(([kind]) => (v[`security_${kind}`] ?? 0) > 0)
+    .map(([kind, name]) => `${v[`security_${kind}`]} ${name}`);
+  const sensitive = v.sensitive_path === 1 ? " The path suggests sensitive code: look at it first." : "";
+  return [
+    "review-security",
+    `Review the security signals${kinds.length ? `: ${kinds.join(", ")}` : ""}.${sensitive}`,
+  ];
+}
+
 /** The advice for a dimension that is exceeded, worded from the file's numbers. */
 function simple(dimension: string, type: ActionType, text: (v: Record<string, number>) => string) {
   return ({ file, is }: Context): Advice | undefined =>
@@ -71,6 +94,7 @@ const RULES: Array<(c: Context) => Advice | undefined> = [
   deduplicate,
   simple("coupling", "reduce-imports", (v) => `Reduce imports (${v.imports_out} internal modules).`),
   removeShortcuts,
+  reviewSecurity,
   simple(
     "fixes",
     "add-tests",

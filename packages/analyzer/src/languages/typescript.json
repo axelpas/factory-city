@@ -116,5 +116,94 @@
       "nodeType": "catch_clause",
       "bodyField": "body"
     }
+  ],
+  "security": [
+    {
+      "kind": "dynamic_code",
+      "type": "call",
+      "pattern": "^(eval|window\\.eval|globalThis\\.eval)$"
+    },
+    {
+      "kind": "dynamic_code",
+      "type": "node",
+      "nodeType": "new_expression",
+      "pattern": "^new\\s+Function\\s*\\("
+    },
+    {
+      "kind": "command_exec",
+      "type": "call",
+      "pattern": "^(child_process\\.|cp\\.|childProcess\\.)?(exec|execSync)$"
+    },
+    {
+      "kind": "command_exec",
+      "type": "node",
+      "nodeType": "pair",
+      "pattern": "^shell\\s*:\\s*true$"
+    },
+    {
+      "kind": "unsafe_html",
+      "type": "node",
+      "nodeType": "assignment_expression",
+      "pattern": "\\.(innerHTML|outerHTML)\\s*\\+?="
+    },
+    {
+      "kind": "unsafe_html",
+      "type": "node",
+      "nodeType": "jsx_attribute",
+      "pattern": "^dangerouslySetInnerHTML"
+    },
+    {
+      "kind": "unsafe_html",
+      "type": "call",
+      "pattern": "^document\\.write(ln)?$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "variable_declarator",
+      "pattern": "([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA]pi[_-]?[kK]ey|API_?KEY)\\w*\\s*(:\\s*\\w+\\s*)?=\\s*[\"'`][^\"'`\\s$]{8,}[\"'`]$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "pair",
+      "pattern": "^[\"']?([pP]ass(word|wd)|PASS(WORD|WD)|[sS]ecret|SECRET|[tT]oken|TOKEN|[aA]pi[_-]?[kK]ey|API_?KEY)\\w*[\"']?\\s*:\\s*[\"'`][^\"'`\\s$]{8,}[\"'`]$"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string",
+      "pattern": "^[\"'](ghp_[A-Za-z0-9]{30,}|github_pat_\\w{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[\\w-]{10,})"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "string",
+      "pattern": "BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY"
+    },
+    {
+      "kind": "hardcoded_secret",
+      "type": "node",
+      "nodeType": "template_string",
+      "pattern": "BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "node",
+      "nodeType": "pair",
+      "pattern": "^rejectUnauthorized\\s*:\\s*false$"
+    },
+    {
+      "kind": "tls_disabled",
+      "type": "node",
+      "nodeType": "assignment_expression",
+      "pattern": "NODE_TLS_REJECT_UNAUTHORIZED[\"'\\]]*\\s*=\\s*[\"']?0"
+    },
+    {
+      "kind": "sql_concat",
+      "type": "node",
+      "nodeType": "call_expression",
+      "pattern": "(^|\\.)(query|execute|raw|queryRawUnsafe|executeRawUnsafe)\\(\\s*(`[^`]*\\$\\{|\"[^\"]*\"\\s*\\+|'[^']*'\\s*\\+)"
+    }
   ]
 }

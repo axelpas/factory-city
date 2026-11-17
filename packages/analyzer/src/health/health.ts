@@ -40,6 +40,8 @@ function healthyLines(files: readonly HealthFile[], statics: readonly RiskDimens
   return healthy;
 }
 
+const SECURITY = "security";
+
 /** Risk profile and score of a set of files, weighted by real lines of code. */
 export function computeHealth(files: readonly HealthFile[], dimensions: readonly RiskDimension[]): Health {
   const total = files.reduce((sum, f) => sum + (f.values.rloc ?? 0), 0);
@@ -51,11 +53,19 @@ export function computeHealth(files: readonly HealthFile[], dimensions: readonly
     profile[d.id] = share;
     if (d.kind === "static") scored.push(d.id);
   }
-  const healthy = healthyLines(
-    files,
-    dimensions.filter((d) => d.kind === "static"),
-  );
-  return { score: total === 0 ? 100 : round((healthy / total) * 100, 1), profile, scored };
+  const statics = dimensions.filter((d) => d.kind === "static");
+  const percent = (lines: number) => (total === 0 ? 100 : round((lines / total) * 100, 1));
+  return {
+    score: percent(healthyLines(files, statics)),
+    scoreWithoutSecurity: percent(
+      healthyLines(
+        files,
+        statics.filter((d) => d.id !== SECURITY),
+      ),
+    ),
+    profile,
+    scored,
+  };
 }
 
 /** The health of a frame, as kept in the timeline manifest. */
@@ -67,6 +77,7 @@ export function frameHealth(
   const health = computeHealth(files, dimensions);
   return {
     score: health.score,
+    scoreWithoutSecurity: health.scoreWithoutSecurity,
     profile: health.profile,
     hotspots: findHotspots(files, dimensions, {}, top).map((h) => h.path),
   };

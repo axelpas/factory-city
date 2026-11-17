@@ -1183,6 +1183,10 @@ button[aria-pressed="true"] {
 .score-summary {
   padding: var(--s-8) var(--s-12);
 }
+.score-without {
+  margin: var(--s-2) 0 var(--s-6);
+  font-variant-numeric: tabular-nums;
+}
 .score {
   display: flex;
   align-items: baseline;

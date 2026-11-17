@@ -4,6 +4,7 @@ import { METRICS_1 } from "./registry/metrics-1.js";
 import { METRICS_2 } from "./registry/metrics-2.js";
 import { METRICS_3 } from "./registry/metrics-3.js";
 import { METRICS_4 } from "./registry/metrics-4.js";
+import { METRICS_5 } from "./registry/metrics-5.js";
 import type { DataLevel, MetricDefinition } from "./registry/types.js";
 
 /**
@@ -11,7 +12,13 @@ import type { DataLevel, MetricDefinition } from "./registry/types.js";
  * Ids follow CodeCharta names where an equivalent exists (ADR snapshot-format-cc-json).
  * It is written in parts, in the order the metrics are listed.
  */
-export const METRICS: readonly MetricDefinition[] = [...METRICS_1, ...METRICS_2, ...METRICS_3, ...METRICS_4];
+export const METRICS: readonly MetricDefinition[] = [
+  ...METRICS_1,
+  ...METRICS_2,
+  ...METRICS_3,
+  ...METRICS_4,
+  ...METRICS_5,
+];
 
 const BY_ID = new Map(METRICS.map((m) => [m.id, m]));
 

@@ -61,6 +61,21 @@ function shortcutMetrics(walker: Walker, lang: LanguageConfig, code: number): Re
   return out;
 }
 
+/** Security signals by kind, with the total and its density; test files are not rated, other tiers have no rules. */
+function securityMetrics(walker: Walker, lang: LanguageConfig, code: number, isTest: boolean) {
+  const out: Record<string, number> = {};
+  if (lang.security.length === 0 || isTest) return out;
+  let total = 0;
+  for (const kind of new Set(lang.security.map((rule) => rule.kind))) {
+    const n = walker.security.get(kind) ?? 0;
+    out[`security_${kind}`] = n;
+    total += n;
+  }
+  out.security_signals = total;
+  if (code > 0) out.security_signal_density = (total / code) * 1000;
+  return out;
+}
+
 /** The cohesion of the file, and the names of its groups when there are several. */
 function cohesionMetrics(
   root: Node,
@@ -104,6 +119,7 @@ export function computeMetrics(
         ? {}
         : { max_function_complexity: walker.maxFunctionComplexity }),
       ...shortcutMetrics(walker, lang, code),
+      ...securityMetrics(walker, lang, code, isTest),
       ...cohesion.metrics,
     };
     return {

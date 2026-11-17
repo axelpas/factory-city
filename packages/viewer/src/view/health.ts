@@ -18,6 +18,8 @@ export interface HealthView {
   reason?: string;
   score: number;
   scoreText: string;
+  /** The score with the security dimension left out, when the code could be rated on it. */
+  scoreWithoutSecurityText?: string;
   notice: string;
   /** Score of every frame, for the trend; empty for a single snapshot. */
   trend: number[];
@@ -62,6 +64,17 @@ function profileRows(report: Report, profile: Report["health"]["profile"], fmt: 
   return { rows, unavailable };
 }
 
+/** The score without the security dimension, as text, when security entered the rating of this frame. */
+function withoutSecurity(
+  report: Report,
+  current: FrameHealth | undefined,
+  rows: readonly ProfileRow[],
+  fmt: Formatter,
+): string | undefined {
+  const value = current?.scoreWithoutSecurity ?? (current ? undefined : report.health.scoreWithoutSecurity);
+  return value !== undefined && rows.some((r) => r.id === "security") ? fmt.score(value) : undefined;
+}
+
 /** What the frame did to the score and to the hotspots, against the frame before it. */
 function movementOf(current: FrameHealth | undefined, previous: FrameHealth | undefined, fmt: Formatter) {
   if (!current || !previous) return undefined;
@@ -72,6 +85,11 @@ function movementOf(current: FrameHealth | undefined, previous: FrameHealth | un
     created: current.hotspots.filter((p) => !previous.hotspots.includes(p)),
     resolved: previous.hotspots.filter((p) => !current.hotspots.includes(p)),
   };
+}
+
+/** The optional field, only when there is a value. */
+function withText(text: string | undefined): { scoreWithoutSecurityText?: string } {
+  return text === undefined ? {} : { scoreWithoutSecurityText: text };
 }
 
 const EMPTY: Omit<HealthView, "frame"> = {
@@ -125,6 +143,7 @@ export function healthView(
     available: true,
     score,
     scoreText: fmt.score(score),
+    ...withText(withoutSecurity(report, current, rows, fmt)),
     notice: report.notice,
     trend: isTimeline ? frames.map((h) => h?.score ?? Number.NaN) : [],
     profile: rows,

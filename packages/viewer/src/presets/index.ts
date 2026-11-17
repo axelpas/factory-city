@@ -9,6 +9,7 @@ import cost from "./cost.json";
 import duplication from "./duplication.json";
 import hotspots from "./hotspots.json";
 import language from "./language.json";
+import security from "./security.json";
 import shortcuts from "./shortcuts.json";
 import structure from "./structure.json";
 import threeCs from "./three-cs.json";
@@ -40,6 +41,7 @@ export const PRESETS: readonly Preset[] = [
   cohesion as Preset,
   threeCs as Preset,
   shortcuts as Preset,
+  security as Preset,
   duplication as Preset,
   language as Preset,
   hotspots as Preset,

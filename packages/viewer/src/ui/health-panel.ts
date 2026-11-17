@@ -159,6 +159,18 @@ function hiddenLinksView(view: HealthView): HTMLElement[] {
   ];
 }
 
+/** The score read without the security dimension, so that both can be compared. */
+function withoutSecurityLine(view: HealthView): HTMLElement[] {
+  if (!view.scoreWithoutSecurityText) return [];
+  return [
+    el("p", {
+      class: "muted score-without",
+      text: `Without security signals: ${view.scoreWithoutSecurityText}`,
+      title: "The same score, with the security dimension left out of the rating of every file",
+    }),
+  ];
+}
+
 /** The Health tab: the score with its trend, the risk profile, the hotspots and the hidden links. */
 export function renderHealthPanel(
   panel: HTMLElement,
@@ -172,6 +184,7 @@ export function renderHealthPanel(
   }
   panel.append(
     el("div", { class: "score" }, el("b", { text: format.score(view.score) })),
+    ...withoutSecurityLine(view),
     ...(view.trend.length > 1 ? [trendView(view)] : []),
     el("p", { class: "muted", text: view.notice }),
     ...movementView(view),

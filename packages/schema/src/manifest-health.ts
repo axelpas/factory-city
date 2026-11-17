@@ -28,6 +28,8 @@ export interface RiskShare {
 export interface Health {
   /** Share of code, out of 100, in files that are low risk on every static dimension available for them. */
   score: number;
+  /** The same share, with the security dimension left out of the rating of every file. */
+  scoreWithoutSecurity: number;
   /** Dimension id to shares. A dimension with no rated code is absent. */
   profile: Record<string, RiskShare>;
   /** Static dimensions that entered the score. */
@@ -42,7 +44,8 @@ export type ActionType =
   | "reduce-imports"
   | "remove-shortcuts"
   | "add-tests"
-  | "separate-concerns";
+  | "separate-concerns"
+  | "review-security";
 
 export interface HotspotAction {
   type: ActionType;
@@ -89,6 +92,8 @@ export interface Report {
 /** Health of one frame, kept in the timeline manifest. */
 export interface FrameHealth {
   score: number;
+  /** The score without the security dimension; absent in data written before it existed. */
+  scoreWithoutSecurity?: number;
   profile: Record<string, RiskShare>;
   /** Paths of the frame's hotspots, best rank first. */
   hotspots: string[];

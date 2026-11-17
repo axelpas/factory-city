@@ -1,0 +1,10 @@
+{
+  "id": "security",
+  "label": "Security signals",
+  "group": "Code",
+  "level": 0,
+  "question": "Where does the code widen the attack surface?",
+  "area": "rloc",
+  "height": "mcc",
+  "color": ["security_signals"]
+}
