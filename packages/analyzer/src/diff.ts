@@ -8,7 +8,7 @@ import { buildTimeline } from "./timeline.js";
 
 async function tryGit(cwd: string, args: string[]): Promise<string | undefined> {
   try {
-    return await git(cwd, args);
+    return (await git(cwd, args)).trim();
   } catch {
     return undefined;
   }
