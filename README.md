@@ -15,6 +15,28 @@ It is two independent programs that share nothing but data files: an **analyzer*
 
 [Open the standalone demo](examples/factory-city.html) (one file, works offline) · [Watch the film](examples/factory-city.mp4) · [The same on a public project](examples/twenty-ui.html) ([about the examples](examples/README.md))
 
+## Contents
+
+- [Quickstart](#quickstart)
+- [Use it from Claude Code](#use-it-from-claude-code)
+- [How to read the city](#how-to-read-the-city)
+- [A tour](#a-tour)
+  - [Presets](#presets)
+  - [Four themes](#four-themes)
+  - [The timelapse](#the-timelapse)
+  - [Health, and the factory](#health-and-the-factory)
+  - [Compare a branch with its base](#compare-a-branch-with-its-base)
+  - [Exports](#exports)
+- [Supported languages](#supported-languages)
+- [Data levels](#data-levels)
+- [Command line](#command-line)
+- [Data format](#data-format)
+- [Extending it](#extending-it)
+- [FAQ](#faq)
+- [Contributing](#contributing)
+- [Prior art and credits](#prior-art-and-credits)
+- [License](#license)
+
 ## Quickstart
 
 You need Node.js 22 or later and pnpm. Git and the GitHub CLI are optional: each one unlocks a [data level](#data-levels).
