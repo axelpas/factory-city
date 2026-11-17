@@ -9,15 +9,20 @@ Factory City turns a codebase into a 3D city: folders are districts, files are b
 
 ## 1. Find the command
 
-1. If `factory-city` is on the PATH, use it.
-2. Otherwise, if the environment variable `FACTORY_CITY_CLI` holds the path of `packages/analyzer/dist/cli/main.js`, run `node "$FACTORY_CITY_CLI"` wherever this skill says `factory-city`.
-3. Otherwise stop and give the user these lines, then wait (do not install anything yourself):
+Look in this order, and stop at the first hit:
+
+1. `factory-city` is on the PATH: use it.
+2. The environment variable `FACTORY_CITY_CLI` holds the path of `packages/analyzer/dist/cli/main.js`: run `node "$FACTORY_CITY_CLI"` wherever this skill says `factory-city`.
+3. A clone already exists in a usual place. Check these paths one by one with `test -f` (never `find` over the home folder, it is slow): `~/GIT/factory-city`, `~/factory-city`, `~/src/factory-city`, `~/code/factory-city`, `~/dev/factory-city`, each followed by `/packages/analyzer/dist/cli/main.js`. If one exists, use it with `node` and tell the user the one-line fix below so that the next session finds it at once.
+4. Otherwise stop and give the user the lines below, then wait. Do not install anything yourself.
 
 ```sh
 git clone https://github.com/axelpas/factory-city.git && cd factory-city
 pnpm install && pnpm build
 export FACTORY_CITY_CLI="$(pwd)/packages/analyzer/dist/cli/main.js"
 ```
+
+To make it permanent for Claude Code, the user can put the `export` line in `~/.zshenv`, or the variable in the `env` section of `~/.claude/settings.json`, or link `factory-city` into a folder of the PATH (for example `~/.local/bin`). These are the user's own files: propose them, do not edit them unasked.
 
 It needs Node.js 22 or later. Git and the GitHub CLI (`gh`) are optional: each unlocks a richer data level.
 
@@ -47,6 +52,10 @@ The last lines say where the data was written. Remember that folder as `<data>`.
 ```sh
 factory-city report <data> --json
 ```
+
+`report` takes a **data folder written by `analyze` or `timeline`, or a project folder**. For a data folder it reads the `report*.json` already there, and it fails or prints nothing useful if there is none. For a project folder it analyzes the project first. It has no `--rev`: to look at another revision, analyze that revision first (`analyze --rev <rev>`), then read its data folder.
+
+Never redirect the output of `report` into the data folder: it would overwrite the report file that was just read. To keep the text, write it to another folder, such as the session's scratch folder.
 
 Tell the user, in a few lines and in their language:
 
